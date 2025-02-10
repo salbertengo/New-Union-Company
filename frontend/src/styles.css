@@ -1,0 +1,93 @@
+html, body {
+  width: 100%;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  font-family: Poppins, sans-serif;
+  background-color: #D9D9D9;
+}
+
+.App {
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+  min-width: 1440px;
+  min-height: 1024px;
+}
+
+
+/* Otros estilos existentes */
+.texto-modulos {
+  font-family: Poppins, sans-serif;
+  margin-left: 20px;
+  margin-top: 13px;
+  font-size: 22px;
+  font-weight: bold;
+}
+
+/*SIDE BAR IZQUIERDA*/
+.sidebar {
+  position: fixed;
+  top: 0px;
+  left: 0px;
+  width: 160px;
+  height: 1024px;
+  background-color: #ffffff;
+  padding: 20px;
+}
+
+.sidebar-button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 10px;
+  background-color: white;
+  color: #9197B3;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  text-align: left;
+  transition: background-color 0.3s ease, transform 0.3s ease;
+}
+
+.sidebar-button1 {
+  gap: 13px;
+}
+
+.sidebar-button2 {
+  gap: 0px;
+  padding-left: 44px;
+}
+
+.icon {
+  width: 20px;
+  height: 20px;
+  margin-right: 10px;
+  fill: #9197B3;
+  transition: fill 0.3s ease;
+}
+
+.icon-interior {
+  width: 20px;
+  height: 20px;
+  margin-right: 10px;
+  fill: none;
+  transition: fill 0.3s ease;
+}
+
+.icon-external-border {
+  stroke: #9197B3;
+  stroke-width: 1.35px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.icon-interior-border {
+  stroke: #9197B3;
+  stroke-width: 1.5px;
+  stroke-miterlimit: 10;
+}
