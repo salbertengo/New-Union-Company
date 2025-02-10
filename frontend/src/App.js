@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/login';
-import InventoryView from './pages/inventoryView';
+import InventoryPage from './pages/InventoryPage';
 import './styles.css'; // Asegúrate de importar el archivo de estilos
 
 const App = () => {
@@ -18,7 +18,7 @@ const App = () => {
           <Route path="/login" element={<Login onLogin={handleLogin} />} />
           <Route
             path="/inventory"
-            element={isAuthenticated ? <InventoryView /> : <Navigate to="/login" />}
+            element={isAuthenticated ? <InventoryPage /> : <Navigate to="/login" />}
           />
           <Route
             path="/"

@@ -61,8 +61,6 @@ const InventoryView = () => {
     { headerName: 'Brand', field: 'brand' },
     { headerName: 'Stock', field: 'stock' },
     { headerName: 'Min', field: 'min' },
-    { headerName: 'Real', field: 'real' },
-    { headerName: 'Dif', field: 'dif' },
     { headerName: 'Cost', field: 'cost' },
     { headerName: 'Sale', field: 'sale' },
   ];
@@ -93,11 +91,7 @@ const InventoryView = () => {
   return (
     <div
       style={{
-        position: 'relative',
-        left: 'calc(12%)',
-        top: 'calc(42%)',
-        width: 'calc(86%)',
-        height: 'calc(48%)',
+
         borderRadius: '30px',
         overflow: 'hidden',
         backgroundColor: '#ffffff',
@@ -228,24 +222,7 @@ const InventoryView = () => {
               style={{ width: '100%', marginBottom: '10px' }}
             />
           </label>
-          <label>
-            Real:
-            <input
-              type="number"
-              value={editItem.real || 0}
-              onChange={e => setEditItem({ ...editItem, real: parseInt(e.target.value || 0, 10) })}
-              style={{ width: '100%', marginBottom: '10px' }}
-            />
-          </label>
-          <label>
-            Dif:
-            <input
-              type="number"
-              value={editItem.dif || 0}
-              onChange={e => setEditItem({ ...editItem, dif: parseInt(e.target.value || 0, 10) })}
-              style={{ width: '100%', marginBottom: '10px' }}
-            />
-          </label>
+
           <label>
             Cost:
             <input

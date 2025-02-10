@@ -1,33 +1,22 @@
-import React, { useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import Login from './pages/login';
-import InventoryView from './pages/inventoryView';
-import './styles.css'; // Asegúrate de importar el archivo de estilos
+const express = require('express');
+const authRoutes = require('./routes/authRoutes');
+const inventoryRouter = require('./routes/inventoryRoutes');
+const bodyParser = require('body-parser');
+const cors = require('cors'); // Importa el módulo cors
 
-const App = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+const app = express();
+app.use(bodyParser.json());
 
-  const handleLogin = () => {
-    setIsAuthenticated(true);
-  };
+app.use(cors({
+  origin: 'http://localhost:4000', // Permitir solicitudes desde el frontend
+  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+  credentials: true,
+}));
 
-  return (
-    <Router>
-      <div className="App">
-        <Routes>
-          <Route path="/login" element={<Login onLogin={handleLogin} />} />
-          <Route
-            path="/inventory"
-            element={isAuthenticated ? <InventoryView /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/"
-            element={isAuthenticated ? <Navigate to="/inventory" /> : <Navigate to="/login" />}
-          />
-        </Routes>
-      </div>
-    </Router>
-  );
-};
 
-export default App;
+app.use('/auth', authRoutes);
+app.use('/inventory', inventoryRouter);
+
+app.listen(3000, () => {
+  console.log('Servidor en http://localhost:3000');
+});
