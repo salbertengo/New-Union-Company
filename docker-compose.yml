@@ -1,0 +1,43 @@
+services:
+  mysql:
+    image: mysql:latest
+    container_name: mysql_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: admin
+      MYSQL_DATABASE: NewUnionDB
+      MYSQL_USER: admin
+      MYSQL_PASSWORD: admin
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  backend:
+    build: "./Backend"
+    container_name: inventory_backend
+    restart: always
+    depends_on:
+      - mysql
+    environment:
+      DB_HOST: mysql
+      DB_USER: admin
+      DB_PASSWORD: admin
+      DB_NAME: NewUnionDB
+      JWT_SECRET: mysecurejwt
+    ports:
+      - "3000:3000"
+
+    volumes:
+      - ./Backend:/usr/src/app
+      - /usr/src/app/node_modules
+
+    working_dir: /usr/src/app
+
+    command:
+      - npx
+      - nodemon
+      - app.js    
+
+volumes:
+  mysql_data:
