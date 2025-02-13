@@ -1,0 +1,75 @@
+/* Contenedor principal: ocupa toda la pantalla, con un fondo suave */
+.login-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background: #f3f4f6; /* gris claro */
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  }
+  
+  /* Tarjeta central donde se sitúa el formulario */
+  .login-card {
+    background: #ffffff;
+    padding: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.05);
+    max-width: 350px;
+    width: 100%;
+    text-align: center;
+  }
+  
+  /* Título */
+  .login-card h2 {
+    margin-bottom: 1.5rem;
+    color: #333;
+  }
+  
+  /* Grupo de inputs con su label */
+  .input-group {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+  }
+  
+  /* Label de los inputs */
+  .input-group label {
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: #555;
+  }
+  
+  /* Inputs de texto y password */
+  .input-group input {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 0.95rem;
+    transition: border-color 0.2s;
+  }
+  
+  .input-group input:focus {
+    outline: none;
+    border-color: #5b9bd5; /* azul suave */
+  }
+  
+  /* Botón de login */
+  .login-btn {
+    width: 100%;
+    padding: 0.75rem;
+    background-color: #5b9bd5;
+    color: #ffffff;
+    border: none;
+    border-radius: 4px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s;
+  }
+  
+  .login-btn:hover {
+    background-color: #4a90c9;
+  }
+  

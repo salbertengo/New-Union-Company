@@ -1,5 +1,5 @@
 //// filepath: /c:/Users/salbe/OneDrive/Escritorio/New Union Company/frontend/src/pages/sumary.js
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AgGridReact } from '@ag-grid-community/react';
 import { ClientSideRowModelModule } from '@ag-grid-community/client-side-row-model';
 import { ModuleRegistry } from '@ag-grid-community/core';
@@ -10,63 +10,73 @@ import 'ag-grid-community/styles/ag-theme-alpine.css';
 ModuleRegistry.registerModules([ClientSideRowModelModule]);
 
 const Sumary = () => {
-  // Datos de prueba para “Low Stock Parts”
-  const [lowStockData] = useState([
-    { id: 1, sku: 'A001', name: 'Part A', stock: 3 },
-    { id: 2, sku: 'B002', name: 'Part B', stock: 5 }
-  ]);
+  const [inventory, setInventory] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchInventory = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch('http://localhost:3000/inventory', {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setInventory(data);
+        } else {
+          console.error('Error fetching inventory:', response.status);
+        }
+      } catch (error) {
+        console.error('Error fetching inventory:', error);
+      }
+      setLoading(false);
+    };
+    fetchInventory();
+  }, []);
+
+  // Filtrar productos cuyo stock es menor que min
+  const lowStockData = inventory.filter(product => product.stock < product.min);
+
   const lowStockColumns = [
     { headerName: 'SKU', field: 'sku' },
     { headerName: 'Name', field: 'name' },
     { headerName: 'Stock', field: 'stock' }
   ];
 
-  // Datos de prueba para “Last Consumptions”
-  const [lastConsumptionsData] = useState([
-    { id: 1, sku: 'A001', name: 'Part A', consumed: 10 },
-    { id: 2, sku: 'C003', name: 'Part C', consumed: 7 }
-  ]);
-  const lastConsumptionsColumns = [
-    { headerName: 'SKU', field: 'sku' },
-    { headerName: 'Name', field: 'name' },
-    { headerName: 'Consumed', field: 'consumed' }
-  ];
-
   return (
     <div
       style={{
-
         borderRadius: '30px',
         overflow: 'hidden',
         backgroundColor: '#ffffff',
         boxSizing: 'border-box',
-        padding: '20px'
+        padding: '20px',
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%'
       }}
     >
-      <h3>Low Stock Parts</h3>
-      <div
-        className="ag-theme-alpine"
-        style={{ width: '100%', height: '120px', marginBottom: '20px' }}
-      >
-        <AgGridReact
-          rowData={lowStockData}
-          columnDefs={lowStockColumns}
-          defaultColDef={{ flex: 1, resizable: true }}
-          modules={[ClientSideRowModelModule]}
-        />
-      </div>
-
-      <h3>Last Consumptions</h3>
-      <div
-        className="ag-theme-alpine"
-        style={{ width: '100%', height: '120px' }}
-      >
-        <AgGridReact
-          rowData={lastConsumptionsData}
-          columnDefs={lastConsumptionsColumns}
-          defaultColDef={{ flex: 1, resizable: true }}
-          modules={[ClientSideRowModelModule]}
-        />
+      <h3 style={{ margin: 0, marginBottom: '10px', fontSize: '18px' }}>Low Stock Parts</h3>
+      {/* Contenedor flexible para la grid */}
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+        <div className="ag-theme-alpine" style={{ width: '100%', height: '100%' }}>
+          {loading ? (
+            <p>Loading...</p>
+          ) : (
+            <AgGridReact
+              rowData={lowStockData}
+              columnDefs={lowStockColumns}
+              defaultColDef={{ flex: 1, resizable: true }}
+              modules={[ClientSideRowModelModule]}
+              pagination={false}
+              rowHeight={24}
+              headerHeight={28}
+            />
+          )}
+        </div>
       </div>
     </div>
   );

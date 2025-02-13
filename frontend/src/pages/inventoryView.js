@@ -1,10 +1,12 @@
-//// filepath: /c:/Users/salbe/OneDrive/Escritorio/New Union Company/frontend/src/pages/inventoryView.js
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { AgGridReact } from '@ag-grid-community/react';
 import { ClientSideRowModelModule } from '@ag-grid-community/client-side-row-model';
 import { ModuleRegistry } from '@ag-grid-community/core';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faEdit, faCog } from '@fortawesome/free-solid-svg-icons';
+import '@fortawesome/fontawesome-svg-core/styles.css';
 
 ModuleRegistry.registerModules([ClientSideRowModelModule]);
 
@@ -14,6 +16,13 @@ const InventoryView = () => {
   const [categoryTerm, setCategoryTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
+  const gridRef = useRef(null);
+  const [isHovered, setIsHovered] = useState(false);
+  // States for compatibility modal
+  const [showCompatibilityModal, setShowCompatibilityModal] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [compatibilities, setCompatibilities] = useState([]);
+  const [newCompatibility, setNewCompatibility] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -41,6 +50,7 @@ const InventoryView = () => {
   }, []);
 
   const uniqueCategories = [...new Set(rowData.map(item => item.category))];
+  const uniqueBrands = [...new Set(rowData.map(item => item.brand))];
 
   const filteredData = rowData.filter(item => {
     const nameMatches = item.name?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -48,50 +58,257 @@ const InventoryView = () => {
     return nameMatches && categoryMatches;
   });
 
-  // Ajuste de columnas para que entren en el contenedor
   const defaultColDef = {
-    flex: 1,
-    resizable: true
+    resizable: true // Removed flex: 1
   };
 
-  const columnDefs = [
-    { headerName: 'SKU', field: 'sku' },
-    { headerName: 'Name', field: 'name' },
-    { headerName: 'Category', field: 'category' },
-    { headerName: 'Brand', field: 'brand' },
-    { headerName: 'Stock', field: 'stock' },
-    { headerName: 'Min', field: 'min' },
-    { headerName: 'Cost', field: 'cost' },
-    { headerName: 'Sale', field: 'sale' },
-  ];
-
-  const handleRowClicked = (params) => {
-    setEditItem(params.data);
+  const handleOpenEditModal = (data) => {
+    setEditItem(data);
     setShowModal(true);
   };
 
-  const handleSave = async () => {
-    if (!editItem) return;
+  const handleOpenCompatibilityModal = async (product) => {
+    setSelectedProduct(product);
+    await fetchCompatibilities(product.id);
+    setShowCompatibilityModal(true);
+  };
+
+  const fetchCompatibilities = async (productId) => {
+    const token = localStorage.getItem('token');
     try {
-      const token = localStorage.getItem('token');
-      await fetch(`http://localhost:3000/inventory/${editItem.id}`, {
-        method: 'PUT',
+      const response = await fetch(`http://localhost:3000/compatibility/${productId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setCompatibilities(data);
+      } else {
+        console.error('Error fetching compatibilities:', response.status);
+      }
+    } catch (error) {
+      console.error('Error fetching compatibilities:', error);
+    }
+  };
+
+  const handleAddCompatibility = async () => {
+    if (!newCompatibility.trim()) {
+      alert("Please enter the motorcycle model to add compatibility.");
+      return;
+    }
+    const token = localStorage.getItem('token');
+    try {
+      const response = await fetch(`http://localhost:3000/compatibility`, {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify(editItem),
+        body: JSON.stringify({
+          product_id: selectedProduct.id,
+          motorcycle_model: newCompatibility.trim()
+        }),
       });
-      setShowModal(false);
+      if (response.ok) {
+        await fetchCompatibilities(selectedProduct.id);
+        setNewCompatibility('');
+      } else {
+        console.error('Error adding compatibility:', response.status);
+      }
     } catch (error) {
-      console.error('Error updating item:', error);
+      console.error('Error adding compatibility:', error);
     }
+  };
+
+  const handleDeleteCompatibility = async (motorcycle_model) => {
+    const token = localStorage.getItem('token');
+    try {
+      const response = await fetch(`http://localhost:3000/compatibility`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          product_id: selectedProduct.id,
+          motorcycle_model
+        }),
+      });
+      if (response.ok) {
+        await fetchCompatibilities(selectedProduct.id);
+      } else {
+        console.error('Error deleting compatibility:', response.status);
+      }
+    } catch (error) {
+      console.error('Error deleting compatibility:', error);
+    }
+  };
+
+
+
+  const columnDefs = [
+    { headerName: 'SKU', field: 'sku', width: 250, headerStyle: { fontFamily: "Impact", fontSize: "8px", color: "red" } },
+    { headerName: 'Name', field: 'name', width: 300 },
+    { headerName: 'Category', field: 'category', width: 120 },
+    { headerName: 'Brand', field: 'brand', width: 120 },
+    { headerName: 'Stock', field: 'stock', width: 80 },
+    { headerName: 'Min', field: 'min', width: 80 },
+    { headerName: 'Cost', field: 'cost', width: 80 },
+    { headerName: 'Sale', field: 'sale', width: 80 },
+    {
+      headerName: 'Edit',
+      field: 'edit',
+      width: 30, // Set a fixed width
+      sortable: false,
+      filter: false,
+      cellStyle: {
+        padding: '5px',
+        textAlign: 'center',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      },
+      cellRenderer: params => (
+        <div
+          onClick={(e) => {
+            e.stopPropagation();
+            handleOpenEditModal(params.data);
+          }}
+          title="Edit product"
+          style={{
+            cursor: 'pointer',
+            color: '#3498db',
+            textAlign: 'center',
+            lineHeight: 'normal', // Adjust lineHeight if needed
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '100%'
+          }}
+        >
+          <FontAwesomeIcon icon={faEdit} style={{ fontSize: '14px' }} />
+        </div>
+      )
+    },
+    {
+      headerName: 'Compatibility',
+      field: 'compatibility',
+      width: 80, // Set a fixed width
+      sortable: false,
+      filter: false,
+      cellStyle: {
+        padding: '5px',
+        textAlign: 'center',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      },
+      cellRenderer: params => (
+        <div
+          onClick={(e) => {
+            e.stopPropagation();
+            handleOpenCompatibilityModal(params.data);
+          }}
+          title="Modify compatibility"
+          style={{
+            cursor: 'pointer',
+            color: '#f39c12',
+            textAlign: 'center',
+            lineHeight: 'normal', // Adjust lineHeight if needed
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '100%'
+          }}
+        >
+          <FontAwesomeIcon icon={faCog} style={{ fontSize: '14px' }} />
+        </div>
+      )
+    }
+  ];
+
+  const handleRowClicked = () => {
+  };
+
+  const handleAddProduct = () => {
+    const newProduct = {
+      sku: '',
+      name: '',
+      category: uniqueCategories[0] || '',
+      brand: uniqueBrands[0] || '',
+      stock: 0,
+      min: 0,
+      cost: 0,
+      sale: 0
+    };
+    setEditItem(newProduct);
+    setShowModal(true);
+  };
+  
+  const handleSave = async () => {
+    if (!editItem) return;
+    const { sku, name, cost, sale } = editItem; // Required fields
+    if (!sku || !name || !cost || !sale) {
+      alert("Please complete all required fields (SKU, Name, Cost and Sale).");
+      return;
+    }
+    console.log("Sending product:", editItem);
+    const token = localStorage.getItem('token');
+    try {
+      let response;
+      if (editItem.id) {
+        response = await fetch(`http://localhost:3000/inventory/${editItem.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify(editItem),
+        });
+      } else {
+        response = await fetch('http://localhost:3000/inventory', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify(editItem),
+        });
+      }
+      console.log("Server response:", response.status);
+      if (response.ok) {
+        const savedItem = await response.json();
+        console.log("Saved product:", savedItem);
+        if (editItem.id) {
+          setRowData(prevData =>
+            prevData.map(item => (item.id === editItem.id ? savedItem : item))
+          );
+        } else {
+          setRowData(prevData => [...prevData, savedItem]);
+        }
+        setShowModal(false);
+      } else {
+        console.error('Error saving item:', response.status);
+      }
+    } catch (error) {
+      console.error('Error saving item:', error);
+    }
+  };
+
+  const onGridReady = (params) => {
+    gridRef.current = params.api;
+    params.api.sizeColumnsToFit();
   };
 
   return (
     <div
       style={{
-
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
         borderRadius: '30px',
         overflow: 'hidden',
         backgroundColor: '#ffffff',
@@ -99,53 +316,99 @@ const InventoryView = () => {
         padding: '20px'
       }}
     >
-      <h2>Inventory</h2>
-      <div style={{ marginBottom: '10px' }}>
-        <input
-          type="text"
-          placeholder="Search by name"
-          style={{ marginRight: '10px', padding: '5px' }}
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
-        <select
-          value={categoryTerm}
-          onChange={(e) => setCategoryTerm(e.target.value)}
-          style={{ padding: '5px' }}
-        >
-          <option value="">All Categories</option>
-          {uniqueCategories.map(cat => (
-            <option key={cat} value={cat}>
-              {cat}
-            </option>
-          ))}
-        </select>
-      </div>
+      {/* Header, filters and button to add */}
       <div
-        className="ag-theme-alpine"
         style={{
-          width: '100%',
-          height: '380px'
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '10px'
         }}
       >
-        <AgGridReact
-          rowData={filteredData}
-          columnDefs={columnDefs}
-          defaultColDef={defaultColDef}
-          modules={[ClientSideRowModelModule]}
-          pagination
-          paginationPageSize={12}
-          onRowClicked={handleRowClicked}
-        />
+        <h2 style={{ margin: 0, fontSize: '18px' }}>Inventory View</h2>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <input
+            type="text"
+            placeholder="Search by name"
+            style={{
+              padding: '5px',
+              width: '216px',
+              borderRadius: '10px',
+              border: '1px solid white',
+              backgroundColor: '#F9FBFF',
+              height: '25px'
+            }}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+          <select
+            value={categoryTerm}
+            onChange={(e) => setCategoryTerm(e.target.value)}
+            style={{
+              padding: '5px',
+              width: '216px',
+              borderRadius: '10px',
+              border: '1px solid white',
+              backgroundColor: '#F9FBFF',
+              height: '35px',
+              color: 'gray'
+            }}
+          >
+            <option value="">All Categories</option>
+            {uniqueCategories.map(cat => (
+              <option key={cat} value={cat}>
+                {cat}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={handleAddProduct}
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: isHovered ? '#4321C9' : '#5932EA',
+              color: 'white',
+              border: 'none',
+              borderRadius: '5px',
+              cursor: 'pointer',
+              transition: 'background-color 0.3s ease'
+            }}
+          >
+            Add Product
+          </button>
+        </div>
       </div>
-
+  
+      {/* Grid */}
+      <div style={{ flex: 1 }}>
+        <div className="ag-theme-alpine" style={{ width: '100%', height: '100%' }}>
+          <AgGridReact
+            ref={gridRef}
+            rowData={filteredData}
+            columnDefs={columnDefs}
+            defaultColDef={defaultColDef}
+            modules={[ClientSideRowModelModule]}
+            pagination
+            paginationPageSize={12}
+            onRowClicked={handleRowClicked}
+            headerHeight={30}
+            rowHeight={25}
+            suppressSizeToFit={true}
+            onGridReady={onGridReady}
+          />
+        </div>
+      </div>
+  
+      {/* Modal for product */}
       {showModal && editItem && (
         <div
           style={{
             position: 'fixed',
-            top: '30%',
-            left: '35%',
-            width: '400px',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: '450px',
             backgroundColor: '#fff',
             padding: '20px',
             borderRadius: '10px',
@@ -153,100 +416,343 @@ const InventoryView = () => {
             zIndex: 9999
           }}
         >
-          <button
+          <div
             style={{
-              background: 'transparent',
-              border: 'none',
-              fontSize: '16px',
-              position: 'absolute',
-              top: '5px',
-              right: '10px',
-              cursor: 'pointer'
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '20px'
             }}
-            onClick={() => setShowModal(false)}
           >
-            X
-          </button>
-          <h3>Edit Item</h3>
-          <label>
-            SKU:
+            <h2 style={{ margin: 0 }}>
+              {editItem.id ? 'Edit Product' : 'Add Product'}
+            </h2>
+            <button
+              onClick={() => setShowModal(false)}
+              style={{
+                background: 'none',
+                border: 'none',
+                fontSize: '24px',
+                cursor: 'pointer',
+                lineHeight: '1'
+              }}
+            >
+              &times;
+            </button>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+            <div style={{ flex: '1 1 45%' }}>
+              <label style={{ display: 'block', marginBottom: '5px' }}>SKU</label>
+              <input
+                type="text"
+                value={editItem.sku}
+                onChange={(e) => setEditItem({ ...editItem, sku: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '5px',
+                  borderRadius: '10px',
+                  border: '1px solid white',
+                  backgroundColor: '#F9FBFF'
+                }}
+              />
+            </div>
+            <div style={{ flex: '1 1 45%' }}>
+              <label style={{ display: 'block', marginBottom: '5px' }}>Name</label>
+              <input
+                type="text"
+                value={editItem.name}
+                onChange={(e) => setEditItem({ ...editItem, name: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '5px',
+                  borderRadius: '10px',
+                  border: '1px solid white',
+                  backgroundColor: '#F9FBFF'
+                }}
+              />
+            </div>
+            <div style={{ flex: '1 1 45%' }}>
+              <label style={{ display: 'block', marginBottom: '5px' }}>
+                Category
+              </label>
+              <select
+                value={editItem.category}
+                onChange={(e) =>
+                  setEditItem({ ...editItem, category: e.target.value })
+                }
+                style={{
+                  width: '100%',
+                  padding: '5px',
+                  borderRadius: '10px',
+                  border: '1px solid white',
+                  backgroundColor: '#F9FBFF'
+                }}
+              >
+                {uniqueCategories.map(cat => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ flex: '1 1 45%' }}>
+              <label style={{ display: 'block', marginBottom: '5px' }}>Brand</label>
+              <select
+                value={editItem.brand}
+                onChange={(e) =>
+                  setEditItem({ ...editItem, brand: e.target.value })
+                }
+                style={{
+                  width: '100%',
+                  padding: '5px',
+                  borderRadius: '10px',
+                  border: '1px solid white',
+                  backgroundColor: '#F9FBFF'
+                }}
+              >
+                {uniqueBrands.map(b => (
+                  <option key={b} value={b}>
+                    {b}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ flex: '1 1 45%' }}>
+              <label style={{ display: 'block', marginBottom: '5px' }}>
+                Stock
+              </label>
+              <input
+                type="number"
+                value={editItem.stock}
+                onChange={(e) =>
+                  setEditItem({ ...editItem, stock: Number(e.target.value) })
+                }
+                style={{
+                  width: '100%',
+                  padding: '5px',
+                  borderRadius: '10px',
+                  border: '1px solid white',
+                  backgroundColor: '#F9FBFF'
+                }}
+              />
+            </div>
+            <div style={{ flex: '1 1 45%' }}>
+              <label style={{ display: 'block', marginBottom: '5px' }}>Min</label>
+              <input
+                type="number"
+                value={editItem.min}
+                onChange={(e) =>
+                  setEditItem({ ...editItem, min: Number(e.target.value) })
+                }
+                style={{
+                  width: '100%',
+                  padding: '5px',
+                  borderRadius: '10px',
+                  border: '1px solid white',
+                  backgroundColor: '#F9FBFF'
+                }}
+              />
+            </div>
+            <div style={{ flex: '1 1 45%' }}>
+              <label style={{ display: 'block', marginBottom: '5px' }}>Cost</label>
+              <input
+                type="number"
+                value={editItem.cost}
+                onChange={(e) =>
+                  setEditItem({ ...editItem, cost: Number(e.target.value) })
+                }
+                style={{
+                  width: '100%',
+                  padding: '5px',
+                  borderRadius: '10px',
+                  border: '1px solid white',
+                  backgroundColor: '#F9FBFF'
+                }}
+              />
+            </div>
+            <div style={{ flex: '1 1 45%' }}>
+              <label style={{ display: 'block', marginBottom: '5px' }}>
+                Sale
+              </label>
+              <input
+                type="number"
+                value={editItem.sale}
+                onChange={(e) =>
+                  setEditItem({ ...editItem, sale: Number(e.target.value) })
+                }
+                style={{
+                  width: '100%',
+                  padding: '5px',
+                  borderRadius: '10px',
+                  border: '1px solid white',
+                  backgroundColor: '#F9FBFF'
+                }}
+              />
+            </div>
+          </div>
+          <div
+            style={{
+              marginTop: '20px',
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '10px'
+            }}
+          >
+            <button
+              onClick={handleSave}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: '#5932EA',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '5px',
+                cursor: 'pointer',
+                transition: 'background-color 0.3s ease'
+              }}
+            >
+              Save
+            </button>
+            <button
+              onClick={() => setShowModal(false)}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: '#4321C9',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '5px',
+                cursor: 'pointer',
+                transition: 'background-color 0.3s ease'
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+  
+      {/* Modal for compatibility */}
+      {showCompatibilityModal && selectedProduct && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: '500px',
+            maxHeight: '80%',
+            overflowY: 'auto',
+            backgroundColor: '#fff',
+            padding: '20px',
+            borderRadius: '10px',
+            boxShadow: '0 0 10px rgba(0,0,0,0.2)',
+            zIndex: 10000
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '20px'
+            }}
+          >
+            <h2 style={{ margin: 0 }}>
+              Compatibilities for {selectedProduct.name}
+            </h2>
+            <button
+              onClick={() => setShowCompatibilityModal(false)}
+              style={{
+                background: 'none',
+                border: 'none',
+                fontSize: '24px',
+                cursor: 'pointer',
+                lineHeight: '1'
+              }}
+            >
+              &times;
+            </button>
+          </div>
+          {compatibilities.length === 0 ? (
+            <p>No compatibilities registered.</p>
+          ) : (
+            <div>
+              {compatibilities.map((comp, index) => (
+                <div
+                  key={index}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: '10px',
+                    padding: '5px',
+                    border: '1px solid #ddd',
+                    borderRadius: '5px'
+                  }}
+                >
+                  <span>{comp.motorcycle_model}</span>
+                  <button
+                    onClick={() => handleDeleteCompatibility(comp.motorcycle_model)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#f44336',
+                      cursor: 'pointer',
+                      fontSize: '16px'
+                    }}
+                  >
+                    &times;
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Add new compatibility */}
+          <div style={{ display: 'flex', alignItems: 'center', marginTop: '15px' }}>
             <input
               type="text"
-              value={editItem.sku}
-              onChange={e => setEditItem({ ...editItem, sku: e.target.value })}
-              style={{ width: '100%', marginBottom: '10px' }}
+              placeholder="New motorcycle model"
+              value={newCompatibility}
+              onChange={(e) => setNewCompatibility(e.target.value)}
+              style={{
+                flex: 1,
+                padding: '5px',
+                borderRadius: '10px',
+                border: '1px solid white',
+                backgroundColor: '#F9FBFF'
+              }}
             />
-          </label>
-          <label>
-            Name:
-            <input
-              type="text"
-              value={editItem.name}
-              onChange={e => setEditItem({ ...editItem, name: e.target.value })}
-              style={{ width: '100%', marginBottom: '10px' }}
-            />
-          </label>
-          <label>
-            Category:
-            <input
-              type="text"
-              value={editItem.category}
-              onChange={e => setEditItem({ ...editItem, category: e.target.value })}
-              style={{ width: '100%', marginBottom: '10px' }}
-            />
-          </label>
-          <label>
-            Brand:
-            <input
-              type="text"
-              value={editItem.brand || ''}
-              onChange={e => setEditItem({ ...editItem, brand: e.target.value })}
-              style={{ width: '100%', marginBottom: '10px' }}
-            />
-          </label>
-          <label>
-            Stock:
-            <input
-              type="number"
-              value={editItem.stock || 0}
-              onChange={e => setEditItem({ ...editItem, stock: parseInt(e.target.value || 0, 10) })}
-              style={{ width: '100%', marginBottom: '10px' }}
-            />
-          </label>
-          <label>
-            Min:
-            <input
-              type="number"
-              value={editItem.min || 0}
-              onChange={e => setEditItem({ ...editItem, min: parseInt(e.target.value || 0, 10) })}
-              style={{ width: '100%', marginBottom: '10px' }}
-            />
-          </label>
-
-          <label>
-            Cost:
-            <input
-              type="number"
-              step="0.01"
-              value={editItem.cost || 0}
-              onChange={e => setEditItem({ ...editItem, cost: parseFloat(e.target.value || 0) })}
-              style={{ width: '100%', marginBottom: '10px' }}
-            />
-          </label>
-          <label>
-            Sale:
-            <input
-              type="number"
-              step="0.01"
-              value={editItem.sale || 0}
-              onChange={e => setEditItem({ ...editItem, sale: parseFloat(e.target.value || 0) })}
-              style={{ width: '100%', marginBottom: '10px' }}
-            />
-          </label>
-          <button onClick={handleSave} style={{ marginRight: '10px' }}>
-            Save
-          </button>
-          <button onClick={() => setShowModal(false)}>Cancel</button>
+            <button
+              onClick={handleAddCompatibility}
+              style={{
+                marginLeft: '5px',
+                padding: '10px 20px',
+                backgroundColor: '#5932EA',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '5px',
+                cursor: 'pointer',
+                transition: 'background-color 0.3s ease'
+              }}
+            >
+              +
+            </button>
+          </div>
+          <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end' }}>
+            <button
+              onClick={() => setShowCompatibilityModal(false)}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: '#4321C9',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '5px',
+                cursor: 'pointer',
+                transition: 'background-color 0.3s ease'
+              }}
+            >
+              Save Changes
+            </button>
+          </div>
         </div>
       )}
     </div>

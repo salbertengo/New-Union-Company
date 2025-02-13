@@ -1,4 +1,3 @@
-// routes/inventoryRoutes.js
 const express = require('express');
 const InventoryController = require('../controllers/inventoryController');
 const authenticateToken = require('../middleware/auth');

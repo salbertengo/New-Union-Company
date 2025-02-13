@@ -27,6 +27,7 @@ class InventoryController {
     try {
       const productId = await InventoryService.createProduct(req.body);
       res.status(201).json({ id: productId });
+      console.log('req.body:', req.body);
     } catch (err) {
       console.error('Error en InventoryController.create:', err); 
       res.status(400).json({ error: err.message });

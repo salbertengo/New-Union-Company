@@ -15,10 +15,21 @@ class InventoryService {
   }
 
   static async createProduct(data) {
-    if (!data.name || data.stock === undefined || data.cost === undefined || data.sell === undefined) {
-      throw new Error('Missing required data');
+    const { name, stock, cost, sale, category, sku, min, brand } = data;
+    if (!name || !sku || !cost || !sale) {
+      throw new Error("Missing required data");
     }
-    return await InventoryModel.create(data);
+  
+    return await InventoryModel.create({
+      name,
+      stock,
+      cost,
+      sale,
+      category,
+      sku,
+      min,
+      brand
+    });
   }
 
   static async updateProduct(id, data) {
