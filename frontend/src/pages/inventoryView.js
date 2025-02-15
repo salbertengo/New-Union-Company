@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { AgGridReact } from '@ag-grid-community/react';
 import { ClientSideRowModelModule } from '@ag-grid-community/client-side-row-model';
 import { ModuleRegistry } from '@ag-grid-community/core';
@@ -18,36 +18,37 @@ const InventoryView = () => {
   const [editItem, setEditItem] = useState(null);
   const gridRef = useRef(null);
   const [isHovered, setIsHovered] = useState(false);
-  // States for compatibility modal
   const [showCompatibilityModal, setShowCompatibilityModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [compatibilities, setCompatibilities] = useState([]);
   const [newCompatibility, setNewCompatibility] = useState('');
+  const [refreshInventory, setRefreshInventory] = useState(false);
+
+  const fetchInventoryData = useCallback(async () => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.error('No token found');
+      return;
+    }
+    try {
+      const response = await fetch('http://localhost:3000/inventory', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (!response.ok) throw new Error('Error fetching inventory');
+      const data = await response.json();
+      setRowData(data);
+    } catch (error) {
+      console.error('Error fetching inventory:', error);
+    }
+  }, []);
 
   useEffect(() => {
-    const fetchData = async () => {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        console.error('No token found');
-        return;
-      }
-      try {
-        const response = await fetch('http://localhost:3000/inventory', {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-        if (!response.ok) throw new Error('Error fetching inventory');
-        const data = await response.json();
-        setRowData(data);
-      } catch (error) {
-        console.error('Error fetching inventory:', error);
-      }
-    };
-    fetchData();
-  }, []);
+    fetchInventoryData();
+  }, [fetchInventoryData, refreshInventory]);
 
   const uniqueCategories = [...new Set(rowData.map(item => item.category))];
   const uniqueBrands = [...new Set(rowData.map(item => item.brand))];
@@ -147,8 +148,6 @@ const InventoryView = () => {
     }
   };
 
-
-
   const columnDefs = [
     { headerName: 'SKU', field: 'sku', width: 250, headerStyle: { fontFamily: "Impact", fontSize: "8px", color: "red" } },
     { headerName: 'Name', field: 'name', width: 300 },
@@ -247,15 +246,15 @@ const InventoryView = () => {
     setEditItem(newProduct);
     setShowModal(true);
   };
-  
+
   const handleSave = async () => {
     if (!editItem) return;
-    const { sku, name, cost, sale } = editItem; // Required fields
+    const { sku, name, cost, sale } = editItem;
     if (!sku || !name || !cost || !sale) {
       alert("Please complete all required fields (SKU, Name, Cost and Sale).");
       return;
     }
-    console.log("Sending product:", editItem);
+    
     const token = localStorage.getItem('token');
     try {
       let response;
@@ -278,23 +277,44 @@ const InventoryView = () => {
           body: JSON.stringify(editItem),
         });
       }
-      console.log("Server response:", response.status);
+  
       if (response.ok) {
-        const savedItem = await response.json();
-        console.log("Saved product:", savedItem);
-        if (editItem.id) {
-          setRowData(prevData =>
-            prevData.map(item => (item.id === editItem.id ? savedItem : item))
-          );
-        } else {
-          setRowData(prevData => [...prevData, savedItem]);
-        }
+        // En lugar de actualizar rowData directamente, 
+        // usamos refreshInventory para provocar una nueva carga
+        setRefreshInventory(prev => !prev);
         setShowModal(false);
       } else {
         console.error('Error saving item:', response.status);
       }
     } catch (error) {
-      console.error('Error saving item:', error);
+      console.error('Error in handleSave:', error);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!editItem?.id) return;
+    const confirmed = window.confirm('Are you sure you want to delete this item?');
+    if (!confirmed) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`http://localhost:3000/inventory/${editItem.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        }
+      });
+
+      if (response.ok) {
+        // Actualiza la tabla *después* de que el backend confirme la eliminación
+        setRefreshInventory(prev => !prev);
+        setShowModal(false);
+      } else {
+        console.error('Error deleting item:', response.status);
+      }
+    } catch (error) {
+      console.error('Error deleting item:', error);
     }
   };
 
@@ -379,7 +399,7 @@ const InventoryView = () => {
           </button>
         </div>
       </div>
-  
+
       {/* Grid */}
       <div style={{ flex: 1 }}>
         <div className="ag-theme-alpine" style={{ width: '100%', height: '100%' }}>
@@ -399,7 +419,7 @@ const InventoryView = () => {
           />
         </div>
       </div>
-  
+
       {/* Modal for product */}
       {showModal && editItem && (
         <div
@@ -613,6 +633,19 @@ const InventoryView = () => {
               Save
             </button>
             <button
+              onClick={handleDelete}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: '#f44336',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '5px',
+                cursor: 'pointer'
+              }}
+            >
+              Delete
+            </button>
+            <button
               onClick={() => setShowModal(false)}
               style={{
                 padding: '10px 20px',
@@ -629,7 +662,7 @@ const InventoryView = () => {
           </div>
         </div>
       )}
-  
+
       {/* Modal for compatibility */}
       {showCompatibilityModal && selectedProduct && (
         <div
