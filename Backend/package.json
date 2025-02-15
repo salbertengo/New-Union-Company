@@ -1,6 +1,7 @@
 {
   "name": "backend",
   "version": "1.0.0",
+  "bin": "./app.js",
   "main": "app.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -20,6 +21,12 @@
     "mysql2": "^3.12.0"
   },
   "devDependencies": {
-    "nodemon": "^2.0.22"
+    "nodemon": "^2.0.22",
+    "pkg": "^5.8.0"
+  },
+  "pkg": {
+    "assets": [
+      "build/**/*"
+    ]
   }
 }

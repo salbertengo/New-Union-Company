@@ -4,10 +4,12 @@ const authRoutes = require('./routes/authRoutes');
 const inventoryRouter = require('./routes/inventoryRoutes');
 const compatibilityRoutes = require('./routes/compatibilityRoutes');
 const bodyParser = require('body-parser');
-const cors = require('cors'); // Importa el módulo cors
+const path = require('path');
+const cors = require('cors'); 
 
 const app = express();
 app.use(bodyParser.json());
+app.use(express.static(path.join(__dirname, 'build')));
 
 app.use(cors({
   origin: 'http://localhost:4000', 
@@ -18,8 +20,10 @@ app.use(cors({
 app.use('/auth', authRoutes);
 app.use('/inventory', inventoryRouter);
 app.use('/compatibility', compatibilityRoutes);
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'build', 'index.html'));
+});
 
 app.listen(3000, () => {
-  console.log('Servidor en http://localhost:3000');
 
 });

@@ -23,7 +23,7 @@ const Login = ({ onLogin }) => {
       const data = await response.json();
       localStorage.setItem('token', data.token);
       onLogin();
-      navigate('/inventory');
+      navigate('/inventorydashboard');
     } catch (error) {
       alert(error.message);
     }

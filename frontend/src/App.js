@@ -1,18 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
 import Login from './pages/login';
+import Registration from './pages/register';
 import Inventory from './pages/InventoryPage';
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
-    // Al cargar la aplicación, verifica si hay un token en localStorage
     const token = localStorage.getItem('token');
     if (token) {
       setIsLoggedIn(true);
     } else {
-      setIsLoggedIn(false); // Asegúrate de establecer isLoggedIn a false si no hay token
+      setIsLoggedIn(false); 
     }
   }, []);
 
@@ -21,7 +21,7 @@ function App() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('token'); // Elimina el token al cerrar sesión
+    localStorage.removeItem('token'); 
     setIsLoggedIn(false);
   };
 
@@ -29,8 +29,9 @@ function App() {
     <Router>
       <Routes>
         <Route path="/login" element={<Login onLogin={handleLogin} />} />
+        <Route path="/register" element={<Registration />} />
         <Route
-          path="/inventory"
+          path="/inventorydashboard"
           element={
             isLoggedIn ? (
               <Inventory onLogout={handleLogout} />
@@ -39,7 +40,7 @@ function App() {
             )
           }
         />
-        <Route path="/" element={<Navigate to="/inventory" />} />
+        <Route path="/" element={<Navigate to="/inventorydashboard" />} />
       </Routes>
     </Router>
   );
