@@ -632,19 +632,7 @@ const InventoryView = () => {
             >
               Save
             </button>
-            <button
-              onClick={handleDelete}
-              style={{
-                padding: '10px 20px',
-                backgroundColor: '#f44336',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '5px',
-                cursor: 'pointer'
-              }}
-            >
-              Delete
-            </button>
+         
             <button
               onClick={() => setShowModal(false)}
               style={{
@@ -723,18 +711,7 @@ const InventoryView = () => {
                   }}
                 >
                   <span>{comp.motorcycle_model}</span>
-                  <button
-                    onClick={() => handleDeleteCompatibility(comp.motorcycle_model)}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: '#f44336',
-                      cursor: 'pointer',
-                      fontSize: '16px'
-                    }}
-                  >
-                    &times;
-                  </button>
+                  
                 </div>
               ))}
             </div>
