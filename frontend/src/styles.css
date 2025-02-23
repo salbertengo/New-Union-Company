@@ -96,3 +96,79 @@ html, body {
   stroke-width: 1.5px;
   stroke-miterlimit: 10;
 }
+
+.icon-agujero-llave{
+  stroke:#9197B3;
+  stroke-width: 2px;
+  stroke-linecap: round;
+}
+
+.jobsheets-button-general{
+  width: 20px;
+  height: 20px;
+  fill: none;
+}
+
+.jobsheets-inferior{
+  fill: #9197B3;
+}
+
+.jobsheets-external-border{
+  stroke: #9197B3;
+  stroke-width: 1.5px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+
+.payments-button-border{
+  stroke:#9197B3;
+  stroke-width: 1.5px;
+  stroke-linecap: round;
+  stroke-linejoin:round;
+}
+
+.payments-button{
+  width: 21;
+  height: 22px;
+  fill: none;
+}
+
+#btn4 svg {
+  margin-left: -45px; /* Mueve el ícono hacia la izquierda */
+}
+
+#btn4 .texto-btn4 {
+  position: relative;
+  left: -35px;
+}
+
+/*Hover en side bar*/
+
+.sidebar-button:hover,
+.sidebar-button1:hover {
+  background-color: #5932EA;
+  transform: translateX(5px);
+  color: #FFFFFF;
+}
+
+.sidebar-button:hover .icon {
+  fill: white;
+}
+
+.sidebar-button:hover .payments-button {
+  stroke: white;
+}
+
+.sidebar-button:hover .icon-external-border,
+.sidebar-button:hover .icon-interior-border,
+.sidebar-button:hover .icon-agujero-llave,
+.sidebar-button:hover .payments-button-border,
+.sidebar-button1:hover .jobsheets-external-border,
+.sidebar-button1:hover .jobsheets-inferior {
+  stroke: white;
+}
+
+.sidebar-button i {
+  margin-right: 10px;
+}

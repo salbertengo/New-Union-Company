@@ -3,6 +3,7 @@ import React from 'react';
 import Sumary from './sumary';
 import CompatibilityCheck from './compatibilityCheck';
 import InventoryView from './inventoryView';
+import SideBar from './Sidebar';
 
 const InventoryPage = () => {
   return (
@@ -27,6 +28,7 @@ const InventoryPage = () => {
           alignItems: 'center'
         }}
       >
+        <SideBar />
       </div>
 
       {/* Contenedor principal */}
