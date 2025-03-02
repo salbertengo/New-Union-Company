@@ -1,0 +1,226 @@
+[33mcommit d0be24c4af0046af2cfa4789c55ac68377bcd453[m
+Author: salbertengo <salbertengo@hotmail.com>
+Date:   Sun Feb 16 23:51:18 2025 -0300
+
+    Eliminando archivos grandes del historial
+
+[1mdiff --git a/node_modules/.bin/asar b/node_modules/.bin/asar[m
+[1mdeleted file mode 100644[m
+[1mindex 8178288..0000000[m
+[1m--- a/node_modules/.bin/asar[m
+[1m+++ /dev/null[m
+[36m@@ -1,16 +0,0 @@[m
+[31m-#!/bin/sh[m
+[31m-basedir=$(dirname "$(echo "$0" | sed -e 's,\\,/,g')")[m
+[31m-[m
+[31m-case `uname` in[m
+[31m-    *CYGWIN*|*MINGW*|*MSYS*)[m
+[31m-        if command -v cygpath > /dev/null 2>&1; then[m
+[31m-            basedir=`cygpath -w "$basedir"`[m
+[31m-        fi[m
+[31m-    ;;[m
+[31m-esac[m
+[31m-[m
+[31m-if [ -x "$basedir/node" ]; then[m
+[31m-  exec "$basedir/node"  "$basedir/../@electron/asar/bin/asar.js" "$@"[m
+[31m-else [m
+[31m-  exec node  "$basedir/../@electron/asar/bin/asar.js" "$@"[m
+[31m-fi[m
+[1mdiff --git a/node_modules/.bin/asar.cmd b/node_modules/.bin/asar.cmd[m
+[1mdeleted file mode 100644[m
+[1mindex cf6a700..0000000[m
+[1m--- a/node_modules/.bin/asar.cmd[m
+[1m+++ /dev/null[m
+[36m@@ -1,17 +0,0 @@[m
+[31m-@ECHO off[m
+[31m-GOTO start[m
+[31m-:find_dp0[m
+[31m-SET dp0=%~dp0[m
+[31m-EXIT /b[m
+[31m-:start[m
+[31m-SETLOCAL[m
+[31m-CALL :find_dp0[m
+[31m-[m
+[31m-IF EXIST "%dp0%\node.exe" ([m
+[31m-  SET "_prog=%dp0%\node.exe"[m
+[31m-) ELSE ([m
+[31m-  SET "_prog=node"[m
+[31m-  SET PATHEXT=%PATHEXT:;.JS;=;%[m
+[31m-)[m
+[31m-[m
+[31m-endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%"  "%dp0%\..\@electron\asar\bin\asar.js" %*[m
+[1mdiff --git a/node_modules/.bin/asar.ps1 b/node_modules/.bin/asar.ps1[m
+[1mdeleted file mode 100644[m
+[1mindex deed456..0000000[m
+[1m--- a/node_modules/.bin/asar.ps1[m
+[1m+++ /dev/null[m
+[36m@@ -1,28 +0,0 @@[m
+[31m-#!/usr/bin/env pwsh[m
+[31m-$basedir=Split-Path $MyInvocation.MyCommand.Definition -Parent[m
+[31m-[m
+[31m-$exe=""[m
+[31m-if ($PSVersionTable.PSVersion -lt "6.0" -or $IsWindows) {[m
+[31m-  # Fix case when both the Windows and Linux builds of Node[m
+[31m-  # are installed in the same directory[m
+[31m-  $exe=".exe"[m
+[31m-}[m
+[31m-$ret=0[m
+[31m-if (Test-Path "$basedir/node$exe") {[m
+[31m-  # Support pipeline input[m
+[31m-  if ($MyInvocation.ExpectingInput) {[m
+[31m-    $input | & "$basedir/node$exe"  "$basedir/../@electron/asar/bin/asar.js" $args[m
+[31m-  } else {[m
+[31m-    & "$basedir/node$exe"  "$basedir/../@electron/asar/bin/asar.js" $args[m
+[31m-  }[m
+[31m-  $ret=$LASTEXITCODE[m
+[31m-} else {[m
+[31m-  # Support pipeline input[m
+[31m-  if ($MyInvocation.ExpectingInput) {[m
+[31m-    $input | & "node$exe"  "$basedir/../@electron/asar/bin/asar.js" $args[m
+[31m-  } else {[m
+[31m-    & "node$exe"  "$basedir/../@electron/asar/bin/asar.js" $args[m
+[31m-  }[m
+[31m-  $ret=$LASTEXITCODE[m
+[31m-}[m
+[31m-exit $ret[m
+[1mdiff --git a/node_modules/.bin/electron b/node_modules/.bin/electron[m
+[1mdeleted file mode 100644[m
+[1mindex 9322e99..0000000[m
+[1m--- a/node_modules/.bin/electron[m
+[1m+++ /dev/null[m
+[36m@@ -1,16 +0,0 @@[m
+[31m-#!/bin/sh[m
+[31m-basedir=$(dirname "$(echo "$0" | sed -e 's,\\,/,g')")[m
+[31m-[m
+[31m-case `uname` in[m
+[31m-    *CYGWIN*|*MINGW*|*MSYS*)[m
+[31m-        if command -v cygpath > /dev/null 2>&1; then[m
+[31m-            basedir=`cygpath -w "$basedir"`[m
+[31m-        fi[m
+[31m-    ;;[m
+[31m-esac[m
+[31m-[m
+[31m-if [ -x "$basedir/node" ]; then[m
+[31m-  exec "$basedir/node"  "$basedir/../electron/cli.js" "$@"[m
+[31m-else [m
+[31m-  exec node  "$basedir/../electron/cli.js" "$@"[m
+[31m-fi[m
+[1mdiff --git a/node_modules/.bin/electron-forge b/node_modules/.bin/electron-forge[m
+[1mdeleted file mode 100644[m
+[1mindex 0fe88d8..0000000[m
+[1m--- a/node_modules/.bin/electron-forge[m
+[1m+++ /dev/null[m
+[36m@@ -1,16 +0,0 @@[m
+[31m-#!/bin/sh[m
+[31m-basedir=$(dirname "$(echo "$0" | sed -e 's,\\,/,g')")[m
+[31m-[m
+[31m-case `uname` in[m
+[31m-    *CYGWIN*|*MINGW*|*MSYS*)[m
+[31m-        if command -v cygpath > /dev/null 2>&1; then[m
+[31m-            basedir=`cygpath -w "$basedir"`[m
+[31m-        fi[m
+[31m-    ;;[m
+[31m-esac[m
+[31m-[m
+[31m-if [ -x "$basedir/node" ]; then[m
+[31m-  exec "$basedir/node"  "$basedir/../@electron-forge/cli/dist/electron-forge.js" "$@"[m
+[31m-else [m
+[31m-  exec node  "$basedir/../@electron-forge/cli/dist/electron-forge.js" "$@"[m
+[31m-fi[m
+[1mdiff --git a/node_modules/.bin/electron-forge-vscode-nix b/node_modules/.bin/electron-forge-vscode-nix[m
+[1mdeleted file mode 100644[m
+[1mindex 8462fcd..0000000[m
+[1m--- a/node_modules/.bin/electron-forge-vscode-nix[m
+[1m+++ /dev/null[m
+[36m@@ -1,16 +0,0 @@[m
+[31m-#!/bin/sh[m
+[31m-basedir=$(dirname "$(echo "$0" | sed -e 's,\\,/,g')")[m
+[31m-[m
+[31m-case `uname` in[m
+[31m-    *CYGWIN*|*MINGW*|*MSYS*)[m
+[31m-        if command -v cygpath > /dev/null 2>&1; then[m
+[31m-            basedir=`cygpath -w "$basedir"`[m
+[31m-        fi[m
+[31m-    ;;[m
+[31m-esac[m
+[31m-[m
+[31m-if [ -x "$basedir/bash" ]; then[m
+[31m-  exec "$basedir/bash"  "$basedir/../@electron-forge/cli/script/vscode.sh" "$@"[m
+[31m-else [m
+[31m-  exec bash  "$basedir/../@electron-forge/cli/script/vscode.sh" "$@"[m
+[31m-fi[m
+[1mdiff --git a/node_modules/.bin/electron-forge-vscode-nix.cmd b/node_modules/.bin/electron-forge-vscode-nix.cmd[m
+[1mdeleted file mode 100644[m
+[1mindex 423c83f..0000000[m
+[1m--- a/node_modules/.bin/electron-forge-vscode-nix.cmd[m
+[1m+++ /dev/null[m
+[36m@@ -1,17 +0,0 @@[m
+[31m-@ECHO off[m
+[31m-GOTO start[m
+[31m-:find_dp0[m
+[31m-SET dp0=%~dp0[m
+[31m-EXIT /b[m
+[31m-:start[m
+[31m-SETLOCAL[m
+[31m-CALL :find_dp0[m
+[31m-[m
+[31m-IF EXIST "%dp0%\bash.exe" ([m
+[31m-  SET "_prog=%dp0%\bash.exe"[m
+[31m-) ELSE ([m
+[31m-  SET "_prog=bash"[m
+[31m-  SET PATHEXT=%PATHEXT:;.JS;=;%[m
+[31m-)[m
+[31m-[m
+[31m-endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%"  "%dp0%\..\@electron-forge\cli\script\vscode.sh" %*[m
+[1mdiff --git a/node_modules/.bin/electron-forge-vscode-nix.ps1 b/node_modules/.bin/electron-forge-vscode-nix.ps1[m
+[1mdeleted file mode 100644[m
+[1mindex 2d30faa..0000000[m
+[1m--- a/node_modules/.bin/electron-forge-vscode-nix.ps1[m
+[1m+++ /dev/null[m
+[36m@@ -1,28 +0,0 @@[m
+[31m-#!/usr/bin/env pwsh[m
+[31m-$basedir=Split-Path $MyInvocation.MyCommand.Definition -Parent[m
+[31m-[m
+[31m-$exe=""[m
+[31m-if ($PSVersionTable.PSVersion -lt "6.0" -or $IsWindows) {[m
+[31m-  # Fix case when both the Windows and Linux builds of Node[m
+[31m-  # are installed in the same directory[m
+[31m-  $exe=".exe"[m
+[31m-}[m
+[31m-$ret=0[m
+[31m-if (Test-Path "$basedir/bash$exe") {[m
+[31m-  # Support pipeline input[m
+[31m-  if ($MyInvocation.ExpectingInput) {[m
+[31m-    $input | & "$basedir/bash$exe"  "$basedir/../@electron-forge/cli/script/vscode.sh" $args[m
+[31m-  } else {[m
+[31m-    & "$basedir/bash$exe"  "$basedir/../@electron-forge/cli/script/vscode.sh" $args[m
+[31m-  }[m
+[31m-  $ret=$LASTEXITCODE[m
+[31m-} else {[m
+[31m-  # Support pipeline input[m
+[31m-  if ($MyInvocation.ExpectingInput) {[m
+[31m-    $input | & "bash$exe"  "$basedir/../@electron-forge/cli/script/vscode.sh" $args[m
+[31m-  } else {[m
+[31m-    & "bash$exe"  "$basedir/../@electron-forge/cli/script/vscode.sh" $args[m
+[31m-  }[m
+[31m-  $ret=$LASTEXITCODE[m
+[31m-}[m
+[31m-exit $ret[m
+[1mdiff --git a/node_modules/.bin/electron-forge-vscode-win b/node_modules/.bin/electron-forge-vscode-win[m
+[1mdeleted file mode 100644[m
+[1mindex 6e30590..0000000[m
+[1m--- a/node_modules/.bin/electron-forge-vscode-win[m
+[1m+++ /dev/null[m
+[36m@@ -1,12 +0,0 @@[m
+[31m-#!/bin/sh[m
+[31m-basedir=$(dirname "$(echo "$0" | sed -e 's,\\,/,g')")[m
+[31m-[m
+[31m-case `uname` in[m
+[31m-    *CYGWIN*|*MINGW*|*MSYS*)[m
+[31m-        if command -v cygpath > /dev/null 2>&1; then[m
+[31m-            basedir=`cygpath -w "$basedir"`[m
+[31m-        fi[m
+[31m-    ;;[m
+[31m-esac[m
+[31m-[m
+[31m-exec "$basedir/../@electron-forge/cli/script/vscode.cmd"   "$
