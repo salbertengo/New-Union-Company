@@ -1,4 +1,3 @@
-
 const InventoryModel = require('../models/inventory');
 
 class InventoryService {
@@ -48,6 +47,18 @@ class InventoryService {
     }
     await InventoryModel.delete(id);
     return true;
+  }
+
+  // Nuevo método para buscar productos
+  static async searchProducts(query, category) {
+    let products = await InventoryModel.searchByName(query);
+    
+    // Si hay una categoría especificada, filtramos por ella
+    if (category && category !== '') {
+      products = products.filter(product => product.category === category);
+    }
+    
+    return products;
   }
 }
 

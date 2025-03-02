@@ -1,10 +1,23 @@
 const InventoryService = require('../services/inventoryService');
 
 class InventoryController {
-  // Handler to get all inventory items
+  // Handler to get all inventory items or search by name
   static async getAll(req, res) {
     try {
-      const products = await InventoryService.getAllProducts();
+      const { search, category } = req.query;
+      let products;
+      
+      if (search) {
+        products = await InventoryService.searchProducts(search, category);
+      } else {
+        products = await InventoryService.getAllProducts();
+        
+        // Si hay categoría pero no búsqueda, filtramos los resultados
+        if (category && category !== '') {
+          products = products.filter(product => product.category === category);
+        }
+      }
+      
       res.json(products);
     } catch (err) {
       res.status(500).json({ error: err.message });
