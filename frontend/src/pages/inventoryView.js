@@ -5,7 +5,7 @@ import { ModuleRegistry } from '@ag-grid-community/core';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faEdit, faCog } from '@fortawesome/free-solid-svg-icons';
+import { faEdit, faCog, faSearch } from '@fortawesome/free-solid-svg-icons';
 import '@fortawesome/fontawesome-svg-core/styles.css';
 
 ModuleRegistry.registerModules([ClientSideRowModelModule]);
@@ -23,44 +23,94 @@ const InventoryView = () => {
   const [compatibilities, setCompatibilities] = useState([]);
   const [newCompatibility, setNewCompatibility] = useState('');
   const [refreshInventory, setRefreshInventory] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const searchTimeout = useRef(null);
 
-  const fetchInventoryData = useCallback(async () => {
+  const fetchInventoryData = useCallback(async (search = '', category = '') => {
+    setLoading(true);
     const token = localStorage.getItem('token');
     if (!token) {
       console.error('No token found');
+      setLoading(false);
       return;
     }
+    
     try {
-      const response = await fetch('http://localhost:3000/inventory', {
+      // Construir la URL con parámetros de búsqueda
+      let url = 'http://localhost:3000/inventory';
+      const params = new URLSearchParams();
+      
+      if (search) {
+        params.append('search', search);
+      }
+      
+      if (category) {
+        params.append('category', category);
+      }
+      
+      // Añadir los parámetros a la URL si existen
+      const queryString = params.toString();
+      if (queryString) {
+        url = `${url}?${queryString}`;
+      }
+      
+      const response = await fetch(url, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
       });
+      
       if (!response.ok) throw new Error('Error fetching inventory');
       const data = await response.json();
       setRowData(data);
     } catch (error) {
       console.error('Error fetching inventory:', error);
+    } finally {
+      setLoading(false);
     }
   }, []);
 
+  // Manejo del cambio en el campo de búsqueda con debounce
+  const handleSearchChange = (e) => {
+    const value = e.target.value;
+    setSearchTerm(value);
+    
+    // Cancelar el timeout anterior si existe
+    if (searchTimeout.current) {
+      clearTimeout(searchTimeout.current);
+    }
+    
+    // Establecer un nuevo timeout para ejecutar la búsqueda después de 500ms
+    searchTimeout.current = setTimeout(() => {
+      fetchInventoryData(value, categoryTerm);
+    }, 500);
+  };
+
+  // Manejo del cambio de categoría
+  const handleCategoryChange = (e) => {
+    const value = e.target.value;
+    setCategoryTerm(value);
+    fetchInventoryData(searchTerm, value);
+  };
+
   useEffect(() => {
     fetchInventoryData();
+    
+    // Limpiar cualquier timeout al desmontar el componente
+    return () => {
+      if (searchTimeout.current) {
+        clearTimeout(searchTimeout.current);
+      }
+    };
   }, [fetchInventoryData, refreshInventory]);
 
   const uniqueCategories = [...new Set(rowData.map(item => item.category))];
   const uniqueBrands = [...new Set(rowData.map(item => item.brand))];
 
-  const filteredData = rowData.filter(item => {
-    const nameMatches = item.name?.toLowerCase().includes(searchTerm.toLowerCase());
-    const categoryMatches = categoryTerm ? item.category === categoryTerm : true;
-    return nameMatches && categoryMatches;
-  });
-
   const defaultColDef = {
-    resizable: true // Removed flex: 1
+    resizable: true
   };
 
   const handleOpenEditModal = (data) => {
@@ -149,18 +199,18 @@ const InventoryView = () => {
   };
 
   const columnDefs = [
-    { headerName: 'SKU', field: 'sku', width: 250, headerStyle: { fontFamily: "Impact", fontSize: "8px", color: "red" } },
-    { headerName: 'Name', field: 'name', width: 300 },
-    { headerName: 'Category', field: 'category', width: 120 },
-    { headerName: 'Brand', field: 'brand', width: 120 },
-    { headerName: 'Stock', field: 'stock', width: 80 },
-    { headerName: 'Min', field: 'min', width: 80 },
-    { headerName: 'Cost', field: 'cost', width: 80 },
-    { headerName: 'Sale', field: 'sale', width: 80 },
+    { headerName: 'SKU', field: 'sku', width: 250, headerClass: 'custom-header-inventory' },
+    { headerName: 'Name', field: 'name', width: 300, headerClass: 'custom-header-inventory' },
+    { headerName: 'Category', field: 'category', width: 120, headerClass: 'custom-header-inventory' },
+    { headerName: 'Brand', field: 'brand', width: 120, headerClass: 'custom-header-inventory' },
+    { headerName: 'Stock', field: 'stock', width: 80, headerClass: 'custom-header-inventory' },
+    { headerName: 'Min', field: 'min', width: 80, headerClass: 'custom-header-inventory' },
+    { headerName: 'Cost', field: 'cost', width: 80, headerClass: 'custom-header-inventory' },
+    { headerName: 'Sale', field: 'sale', width: 80, headerClass: 'custom-header-inventory' },
     {
       headerName: 'Edit',
       field: 'edit',
-      width: 30, // Set a fixed width
+      width: 30,
       sortable: false,
       filter: false,
       cellStyle: {
@@ -181,7 +231,7 @@ const InventoryView = () => {
             cursor: 'pointer',
             color: '#3498db',
             textAlign: 'center',
-            lineHeight: 'normal', // Adjust lineHeight if needed
+            lineHeight: 'normal',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -190,12 +240,13 @@ const InventoryView = () => {
         >
           <FontAwesomeIcon icon={faEdit} style={{ fontSize: '14px' }} />
         </div>
-      )
+      ),
+      headerClass: 'custom-header-inventory'
     },
     {
       headerName: 'Compatibility',
       field: 'compatibility',
-      width: 80, // Set a fixed width
+      width: 80,
       sortable: false,
       filter: false,
       cellStyle: {
@@ -216,7 +267,7 @@ const InventoryView = () => {
             cursor: 'pointer',
             color: '#f39c12',
             textAlign: 'center',
-            lineHeight: 'normal', // Adjust lineHeight if needed
+            lineHeight: 'normal',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -225,7 +276,8 @@ const InventoryView = () => {
         >
           <FontAwesomeIcon icon={faCog} style={{ fontSize: '14px' }} />
         </div>
-      )
+      ),
+      headerClass: 'custom-header-inventory'
     }
   ];
 
@@ -279,9 +331,8 @@ const InventoryView = () => {
       }
   
       if (response.ok) {
-        // En lugar de actualizar rowData directamente, 
-        // usamos refreshInventory para provocar una nueva carga
-        setRefreshInventory(prev => !prev);
+        // Refrescar el inventario después de guardar
+        fetchInventoryData(searchTerm, categoryTerm);
         setShowModal(false);
       } else {
         console.error('Error saving item:', response.status);
@@ -307,8 +358,8 @@ const InventoryView = () => {
       });
 
       if (response.ok) {
-        // Actualiza la tabla *después* de que el backend confirme la eliminación
-        setRefreshInventory(prev => !prev);
+        // Refrescar inventario después de eliminar
+        fetchInventoryData(searchTerm, categoryTerm);
         setShowModal(false);
       } else {
         console.error('Error deleting item:', response.status);
@@ -347,23 +398,36 @@ const InventoryView = () => {
       >
         <h2 style={{ margin: 0, fontSize: '18px' }}>Inventory View</h2>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          <input
-            type="text"
-            placeholder="Search by name"
-            style={{
-              padding: '5px',
-              width: '216px',
-              borderRadius: '10px',
-              border: '1px solid white',
-              backgroundColor: '#F9FBFF',
-              height: '25px'
-            }}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+          <div style={{ position: 'relative' }}>
+            <input
+              type="text"
+              placeholder="Search by name"
+              style={{
+                padding: '5px 30px 5px 10px',
+                width: '216px',
+                borderRadius: '10px',
+                border: '1px solid white',
+                backgroundColor: '#F9FBFF',
+                height: '25px'
+              }}
+              value={searchTerm}
+              onChange={handleSearchChange}
+            />
+            <FontAwesomeIcon 
+              icon={faSearch} 
+              style={{
+                position: 'absolute',
+                right: '10px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: loading ? '#4321C9' : 'gray',
+                cursor: 'pointer'
+              }}
+            />
+          </div>
           <select
             value={categoryTerm}
-            onChange={(e) => setCategoryTerm(e.target.value)}
+            onChange={handleCategoryChange}
             style={{
               padding: '5px',
               width: '216px',
@@ -400,24 +464,60 @@ const InventoryView = () => {
         </div>
       </div>
 
-      {/* Grid */}
-      <div style={{ flex: 1 }}>
-        <div className="ag-theme-alpine" style={{ width: '100%', height: '100%' }}>
+      {/* Grid with loading indicator */}
+      <div style={{ flex: 1, position: 'relative' }}>
+        <div className="ag-theme-alpine inventory-view" 
+          style={{ 
+            width: '100%', 
+            height: '100%',
+            overflowX: 'hidden',
+            overflowY: 'auto',
+            opacity: loading ? 0.6 : 1,
+            transition: 'opacity 0.3s ease'
+          }}>
           <AgGridReact
             ref={gridRef}
-            rowData={filteredData}
+            rowData={rowData}
             columnDefs={columnDefs}
-            defaultColDef={defaultColDef}
+            defaultColDef={{
+              resizable: false,
+              sortable: true,
+              flex: 1
+            }}
             modules={[ClientSideRowModelModule]}
-            pagination
+            pagination={true}
             paginationPageSize={12}
             onRowClicked={handleRowClicked}
             headerHeight={30}
             rowHeight={25}
             suppressSizeToFit={true}
-            onGridReady={onGridReady}
+            suppressHorizontalScroll={true}
           />
         </div>
+        {loading && (
+          <div style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            zIndex: 1000
+          }}>
+            <div style={{
+              width: '40px',
+              height: '40px',
+              border: '4px solid rgba(0, 0, 0, 0.1)',
+              borderLeft: '4px solid #4321C9',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite'
+            }}></div>
+            <style>{`
+              @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+              }
+            `}</style>
+          </div>
+        )}
       </div>
 
       {/* Modal for product */}
@@ -711,7 +811,18 @@ const InventoryView = () => {
                   }}
                 >
                   <span>{comp.motorcycle_model}</span>
-                  
+                  <button
+                    onClick={() => handleDeleteCompatibility(comp.motorcycle_model)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#f44336',
+                      cursor: 'pointer',
+                      fontSize: '16px'
+                    }}
+                  >
+                    &times;
+                  </button>
                 </div>
               ))}
             </div>
