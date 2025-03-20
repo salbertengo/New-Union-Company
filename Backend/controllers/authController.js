@@ -22,8 +22,7 @@ class AuthController {
 
 
 static async verifyToken(req, res) {
-  // Si llegamos aquí, el middleware auth ya verificó el token
-  // y podemos devolver una respuesta exitosa
+
   return res.status(200).json({ valid: true, user: req.user });
 }
 }
