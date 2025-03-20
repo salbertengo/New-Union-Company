@@ -14,7 +14,7 @@ app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, 'build')));
 
 app.use(cors({
-  origin: 'http://localhost:4000', 
+  origin: ['http://localhost:3000', 'http://localhost:4000'],
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
   credentials: true,
 }));
