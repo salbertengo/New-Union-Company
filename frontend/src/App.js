@@ -5,6 +5,7 @@ import Registration from './pages/register';
 import Inventory from './pages/InventoryPage';
 import CustomersPage from './pages/customersPage';
 import JobsheetPage from './pages/jobsheetPage';
+import PaymentsPage from  './pages/paymentsPage';
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
@@ -113,6 +114,16 @@ function App() {
           element={
             isLoggedIn ? (
               <JobsheetPage onLogout={handleLogout} />
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
+         <Route
+          path="/payments"
+          element={
+            isLoggedIn ? (
+              <PaymentsPage onLogout={handleLogout} />
             ) : (
               <Navigate to="/login" />
             )

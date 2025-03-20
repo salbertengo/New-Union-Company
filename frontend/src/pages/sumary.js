@@ -1,4 +1,3 @@
-//// filepath: /c:/Users/salbe/OneDrive/Escritorio/New Union Company/frontend/src/pages/sumary.js
 import React, { useState, useEffect } from 'react';
 import { AgGridReact } from '@ag-grid-community/react';
 import { ClientSideRowModelModule } from '@ag-grid-community/client-side-row-model';
@@ -6,7 +5,7 @@ import { ModuleRegistry } from '@ag-grid-community/core';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 
-// Registrar módulos de AG Grid
+// Registrar mÃ³dulos de AG Grid
 ModuleRegistry.registerModules([ClientSideRowModelModule]);
 
 const Sumary = () => {
@@ -41,9 +40,9 @@ const Sumary = () => {
   const lowStockData = inventory.filter(product => product.stock < product.min);
 
   const lowStockColumns = [
-    { headerName: 'SKU', field: 'sku' },
-    { headerName: 'Name', field: 'name' },
-    { headerName: 'Stock', field: 'stock' }
+    { headerName: 'SKU', field: 'sku', headerClass: 'custom-header-sumary' },
+    { headerName: 'Name', field: 'name', headerClass: 'custom-header-sumary' },
+    { headerName: 'Stock', field: 'stock', headerClass: 'custom-header-sumary' }
   ];
 
   return (
@@ -62,7 +61,7 @@ const Sumary = () => {
       <h3 style={{ margin: 0, marginBottom: '10px', fontSize: '18px' }}>Low Stock Parts</h3>
       {/* Contenedor flexible para la grid */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        <div className="ag-theme-alpine" style={{ width: '100%', height: '100%' }}>
+        <div className="ag-theme-alpine sumary-grid" style={{ width: '100%', height: '100%' }}>
           {loading ? (
             <p>Loading...</p>
           ) : (

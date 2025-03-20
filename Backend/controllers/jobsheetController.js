@@ -1,10 +1,57 @@
 const JobsheetService = require('../services/jobsheetService');
-
+const CustomerService = require('../services/customerService');
+const VehicleService = require('../services/vehicleService');
+const PaymentModel = require('../models/payment');
 class JobsheetController {
+  // En el servidor - jobsheetController.js
   static async getAllJobsheets(req, res) {
     try {
-      const jobsheets = await JobsheetService.getAllJobsheets();
-      res.json(jobsheets);
+      const { search, state } = req.query;
+      const jobsheets = await JobsheetService.getAllJobsheets(search, state);
+      
+      console.log("Raw jobsheets fetched:", jobsheets.length);
+      
+      const enrichedJobsheets = await Promise.all(jobsheets.map(async (js) => {
+        console.log(`Processing jobsheet ID ${js.id}, customer_id: ${js.customer_id}, vehicle_id: ${js.vehicle_id}`);
+        
+        let customer = null;
+        let vehicle = null;
+        
+        try {
+          if (js.customer_id) {
+            customer = await CustomerService.getCustomerById(js.customer_id);
+            console.log(`Customer for ID ${js.customer_id}:`, customer ? "Found" : "Not found");
+          }
+        } catch (error) {
+          console.error(`Error fetching customer ${js.customer_id}:`, error);
+        }
+        
+        try {
+          if (js.vehicle_id) {
+            vehicle = await VehicleService.getVehicleById(js.vehicle_id);
+            console.log(`Vehicle for ID ${js.vehicle_id}:`, vehicle ? "Found" : "Not found");
+          }
+        } catch (error) {
+          console.error(`Error fetching vehicle ${js.vehicle_id}:`, error);
+        }
+        
+        const enriched = {
+          ...js,
+          customer_name: customer ? (customer.name || `${customer.first_name || ''} ${customer.last_name || ''}`.trim()) : `Cliente #${js.customer_id || 'desconocido'}`,
+          vehicle_model: vehicle ? `${vehicle.make || ''} ${vehicle.model || ''}`.trim() : `Vehículo #${js.vehicle_id || 'desconocido'}`,
+          license_plate: vehicle ? vehicle.plate : 'Sin placa'
+        };
+        
+        console.log("Enriched jobsheet:", {
+          id: enriched.id,
+          customer_name: enriched.customer_name,
+          vehicle_model: enriched.vehicle_model
+        });
+        
+        return enriched;
+      }));
+      
+      res.json(enrichedJobsheets);
     } catch (err) {
       console.error('Error in getAllJobsheets:', err);
       res.status(500).json({ error: 'Internal server error' });
@@ -202,6 +249,40 @@ class JobsheetController {
       } else {
         res.status(500).json({ error: 'Internal server error' });
       }
+    }
+  }
+  static async getJobsheetItems(req, res) {
+    try {
+      const { id } = req.params;
+      const items = await JobsheetService.getJobsheetItems(id);
+      res.json(items);
+    } catch (err) {
+      console.error('Error in getJobsheetItems:', err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  static async getAllPayments(req, res) {
+    try {
+      console.log("getAllPayments called"); 
+      const { search } = req.query;
+      const payments = await PaymentModel.getAll(search || '');
+      console.log(`Found ${payments.length} payments`); 
+      res.json(payments);
+    } catch (err) {
+      console.error('Error in getAllPayments:', err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+  
+  static async getPaymentsByJobsheetId(req, res) {
+    try {
+      const { jobsheetId } = req.params;
+      const payments = await PaymentModel.getByJobsheetId(jobsheetId);
+      res.json(payments);
+    } catch (err) {
+      console.error('Error in getPaymentsByJobsheetId:', err);
+      res.status(500).json({ error: 'Internal server error' });
     }
   }
 }

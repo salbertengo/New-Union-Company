@@ -73,6 +73,31 @@ class PaymentModel {
       throw error;
     }
   }
+  static async getAll(search = '') {
+    try {
+      let query = `
+        SELECT p.*, j.id as jobsheet_id 
+        FROM payments p
+        LEFT JOIN jobsheets j ON p.jobsheet_id = j.id
+      `;
+      
+      const params = [];
+      
+      if (search) {
+        query += `
+          WHERE j.id LIKE ? OR p.method LIKE ?
+        `;
+        params.push(`%${search}%`, `%${search}%`);
+      }
+      
+      query += ` ORDER BY p.payment_date DESC`;
+      
+      const [rows] = await pool.query(query, params);
+      return rows;
+    } catch (error) {
+      throw error;
+    }
+  }
 }
 
 module.exports = PaymentModel;

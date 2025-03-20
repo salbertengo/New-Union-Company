@@ -15,7 +15,22 @@ class JobsheetItemModel {
       throw error;
     }
   }
-
+  static async getItemsByJobsheetId(jobsheetId) {
+    try {
+      const [rows] = await pool.query(
+        `SELECT ji.id, ji.jobsheet_id, ji.product_id, ji.quantity, ji.price,
+         i.name
+         FROM jobsheet_items ji
+         LEFT JOIN inventory i ON ji.product_id = i.id
+         WHERE ji.jobsheet_id = ?`,
+        [jobsheetId]
+      );
+      return rows;
+    } catch (error) {
+      console.error('Error getting jobsheet items:', error);
+      throw error;
+    }
+  }
   static async addItem(itemData) {
     const connection = await pool.getConnection();
     try {

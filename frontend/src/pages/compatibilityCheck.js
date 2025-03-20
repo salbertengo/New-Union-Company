@@ -20,24 +20,24 @@ const CompatibilityCheck = () => {
     // Si solo spareName (repuesto)
     if (spareTerm.trim() && !modelTerm.trim()) {
       setColumnDefs([
-        { headerName: 'Motorcycle Model', field: 'motorcycle_model' }
+        { headerName: 'Motorcycle Model', field: 'motorcycle_model', headerClass: 'custom-header-sumary' }
       ]);
     }
     // Si solo modelo de moto
     else if (!spareTerm.trim() && modelTerm.trim()) {
       setColumnDefs([
-        { headerName: 'SKU', field: 'sku' },
-        { headerName: 'Name', field: 'name' },
-        { headerName: 'Stock', field: 'stock' }
+        { headerName: 'SKU', field: 'sku', headerClass: 'custom-header-sumary' },
+        { headerName: 'Name', field: 'name', headerClass: 'custom-header-sumary' },
+        { headerName: 'Stock', field: 'stock', headerClass: 'custom-header-sumary' }
       ]);
     }
     // Si ambos o ninguno (para mantener la lógica que ya tenías)
     else {
       setColumnDefs([
-        { headerName: 'SKU', field: 'sku' },
-        { headerName: 'Name', field: 'name' },
-        { headerName: 'Stock', field: 'stock' },
-        { headerName: 'Motorcycle Model', field: 'motorcycle_model' }
+        { headerName: 'SKU', field: 'sku', headerClass: 'custom-header-sumary' },
+        { headerName: 'Name', field: 'name', headerClass: 'custom-header-sumary' },
+        { headerName: 'Stock', field: 'stock', headerClass: 'custom-header-sumary' },
+        { headerName: 'Motorcycle Model', field: 'motorcycle_model', headerClass: 'custom-header-sumary' }
       ]);
     }
   }, [spareTerm, modelTerm]);
@@ -156,7 +156,7 @@ const CompatibilityCheck = () => {
         />
       </div>
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        <div className="ag-theme-alpine" style={{ width: '100%', height: '100%' }}>
+        <div className="ag-theme-alpine sumary-grid" style={{ width: '100%', height: '100%' }}>
           {loading ? (
             <p>Loading...</p>
           ) : (

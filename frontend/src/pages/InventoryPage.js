@@ -1,4 +1,3 @@
-//// filepath: /c:/Users/salbe/OneDrive/Escritorio/New Union Company/frontend/src/pages/InventoryPage.js
 import React from 'react';
 import Sumary from './sumary';
 import CompatibilityCheck from './compatibilityCheck';
@@ -15,7 +14,7 @@ const InventoryPage = () => {
         flexDirection: 'row',
         backgroundColor: '#D9D9D9',
         boxSizing: 'border-box',
-        overflow: 'hidden' // Evita scroll global
+        overflow: 'hidden'
       }}
     >
       {/* Barra lateral */}

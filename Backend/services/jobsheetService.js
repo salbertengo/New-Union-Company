@@ -3,9 +3,9 @@ const JobsheetItemModel = require('../models/jobsheetItem');
 const PaymentModel = require('../models/payment');
 
 class JobsheetService {
-  static async getAllJobsheets() {
+  static async getAllJobsheets(search, state) {
     try {
-      return await JobsheetModel.getAll();
+      return await JobsheetModel.getAll(search, state);
     } catch (error) {
       throw error;
     }
@@ -139,6 +139,16 @@ class JobsheetService {
       }
       return success;
     } catch (error) {
+      throw error;
+    }
+  }
+
+  static async getJobsheetItems(jobsheetId) {
+    try {
+      const items = await JobsheetItemModel.getItemsByJobsheetId(jobsheetId);
+      return items;
+    } catch (error) {
+      console.error('Error in service getJobsheetItems:', error);
       throw error;
     }
   }
