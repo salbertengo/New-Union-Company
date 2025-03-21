@@ -279,20 +279,16 @@ const columnDefs = [
     }
   
     try {
-      // Construir URL con parámetros
+      // Si hay un término de búsqueda, intentamos primero cargar todos para filtrado local
+      if (search && search.trim() !== "") {
+        await fetchJobsheetsForLocalSearch(status, search);
+        return;
+      }
+      
+      // Para solicitudes sin búsqueda, usamos el endpoint normal
       let url = "http://localhost:3000/jobsheets";
-      const params = [];
-      
-      if (search) {
-        params.push(`search=${encodeURIComponent(search)}`);
-      }
-      
       if (status && status !== "all") {
-        params.push(`state=${encodeURIComponent(status)}`);  
-      }
-      
-      if (params.length > 0) {
-        url += `?${params.join("&")}`;
+        url += `?state=${encodeURIComponent(status)}`;
       }
       
       console.log("Solicitando URL:", url);
@@ -307,57 +303,102 @@ const columnDefs = [
       if (response.ok) {
         const jobsheetData = await response.json();
         console.log("Datos recibidos:", jobsheetData);
-        
-        // IMPORTANTE: Ya no necesitamos transformar los datos, usamos los del backend directamente
         setJobsheets(jobsheetData);
       } else {
-        const errorText = await response.text();
-        console.error("Error del servidor:", response.status, errorText);
+        console.error("Error del servidor:", response.status);
+        setJobsheets([]);
       }
     } catch (error) {
       console.error("Error en fetchJobsheets:", error);
+      setJobsheets([]);
     } finally {
       setLoading(false);
     }
   }, []);
-
   
-const StatusFilterButton = () => {
-  const statuses = ["all", "pending", "in progress", "completed", "cancelled"];
-  
-  const nextStatus = () => {
-    const currentIndex = statuses.indexOf(statusFilter);
-    const nextIndex = (currentIndex + 1) % statuses.length;
-    setStatusFilter(statuses[nextIndex]);
-    fetchJobsheets(searchTerm, statuses[nextIndex]);
+  // Nueva función para cargar jobsheets y realizar búsqueda localmente
+  const fetchJobsheetsForLocalSearch = async (status, searchTerm) => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    
+    try {
+      // Cargar todos los jobsheets, opcionalmente filtrados por estado
+      let url = "http://localhost:3000/jobsheets";
+      if (status && status !== "all") {
+        url += `?state=${encodeURIComponent(status)}`;
+      }
+      
+      const response = await fetch(url, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      
+      if (response.ok) {
+        const allJobsheets = await response.json();
+        
+        // Filtrar localmente por el término de búsqueda
+        const searchTermLower = searchTerm.toLowerCase();
+        const filtered = allJobsheets.filter(js => {
+          // Búsqueda en ID
+          if (js.id.toString().includes(searchTermLower)) return true;
+          
+          // Búsqueda en nombre de cliente
+          if (js.customer_name?.toLowerCase().includes(searchTermLower)) return true;
+          
+          // Búsqueda en modelo de vehículo o placa
+          if (js.vehicle_model?.toLowerCase().includes(searchTermLower)) return true;
+          if (js.license_plate?.toLowerCase().includes(searchTermLower)) return true;
+          
+          return false;
+        });
+        
+        console.log(`Búsqueda local: encontrados ${filtered.length} de ${allJobsheets.length} jobsheets`);
+        setJobsheets(filtered);
+      }
+    } catch (error) {
+      console.error("Error en búsqueda local:", error);
+    }
   };
-
-  let color = '#666';
-  if (statusFilter === 'pending') color = '#FF9500';
-  else if (statusFilter === 'completed') color = '#00C853';
-  else if (statusFilter === 'in progress') color = '#2979FF';
-  else if (statusFilter === 'cancelled') color = '#F44336';
-
-  return (
-    <button 
-      onClick={nextStatus}
-      style={{
-        backgroundColor: statusFilter === 'all' ? '#f0f0f0' : `${color}20`,
-        color: statusFilter === 'all' ? '#333' : color,
-        border: `1px solid ${statusFilter === 'all' ? '#ddd' : `${color}40`}`,
-        borderRadius: '5px',
-        padding: '10px 15px',
-        fontSize: '14px',
-        fontWeight: '500',
-        cursor: 'pointer',
-        textTransform: 'capitalize',
-        marginLeft: '10px'
-      }}
-    >
-      {statusFilter === 'all' ? 'All States' : statusFilter}
-    </button>
-  );
-};
+  
+  const StatusFilterButton = () => {
+    const statuses = ["all", "pending", "in progress", "completed", "cancelled"];
+    
+    const nextStatus = () => {
+      const currentIndex = statuses.indexOf(statusFilter);
+      const nextIndex = (currentIndex + 1) % statuses.length;
+      setStatusFilter(statuses[nextIndex]);
+      fetchJobsheets(searchTerm, statuses[nextIndex]);
+    };
+  
+    let color = '#666';
+    if (statusFilter === 'pending') color = '#FF9500';
+    else if (statusFilter === 'completed') color = '#00C853';
+    else if (statusFilter === 'in progress') color = '#2979FF';
+    else if (statusFilter === 'cancelled') color = '#F44336';
+  
+    return (
+      <button 
+        onClick={nextStatus}
+        style={{
+          backgroundColor: statusFilter === 'all' ? '#F9FBFF' : `${color}20`,
+          color: statusFilter === 'all' ? '#333' : color,
+          border: `1px solid ${statusFilter === 'all' ? '#F9FBFF' : `${color}40`}`,
+          borderRadius: '10px',
+          padding: '5px 15px',
+          height: '35px',
+          fontSize: '14px',
+          fontWeight: '500',
+          cursor: 'pointer',
+          textTransform: 'capitalize'
+          // Se eliminó el marginLeft: '10px' que causaba el solapamiento
+        }}
+      >
+        {statusFilter === 'all' ? 'All States' : statusFilter}
+      </button>
+    );
+  };
   
   const handleCustomerSearch = (e) => {
     const value = e.target.value;
@@ -543,12 +584,11 @@ const StatusFilterButton = () => {
     }
   };
 
-  // Modifica el handleAddItem para usar el endpoint correcto
   const handleAddItem = async () => {
     if (!newItem.product_id || !currentJobsheet) {
       setNotification({
         show: true,
-        message: "Debe seleccionar un producto y especificar la cantidad",
+        message: "You must select a product and a jobsheet first",
         type: "error"
       });
       setTimeout(() => setNotification({show: false}), 3000);
@@ -580,6 +620,19 @@ const StatusFilterButton = () => {
         }
       );
   
+      // Intentar obtener el cuerpo de la respuesta como JSON
+      const responseData = await response.text();
+      let errorMessage = responseData;
+      
+      try {
+        // Intentar parsear como JSON si es posible
+        const jsonData = JSON.parse(responseData);
+        errorMessage = jsonData.error || jsonData.message || "Error desconocido";
+      } catch (e) {
+        // Si no es JSON, usar el texto tal cual
+        console.log("Respuesta no es JSON:", responseData);
+      }
+  
       if (response.ok) {
         setNotification({
           show: true,
@@ -594,25 +647,27 @@ const StatusFilterButton = () => {
         // Recargar lista de items
         fetchJobsheetItems(currentJobsheet.id);
       } else {
-        const errorText = await response.text();
-        console.error("Error adding item:", response.status, errorText);
+        console.error("Error adding item:", response.status, errorMessage);
         
+        // Mostrar el mensaje específico, incluido el de "Insufficient stock"
         setNotification({
           show: true,
-          message: "Error while adding item",
+          message: errorMessage || "Error al agregar el producto",
           type: "error"
         });
-        setTimeout(() => setNotification({show: false}), 3000);
+        
+        // Para errores, mantener la notificación más tiempo
+        setTimeout(() => setNotification({show: false}), 5000);
       }
     } catch (error) {
       console.error("Error adding item:", error);
       
       setNotification({
         show: true,
-        message: "Error: " + error.message,
+        message: "Error de conexión: " + error.message,
         type: "error"
       });
-      setTimeout(() => setNotification({show: false}), 3000);
+      setTimeout(() => setNotification({show: false}), 5000);
     } finally {
       setIsLoading(false);
     }
@@ -675,7 +730,7 @@ const handleDeleteItem = async (itemId) => {
       // Notificación de éxito
       setNotification({
         show: true,
-        message: "Item eliminado correctamente",
+        message: "Item deleted successfully",
         type: "success"
       });
       
@@ -1004,7 +1059,6 @@ const handleInventorySearch = (e) => {
   }, 300);
 };
 
-// Añade función para seleccionar un item del inventario
 const handleSelectInventoryItem = (item) => {
   setNewItem({
     ...newItem,
@@ -1017,124 +1071,127 @@ const handleSelectInventoryItem = (item) => {
   setShowInventoryResults(false);
 };
 
-  return (
-    <>
-<div
-  style={{
-    display: "flex",
-    justifyContent: "space-between",
-    marginBottom: "20px",
-    alignItems: "center",
-  }}
->
-  <div style={{ display: "flex", alignItems: "center" }}>
+return (
+  <>
     <div
       style={{
-        position: "relative",
-        width: "300px",
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        borderRadius: '30px',
+        overflow: 'hidden',
+        backgroundColor: '#ffffff',
+        boxSizing: 'border-box',
+        padding: '20px'
       }}
     >
-      <input
-        type="text"
-        placeholder="Search jobsheets..."
-        value={searchTerm}
-        onChange={handleSearch}
+      {/* Header, filters and button to add */}
+      <div
         style={{
-          width: "100%",
-          padding: "10px 35px 10px 15px",
-          borderRadius: "5px",
-          border: "1px solid #ddd",
-          fontSize: "14px",
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '10px'
         }}
-      />
-      <FontAwesomeIcon
-        icon={faSearch}
-        style={{
-          position: "absolute",
-          right: "12px",
-          top: "50%",
-          transform: "translateY(-50%)",
-          color: loading ? "#4321C9" : "gray",
-          cursor: "pointer",
-        }}
-      />
-    </div>
-    <StatusFilterButton />
-  </div>
-  
-  <button
-    onClick={handleOpenNewModal}
-    onMouseEnter={() => setIsHovered(true)}
-    onMouseLeave={() => setIsHovered(false)}
-    style={{
-      padding: "10px 20px",
-      backgroundColor: isHovered ? "#4321C9" : "#5932EA",
-      color: "white",
-      border: "none",
-      borderRadius: "5px",
-      cursor: "pointer",
-      transition: "background-color 0.3s ease",
-    }}
-  >
-    Add Job Sheet
-  </button>
-</div>
-
-        
-
-      {/* Grid with loading indicator */}
-      <div style={{ height: "calc(100vh - 180px)", width: "100%", position: "relative" }}>
-  <div
-    className="ag-theme-alpine"
-    style={{
-      width: "100%",
-      height: "100%",
-      border: "1px solid #ddd",
-      borderRadius: "5px",
-      overflow: "hidden",
-      opacity: loading ? 0.6 : 1,
-      transition: "opacity 0.3s ease",
-    }}
-  >
-    {console.log("Renderizando AG Grid con datos:", jobsheets)}
-    <AgGridReact
-      ref={gridRef}
-      rowData={jobsheets}
-      columnDefs={columnDefs}
-      defaultColDef={defaultColDef}
-      modules={[ClientSideRowModelModule]}
-      pagination={true}
-      paginationPageSize={12}
-      headerHeight={30}
-      rowHeight={40}
-      onGridReady={onGridReady}
-      domLayout={'autoHeight'}
-      suppressMenuHide={true} 
-      suppressRowTransform={true} 
-      suppressColumnVirtualisation={false} 
-      ensureDomOrder={true} 
-    />
-  </div>
-        {loading && (
-          <div
-            style={{
-              position: "absolute",
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-              zIndex: 1000,
-            }}
-          >
-            <div
+      >
+        <h2 style={{ margin: 0, fontSize: '18px' }}>Job Sheets</h2>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <div style={{ position: 'relative' }}>
+            <input
+              type="text"
+              placeholder="Search jobsheets..."
+              value={searchTerm}
+              onChange={handleSearch}
               style={{
-                width: "40px",
-                height: "40px",
-                border: "4px solid rgba(0, 0, 0, 0.1)",
-                borderLeft: "4px solid #4321C9",
-                borderRadius: "50%",
-                animation: "spin 1s linear infinite",
+                padding: '5px 30px 5px 10px',
+                width: '216px',
+                borderRadius: '10px',
+                border: '1px solid white',
+                backgroundColor: '#F9FBFF',
+                height: '25px'
               }}
             />
+            <FontAwesomeIcon 
+              icon={faSearch} 
+              style={{
+                position: 'absolute',
+                right: '10px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: loading ? '#4321C9' : 'gray',
+                cursor: 'pointer'
+              }}
+            />
+          </div>
+          
+          <StatusFilterButton />
+          
+          <button
+            onClick={handleOpenNewModal}
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: isHovered ? '#4321C9' : '#5932EA',
+              color: 'white',
+              border: 'none',
+              borderRadius: '5px',
+              cursor: 'pointer',
+              transition: 'background-color 0.3s ease'
+            }}
+          >
+            Add Job Sheet
+          </button>
+        </div>
+      </div>
+      
+      {/* Grid con el mismo estilo que InventoryView */}
+      <div style={{ flex: 1, position: 'relative' }}>
+        <div className="ag-theme-alpine inventory-view" 
+          style={{ 
+            width: '100%', 
+            height: '100%',
+            overflowX: 'hidden',
+            overflowY: 'auto',
+            opacity: loading ? 0.6 : 1,
+            transition: 'opacity 0.3s ease'
+          }}>
+          <AgGridReact
+            ref={gridRef}
+            rowData={jobsheets}
+            columnDefs={columnDefs}
+            defaultColDef={{
+              resizable: false,
+              sortable: true,
+              flex: 1,
+              suppressMenu: true
+            }}
+            modules={[ClientSideRowModelModule]}
+            pagination={true}
+            paginationPageSize={12}
+            headerHeight={30}
+            rowHeight={35}
+            suppressSizeToFit={true}
+            suppressHorizontalScroll={true}
+            onGridReady={onGridReady}
+          />
+        </div>
+        {loading && (
+          <div style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            zIndex: 1000
+          }}>
+            <div style={{
+              width: '40px',
+              height: '40px',
+              border: '4px solid rgba(0, 0, 0, 0.1)',
+              borderLeft: '4px solid #4321C9',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite'
+            }}></div>
           </div>
         )}
       </div>
@@ -1812,7 +1869,7 @@ const handleSelectInventoryItem = (item) => {
                       marginLeft: "12px", 
                       color: item.stock > 0 ? "#2e7d32" : "#d32f2f"
                     }}>
-                      {item.stock > 0 ? `${item.stock} en stock` : "Sin stock"}
+                      {item.stock > 0 ? `${item.stock} in stock` : "No stock"}
                     </span>
                   </div>
                   <div style={{ fontWeight: "600", color: "#5932EA", fontSize: "14px" }}>
@@ -1829,7 +1886,7 @@ const handleSelectInventoryItem = (item) => {
                 fontSize: "12px",
                 fontWeight: "500"
               }}>
-                Seleccionar
+                Select
               </div>
             </div>
           ))}
@@ -2044,16 +2101,52 @@ const handleSelectInventoryItem = (item) => {
         </div>
       )}
 
-      <style>
+<style>
         {`
           @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
           }
+          
+          /* Estilos uniformes para AG Grid */
+          .ag-theme-alpine {
+            --ag-header-height: 30px;
+            --ag-row-height: 35px;
+            --ag-header-foreground-color: #333;
+            --ag-header-background-color: #F9FBFF;
+            --ag-odd-row-background-color: #fff;
+            --ag-row-border-color: rgba(0, 0, 0, 0.1);
+            --ag-cell-horizontal-padding: 8px;
+            --ag-borders: none;
+          }
+          
+          .ag-theme-alpine .ag-header {
+            border-bottom: 1px solid #5932EA;
+          }
+          
+          .custom-header-sumary {
+            background-color: #F9FBFF !important;
+            font-weight: 600 !important;
+            color: #333 !important;
+            border-bottom: 1px solid #5932EA !important;
+          }
+          
+          /* Estilo uniforme para botones de estado */
+          .status-btn {
+            padding: 4px 10px;
+            font-size: 12px;
+            font-weight: 500;
+            border-radius: 12px;
+            cursor: pointer;
+            text-transform: capitalize;
+            min-width: 90px;
+            text-align: center;
+          }
         `}
-      </style>
-      </>
-    );
+       </style>
+    </div>
+  </>
+);
 };
 
 export default JobsheetView;
