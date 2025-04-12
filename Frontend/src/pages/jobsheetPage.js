@@ -8,15 +8,15 @@ const JobsheetPage = () => {
 
   return (
     <div
-      style={{
-        width: '100vw',
-        height: '100vh',
-        display: 'flex',
-        flexDirection: 'row',
-        backgroundColor: '#f5f6fa',
-        boxSizing: 'border-box',
-        overflow: 'hidden'
-      }}
+    style={{
+      width: '100vw',
+      height: '100vh',
+      display: 'flex',
+      flexDirection: 'row',
+      backgroundColor: '#D9D9D9',
+      boxSizing: 'border-box',
+      overflow: 'hidden'
+    }}
     >
       {/* Sidebar */}
       <div

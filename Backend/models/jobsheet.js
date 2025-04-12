@@ -130,7 +130,24 @@ class JobsheetModel {
       throw error;
     }
   }
-
+  static async getByVehicleId(vehicleId) {
+    try {
+      const [rows] = await pool.query(`
+        SELECT j.*, c.name AS customer_name, v.plate, v.model,
+               u.username AS technician_name
+        FROM jobsheets j
+        LEFT JOIN customers c ON j.customer_id = c.id
+        LEFT JOIN vehicles v ON j.vehicle_id = v.id
+        LEFT JOIN users u ON j.user_id = u.id
+        WHERE j.vehicle_id = ?
+        ORDER BY j.created_at DESC
+      `, [vehicleId]);
+      
+      return rows;
+    } catch (error) {
+      throw error;
+    }
+  }
   static async getTotalValue(id) {
     try {
       const [rows] = await pool.query(`

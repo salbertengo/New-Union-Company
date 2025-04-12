@@ -1,10 +1,10 @@
 const express = require('express');
 const CustomerController = require('../controllers/customerController');
-const authenticateToken = require('../middleware/auth');
+const { auth } = require('../middleware/auth');
 
 const router = express.Router();
 
-router.use(authenticateToken);
+router.use(auth());
 
 // GET /customers
 router.get('/', CustomerController.getAll);

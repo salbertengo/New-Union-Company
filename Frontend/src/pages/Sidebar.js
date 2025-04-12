@@ -1,9 +1,11 @@
 import "../styles.css";
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth'; 
 
 const Sidebar = () => {
     const navigate = useNavigate();
+    const { isAdmin } = useAuth(); // Add this to check for admin role
     
     useEffect(() => {
       const existingScript = document.getElementById("script-buttons");
@@ -51,15 +53,24 @@ const Sidebar = () => {
         <button 
           className="sidebar-button" 
           id="btn2"
-          onClick={() => handleNavigation('/inventorydashboard')}
+          onClick={() => handleNavigation('/inventorydashboard')} // Updated to match your route
         >
           <svg className="icon" id="inventory-icon"></svg>
           Inventory
         </button>
+        {/* Add Vehicles button */}
+        <button 
+          className="sidebar-button" 
+          id="btn-vehicles"
+          onClick={() => handleNavigation('/vehicles')}
+        >
+          <svg className="icon" id="vehicles-icon"></svg>
+          Vehicles
+        </button>
         <button 
           className="sidebar-button sidebar-button1" 
           id="btn3"
-          onClick={() => handleNavigation('/jobsheets')} // Asumiendo esta ruta
+          onClick={() => handleNavigation('/jobsheets')}
         >
           <svg className="jobsheets-button-general" id="jobsheets-icon"></svg>
           Jobsheets
@@ -67,7 +78,7 @@ const Sidebar = () => {
         <button 
           className="sidebar-button" 
           id="btn4"
-          onClick={() => handleNavigation('/payments')} // Asumiendo esta ruta
+          onClick={() => handleNavigation('/payments')}
         >
           <svg className="payments-button" id="payments-icon"></svg>
           <span className="texto-btn4">Payments</span>
@@ -79,6 +90,18 @@ const Sidebar = () => {
         >
           Customers
         </button>
+        
+        {/* Only show User Management for admins */}
+        {isAdmin() && (
+          <button 
+            className="sidebar-button" 
+            id="btn-usermanagement"
+            onClick={() => handleNavigation('/usermanagement')}
+          >
+            <svg className="icon" id="user-management-icon"></svg>
+            User Management
+          </button>
+        )}
       </nav>
     </div>
   );

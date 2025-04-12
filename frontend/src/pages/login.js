@@ -1,31 +1,35 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
 
-const Login = ({ onLogin }) => {
+const Login = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const navigate = useNavigate();
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const { login } = useAuth();
 
   const handleLogin = async () => {
+    // Validation
+    if (!username || !password) {
+      setError('Please enter both username and password');
+      return;
+    }
+
+    setIsLoading(true);
+    setError('');
+
     try {
-      const response = await fetch('http://localhost:3000/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ username, password })
-      });
-
-      if (!response.ok) {
-        throw new Error('Credenciales incorrectas');
+      const success = await login(username, password);
+      
+      if (!success) {
+        setError('Invalid username or password');
       }
-
-      const data = await response.json();
-      localStorage.setItem('token', data.token);
-      onLogin();
-      navigate('/inventorydashboard');
+      // If successful, the redirect will happen automatically via protected routes
     } catch (error) {
-      alert(error.message);
+      setError('An error occurred during login');
+      console.error('Login error:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -51,11 +55,25 @@ const Login = ({ onLogin }) => {
         }}
       >
         <h2 style={{ marginBottom: '1.5rem', color: '#333' }}>Login</h2>
+        
+        {error && (
+          <div style={{ 
+            color: 'white', 
+            backgroundColor: '#ff4d4f',
+            padding: '8px',
+            borderRadius: '4px',
+            marginBottom: '1rem' 
+          }}>
+            {error}
+          </div>
+        )}
+        
         <input
           type="text"
           placeholder="Username"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
+          disabled={isLoading}
           style={{
             padding: '0.75rem',
             margin: '0.5rem 0',
@@ -70,6 +88,7 @@ const Login = ({ onLogin }) => {
           placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          disabled={isLoading}
           style={{
             padding: '0.75rem',
             margin: '0.5rem 0',
@@ -81,18 +100,19 @@ const Login = ({ onLogin }) => {
         />
         <button
           onClick={handleLogin}
+          disabled={isLoading}
           style={{
-            backgroundColor: '#007bff',
+            backgroundColor: isLoading ? '#ccc' : '#007bff',
             color: 'white',
             padding: '0.75rem',
             margin: '0.5rem 0',
             border: 'none',
             borderRadius: '4px',
-            cursor: 'pointer',
+            cursor: isLoading ? 'default' : 'pointer',
             width: '100%'
           }}
         >
-          Login
+          {isLoading ? 'Logging in...' : 'Login'}
         </button>
       </div>
     </div>

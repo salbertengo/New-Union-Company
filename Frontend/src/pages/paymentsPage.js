@@ -1,15 +1,31 @@
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { AgGridReact } from "@ag-grid-community/react";
 import { ClientSideRowModelModule } from "@ag-grid-community/client-side-row-model";
 import { ModuleRegistry } from "@ag-grid-community/core";
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-alpine.css";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faEdit, faTrash, faSearch } from "@fortawesome/free-solid-svg-icons";
+import { 
+  faEdit, 
+  faTrash, 
+  faSearch, 
+  faPlus,
+  faMoneyBill,
+  faCalendarAlt,
+  faCreditCard,
+  faIdCard,
+  faExchangeAlt,
+  faFileInvoiceDollar,
+  faWallet
+} from "@fortawesome/free-solid-svg-icons";
 import "@fortawesome/fontawesome-svg-core/styles.css";
 import SideBar from './Sidebar';
+import { 
+  ActionButton, 
+  ActionButtonsContainer 
+} from '../components/common/ActionButtons';
 
-// Registrar módulos de AG Grid
+// Register AG Grid modules
 ModuleRegistry.registerModules([ClientSideRowModelModule]);
 
 const PaymentsPage = () => {
@@ -31,11 +47,9 @@ const PaymentsPage = () => {
     payment_date: new Date().toISOString().split('T')[0]
   });
 
-  // Métodos de pago disponibles
   const paymentMethods = ["cash", "credit_card", "debit_card", "transfer", "check", "other"];
 
-  // Definiciones de columnas para AG Grid
-  const columnDefs = [
+  const columnDefs = useMemo(() => [
     {
       headerName: 'ID',
       field: 'id',
@@ -77,27 +91,61 @@ const PaymentsPage = () => {
       field: 'method',
       suppressMenu: true,
       headerClass: 'custom-header-sumary',
+      width: 100, // Added fixed width
       cellRenderer: (params) => {
         const method = params.value || 'cash';
+        const colors = {
+          cash: { bg: "#E3F2FD", text: "#0D47A1", icon: "#2196F3" },
+          credit_card: { bg: "#F3E5F5", text: "#4A148C", icon: "#9C27B0" },
+          debit_card: { bg: "#E8F5E9", text: "#1B5E20", icon: "#4CAF50" },
+          transfer: { bg: "#FFF8E1", text: "#F57F17", icon: "#FFC107" },
+          check: { bg: "#FFEBEE", text: "#B71C1C", icon: "#F44336" },
+          other: { bg: "#ECEFF1", text: "#263238", icon: "#607D8B" }
+        };
+        
+        let icon;
+        switch(method) {
+          case 'cash':
+            icon = <FontAwesomeIcon icon={faMoneyBill} />;
+            break;
+          case 'credit_card':
+            icon = <FontAwesomeIcon icon={faCreditCard} />;
+            break;
+          case 'debit_card':
+            icon = <FontAwesomeIcon icon={faIdCard} />;
+            break;
+          case 'transfer':
+            icon = <FontAwesomeIcon icon={faExchangeAlt} />;
+            break;
+          case 'check':
+            icon = <FontAwesomeIcon icon={faFileInvoiceDollar} />;
+            break;
+          default:
+            icon = <FontAwesomeIcon icon={faWallet} />;
+        }
+        
         return (
           <div style={{
+            height: "100%", // Fill the entire cell
             display: "flex",
-            alignItems: "center",
-            justifyContent: "center"
+            alignItems: "center", 
+            justifyContent: "flex-start", // Changed to left-align
+            paddingLeft: "12px" // Added left padding
           }}>
             <div style={{
-              backgroundColor: method === "cash" ? "#E3F2FD" : 
-                              method === "credit_card" ? "#F3E5F5" : 
-                              method === "debit_card" ? "#E8F5E9" : 
-                              method === "transfer" ? "#FFF8E1" : 
-                              method === "check" ? "#FFEBEE" : "#ECEFF1",
-              padding: "4px 8px",
-              borderRadius: "4px",
-              fontSize: "12px",
-              fontWeight: "500",
-              textTransform: "capitalize"
+              backgroundColor: colors[method].bg,
+              color: colors[method].text,
+              width: "24px",
+              height: "24px",
+              borderRadius: "50%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: "11px",
+              boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+              lineHeight: 0
             }}>
-              {method.replace('_', ' ')}
+              {icon}
             </div>
           </div>
         );
@@ -111,63 +159,55 @@ const PaymentsPage = () => {
     },
     {
       headerName: 'Actions',
-      field: 'actions',
-      suppressMenu: true,
-      width: 120,
-      headerClass: 'custom-header-sumary',
-      cellRenderer: (params) => {
+      width: 160,
+      cellRenderer: params => {
+        if (!params.data) return '';
         return (
-          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-            <button 
-              className="edit-btn"
-              style={{
-                border: 'none', 
-                background: 'none', 
-                cursor: 'pointer', 
-                color: '#5932EA'
-              }}
+          <ActionButtonsContainer>
+            <ActionButton
+              icon={faEdit}
               onClick={() => handleEdit(params.data)}
-            >
-              <FontAwesomeIcon icon={faEdit} />
-            </button>
-            <button 
-              className="delete-btn"
-              style={{
-                border: 'none', 
-                background: 'none', 
-                cursor: 'pointer', 
-                color: '#d32f2f'
-              }}
+              tooltip="Edit Payment"
+              type="default"
+            />
+            <ActionButton
+              icon={faTrash}
               onClick={() => handleDelete(params.data)}
-            >
-              <FontAwesomeIcon icon={faTrash} />
-            </button>
-          </div>
+              tooltip="Delete Payment" 
+              type="danger"
+            />
+          </ActionButtonsContainer>
         );
       }
     }
-  ];
+  ], []);
 
-  // Configuración predeterminada de columnas
-  const defaultColDef = {
-    resizable: false,
-    sortable: true,
-    suppressMenu: true,
-    flex: 1,
-  };
-
-  // Función para manejar el evento onGridReady
+  
   const onGridReady = (params) => {
     gridRef.current = params.api;
-    params.api.sizeColumnsToFit();
-  };
+    setTimeout(() => {
+      if (gridRef.current && !gridRef.current.isDestroyed) {
+        gridRef.current.sizeColumnsToFit();
+      }
+    }, 100);
+  };  
 
   useEffect(() => {
     fetchPayments();
     fetchJobsheets();
+    
+    return () => {
+      // Limpia la referencia de la grid al desmontar
+      if (gridRef.current) {
+        gridRef.current = null;
+      }
+      
+      if (searchTimeout.current) {
+        clearTimeout(searchTimeout.current);
+      }
+    };
   }, []);
 
-  // Función para buscar pagos
   const handleSearch = (e) => {
     setSearchTerm(e.target.value);
     if (searchTimeout.current) {
@@ -179,7 +219,6 @@ const PaymentsPage = () => {
     }, 500);
   };
 
-  // Función para obtener todos los pagos con filtros opcionales
   const fetchPayments = useCallback(async () => {
     setLoading(true);
     try {
@@ -189,8 +228,6 @@ const PaymentsPage = () => {
         return;
       }
   
-      console.log("Fetching payments from /jobsheets/payments");
-      
       const response = await fetch("http://localhost:3000/jobsheets/payments", {
         headers: {
           "Content-Type": "application/json",
@@ -198,22 +235,41 @@ const PaymentsPage = () => {
         },
       });
   
-      console.log("Response status:", response.status);
-      
       if (response.ok) {
         const text = await response.text();
-        console.log("Raw response:", text);
-        
         try {
           const data = JSON.parse(text);
-          console.log("Parsed payments data:", data);
-          setPayments(data || []);
+          
+          // Add this code to fetch customer names for each payment
+          const enhancedPayments = await Promise.all(data.map(async (payment) => {
+            try {
+              // Get the jobsheet to find the customer
+              const jobsheetResponse = await fetch(`http://localhost:3000/jobsheets/${payment.jobsheet_id}`, {
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${token}`,
+                },
+              });
+              
+              if (jobsheetResponse.ok) {
+                const jobsheet = await jobsheetResponse.json();
+                return {
+                  ...payment,
+                  customer_name: jobsheet.customer_name || 'Unknown Customer'
+                };
+              }
+              return payment;
+            } catch (error) {
+              console.error(`Error fetching details for payment ${payment.id}:`, error);
+              return payment;
+            }
+          }));
+          
+          setPayments(enhancedPayments || []);
         } catch (e) {
           console.error("Error parsing JSON:", e);
         }
       } else {
-        console.error("Failed to fetch payments, status:", response.status);
-        // Intentar leer el mensaje de error
         const errorText = await response.text();
         console.error("Error response:", errorText);
       }
@@ -224,7 +280,6 @@ const PaymentsPage = () => {
     }
   }, []);
 
-  // Obtener datos de jobsheets para el selector de jobsheets
   const fetchJobsheets = async () => {
     try {
       const token = localStorage.getItem("token");
@@ -233,7 +288,6 @@ const PaymentsPage = () => {
         return;
       }
   
-      // Cambiamos la URL para obtener jobsheets, no pagos
       const response = await fetch("http://localhost:3000/jobsheets", {
         headers: {
           "Content-Type": "application/json",
@@ -252,26 +306,28 @@ const PaymentsPage = () => {
     }
   };
 
-  // Función para editar un pago
   const handleEdit = (payment) => {
-    setCurrentPayment(payment);
-    setFormData({
-      id: payment.id,
-      jobsheet_id: payment.jobsheet_id,
-      amount: payment.amount,
-      method: payment.method,
-      payment_date: new Date(payment.payment_date).toISOString().split('T')[0]
-    });
-    setShowModal(true);
+    // Usa setTimeout para evitar conflictos con AG-Grid
+    setTimeout(() => {
+      setCurrentPayment(payment);
+      setFormData({
+        id: payment.id,
+        jobsheet_id: payment.jobsheet_id,
+        amount: payment.amount,
+        method: payment.method,
+        payment_date: new Date(payment.payment_date).toISOString().split('T')[0]
+      });
+      setShowModal(true);
+    }, 50);
   };
 
-  // Función para eliminar un pago
   const handleDelete = (payment) => {
-    setCurrentPayment(payment);
-    setShowDeleteModal(true);
+    setTimeout(() => {
+      setCurrentPayment(payment);
+      setShowDeleteModal(true);
+    }, 50);
   };
 
-  // Función para confirmar la eliminación
   const handleConfirmDelete = async () => {
     try {
       const token = localStorage.getItem("token");
@@ -288,7 +344,6 @@ const PaymentsPage = () => {
       });
 
       if (response.ok) {
-        // Actualizar la lista tras el borrado
         fetchPayments(searchTerm);
         setShowDeleteModal(false);
       } else {
@@ -299,20 +354,21 @@ const PaymentsPage = () => {
     }
   };
 
-  // Función para abrir modal para un nuevo pago
   const handleOpenNewModal = () => {
-    setCurrentPayment(null);
-    setFormData({
-      id: null,
-      jobsheet_id: "",
-      amount: "",
-      method: "cash",
-      payment_date: new Date().toISOString().split('T')[0]
-    });
-    setShowModal(true);
+    // Usa setTimeout para romper el flujo sincrónico y evitar conflictos con AG-Grid
+    setTimeout(() => {
+      setCurrentPayment(null);
+      setFormData({
+        id: null,
+        jobsheet_id: "",
+        amount: "",
+        method: "cash",
+        payment_date: new Date().toISOString().split('T')[0]
+      });
+      setShowModal(true);
+    }, 50); // Un pequeño retraso es suficiente
   };
 
-  // Función para manejar cambios en los campos del formulario
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData({
@@ -321,9 +377,7 @@ const PaymentsPage = () => {
     });
   };
 
-  // Función para guardar un pago (crear o actualizar)
   const handleSave = async () => {
-    // Validación básica
     if (!formData.jobsheet_id || !formData.amount || parseFloat(formData.amount) <= 0) {
       alert("Please fill in all required fields with valid values");
       return;
@@ -336,7 +390,6 @@ const PaymentsPage = () => {
         return;
       }
   
-      // Corregir las URLs para apuntar a las rutas de jobsheets/payments
       const url = formData.id
         ? `http://localhost:3000/jobsheets/payments/${formData.id}`
         : "http://localhost:3000/jobsheets/payments";
@@ -353,7 +406,6 @@ const PaymentsPage = () => {
       });
   
       if (response.ok) {
-        // Actualizar la lista tras la operación
         fetchPayments(searchTerm);
         setShowModal(false);
       } else {
@@ -376,7 +428,6 @@ const PaymentsPage = () => {
         overflow: 'hidden'
       }}
     >
-      {/* Sidebar */}
       <div
         style={{
           width: '220px',
@@ -389,7 +440,6 @@ const PaymentsPage = () => {
         <SideBar />
       </div>
 
-      {/* Contenedor principal */}
       <div
         style={{
           flex: 1,
@@ -400,7 +450,6 @@ const PaymentsPage = () => {
           boxSizing: 'border-box',
         }}
       >
-        {/* Contenedor del contenido principal */}
         <div
           style={{
             height: '100%',
@@ -411,446 +460,611 @@ const PaymentsPage = () => {
             backgroundColor: '#ffffff',
             boxSizing: 'border-box',
             padding: '20px',
-            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.05)'
           }}
         >
-          {/* Cabecera con título y búsqueda */}
           <div
             style={{
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
-              marginBottom: '20px'
+              marginBottom: '10px',
             }}
           >
-            <h2 style={{ 
-              margin: 0, 
-              fontSize: '20px',
-              fontWeight: '600',
-              color: '#292D32'
-            }}>Payments</h2>
-            
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <h2 style={{ margin: 0, fontSize: '18px' }}>Payments</h2>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
               <div style={{ position: 'relative' }}>
-                <input
-                  type="text"
-                  placeholder="Search payments..."
-                  value={searchTerm}
-                  onChange={handleSearch}
-                  style={{
-                    padding: '8px 35px 8px 15px',
-                    width: '220px',
-                    borderRadius: '10px',
-                    border: '1px solid #F9FBFF',
-                    backgroundColor: '#F9FBFF',
-                    height: '35px',
-                    fontSize: '14px'
-                  }}
-                />
-                <FontAwesomeIcon 
-                  icon={faSearch} 
-                  style={{
-                    position: 'absolute',
-                    right: '15px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    color: loading ? '#5932EA' : '#7E7E7E',
-                    cursor: 'pointer'
-                  }}
-                />
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center',
+                }}>
+                  <input
+                    type="text"
+                    placeholder="Search payments..."
+                    value={searchTerm}
+                    onChange={handleSearch}
+                    style={{
+                      padding: '5px 30px 5px 10px',
+                      width: '216px',
+                      borderRadius: '10px',
+                      border: '1px solid white',
+                      backgroundColor: '#F9FBFF',
+                      height: '25px',
+                    }}
+                  />
+                  <FontAwesomeIcon
+                    icon={faSearch}
+                    style={{
+                      position: 'absolute',
+                      right: '10px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      color: loading ? '#4321C9' : 'gray',
+                      cursor: 'pointer',
+                    }}
+                  />
+                </div>
               </div>
-              
+
               <button
                 onClick={handleOpenNewModal}
                 onMouseEnter={() => setIsHovered(true)}
                 onMouseLeave={() => setIsHovered(false)}
                 style={{
-                  padding: '9px 20px',
+                  padding: '10px 20px',
                   backgroundColor: isHovered ? '#4321C9' : '#5932EA',
                   color: 'white',
                   border: 'none',
-                  borderRadius: '8px',
+                  borderRadius: '5px',
                   cursor: 'pointer',
                   transition: 'background-color 0.3s ease',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
-                  fontSize: '14px',
-                  fontWeight: '500'
                 }}
               >
+                <FontAwesomeIcon icon={faPlus} />
                 <span>Add Payment</span>
               </button>
             </div>
           </div>
 
-          {/* Grid con indicador de carga */}
           <div style={{ flex: 1, position: 'relative' }}>
             <div 
-              className="ag-theme-alpine inventory-view" 
-              style={{ 
-                width: '100%', 
-                height: '100%',
-                overflowX: 'hidden',
-                overflowY: 'auto',
-                opacity: loading ? 0.6 : 1,
-                transition: 'opacity 0.3s ease',
-                borderRadius: '10px'
-              }}
+  className="ag-theme-alpine inventory-view" 
+  style={{ 
+    width: '100%', 
+    height: '100%',
+    overflowX: 'hidden',
+    overflowY: 'auto',
+    opacity: loading ? 0.6 : 1,
+    transition: 'opacity 0.3s ease',
+  }}
             >
-              <AgGridReact
-                ref={gridRef}
-                rowData={payments}
-                columnDefs={columnDefs}
-                defaultColDef={defaultColDef}
-                modules={[ClientSideRowModelModule]}
-                pagination={true}
-                paginationPageSize={12}
-                headerHeight={40}
-                rowHeight={48}
-                suppressHorizontalScroll={true}
-                onGridReady={onGridReady}
-              />
+  <AgGridReact
+    key={`payments-grid-${showModal ? 'hidden' : 'visible'}`}
+    ref={gridRef}
+    rowData={payments}
+    columnDefs={columnDefs}
+    defaultColDef={{
+      resizable: false,
+      sortable: true,
+      suppressMenu: true, // Crítico para evitar el error
+      flex: 1,
+      cellStyle: {
+        display: 'flex',
+        alignItems: 'center',
+        paddingLeft: '12px',
+        fontSize: '14px',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+        color: '#333'
+      },
+      headerClass: 'custom-header'
+    }}
+    modules={[ClientSideRowModelModule]}
+    pagination={true}
+    paginationPageSize={12}
+    headerHeight={30}
+    rowHeight={50}
+    suppressSizeToFit={true}
+    suppressHorizontalScroll={true}
+    suppressMenuHide={true} // Añadir esta propiedad
+    suppressLoadingOverlay={true} // Gestiona tu propio estado de carga
+    onGridReady={onGridReady}
+    // Ocultar temporalmente la grid cuando el modal está abierto
+    style={{ display: showModal ? 'none' : 'block' }}
+/>
             </div>
             {loading && (
-              <div style={{
-                position: 'absolute',
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -50%)',
-                zIndex: 1000
-              }}>
-                <div style={{
-                  width: '40px',
-                  height: '40px',
-                  border: '4px solid rgba(0, 0, 0, 0.1)',
-                  borderLeft: '4px solid #5932EA',
-                  borderRadius: '50%',
-                  animation: 'spin 1s linear infinite'
-                }}></div>
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  zIndex: 1000,
+                }}
+              >
+                <div
+                  style={{
+                    width: '40px',
+                    height: '40px',
+                    border: '4px solid rgba(0, 0, 0, 0.1)',
+                    borderLeft: '4px solid #4321C9',
+                    borderRadius: '50%',
+                    animation: 'spin 1s linear infinite',
+                  }}
+                ></div>
               </div>
             )}
           </div>
 
-      {/* Create/Edit Modal */}
-      {showModal && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: "rgba(0, 0, 0, 0.5)",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            zIndex: 1000,
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: "white",
-              borderRadius: "8px",
-              width: "500px",
-              padding: "20px",
-              boxShadow: "0 0 10px rgba(0,0,0,0.2)",
-              maxHeight: "80vh",
-              overflowY: "auto",
-            }}
-          >
+          {showModal && (
             <div
               style={{
+                position: "fixed",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: "rgba(0, 0, 0, 0.6)",
                 display: "flex",
-                justifyContent: "space-between",
+                justifyContent: "center",
                 alignItems: "center",
-                marginBottom: "20px",
+                zIndex: 1000,
+                backdropFilter: "blur(5px)",
               }}
             >
-              <h2 style={{ margin: 0 }}>
-                {currentPayment ? "Edit Payment" : "Create New Payment"}
-              </h2>
-              <button
-                onClick={() => setShowModal(false)}
+              <div
                 style={{
-                  background: "none",
-                  border: "none",
-                  fontSize: "24px",
-                  cursor: "pointer",
-                  lineHeight: "1",
+                  backgroundColor: "white",
+                  borderRadius: "16px",
+                  width: "520px",
+                  boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
+                  overflow: "hidden",
+                  animation: "modalFadeIn 0.3s ease",
                 }}
               >
-                &times;
-              </button>
-            </div>
-
-            <div
-              style={{ display: "flex", flexDirection: "column", gap: "15px" }}
-            >
-              <div>
-                <label
+                <div
                   style={{
-                    display: "block",
-                    marginBottom: "5px",
-                    fontWeight: "bold",
+                    background: "linear-gradient(135deg, #5932EA 0%, #4321C9 100%)",
+                    padding: "24px 30px",
+                    color: "white",
+                    position: "relative",
+                    overflow: "hidden",
                   }}
                 >
-                  Jobsheet:
-                </label>
-                <select
-                  name="jobsheet_id"
-                  value={formData.jobsheet_id}
-                  onChange={handleInputChange}
-                  style={{
-                    width: "100%",
-                    padding: "8px",
-                    borderRadius: "4px",
-                    border: "1px solid #ddd",
-                  }}
-                >
-                  <option value="">Select Jobsheet</option>
-                  {jobsheets.map((jobsheet) => (
-                    <option key={jobsheet.id} value={jobsheet.id}>
-                      #{jobsheet.id} - {jobsheet.customer_name} ({jobsheet.vehicle_model})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label
-                  style={{
-                    display: "block",
-                    marginBottom: "5px",
-                    fontWeight: "bold",
-                  }}
-                >
-                  Amount:
-                </label>
-                <div style={{ position: "relative" }}>
-                  <span style={{ 
-                    position: "absolute", 
-                    left: "10px", 
-                    top: "50%", 
-                    transform: "translateY(-50%)",
-                    color: "#666"
-                  }}>
-                    $
-                  </span>
-                  <input
-                    type="number"
-                    name="amount"
-                    value={formData.amount}
-                    onChange={handleInputChange}
+                  <div
                     style={{
-                      width: "100%",
-                      padding: "8px 8px 8px 25px",
-                      borderRadius: "4px",
-                      border: "1px solid #ddd",
+                      position: "absolute",
+                      top: 0,
+                      right: 0,
+                      width: "200px",
+                      height: "100%",
+                      background: "linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.1) 100%)",
+                      transform: "skewX(-20deg) translateX(30%)",
                     }}
-                    step="0.01"
-                    min="0.01"
-                  />
+                  ></div>
+                  
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "10px" }}>
+                        <FontAwesomeIcon icon={faMoneyBill} style={{ fontSize: '24px' }}/>
+                        <h2 style={{ margin: 0, fontSize: "22px", fontWeight: "600" }}>
+                          {currentPayment ? "Edit Payment" : "Add Payment"}
+                        </h2>
+                      </div>
+                      <p style={{ margin: "0", fontSize: "14px", opacity: "0.9" }}>
+                        {currentPayment 
+                          ? `Payment #${currentPayment.id} for jobsheet #${currentPayment.jobsheet_id}`
+                          : "Record a new payment for a jobsheet"}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setShowModal(false)}
+                      style={{
+                        background: "rgba(255,255,255,0.2)",
+                        border: "none",
+                        color: "white",
+                        width: "32px",
+                        height: "32px",
+                        borderRadius: "50%",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "18px",
+                        transition: "background-color 0.2s",
+                        userSelect: "none",
+                        position: "relative",
+                        zIndex: 10,   
+                      }}
+                      onMouseOver={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.3)")}
+                      onMouseOut={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.2)")}
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ padding: "24px 30px" }}>
+                  <div style={{ display: "grid", gap: "20px" }}>
+                    <div>
+                      <label style={{
+                        display: "block",
+                        marginBottom: "8px",
+                        fontSize: "14px",
+                        fontWeight: "600",
+                        color: "#333"
+                      }}>
+                        Select Jobsheet
+                      </label>
+                      <div style={{
+                        position: "relative",
+                        backgroundColor: "#f9faff",
+                        borderRadius: "10px",
+                        border: "1px solid #e0e0e0",
+                        overflow: "hidden",
+                      }}>
+                        <select
+                          name="jobsheet_id"
+                          value={formData.jobsheet_id}
+                          onChange={handleInputChange}
+                          style={{
+                            width: "100%",
+                            padding: "14px 16px",
+                            fontSize: "14px",
+                            border: "none",
+                            backgroundColor: "transparent",
+                            appearance: "none",
+                            outline: "none",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <option value="">Select a jobsheet</option>
+                          {jobsheets.map((jobsheet) => (
+                            <option key={jobsheet.id} value={jobsheet.id}>
+                              #{jobsheet.id} - {jobsheet.customer_name || "Customer"} ({jobsheet.vehicle_model || "Vehicle"})
+                            </option>
+                          ))}
+                        </select>
+                        <div style={{
+                          position: "absolute",
+                          right: "16px",
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          pointerEvents: "none",
+                          color: "#5932EA"
+                        }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M6 9L12 15L18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={{
+                        display: "block",
+                        marginBottom: "8px",
+                        fontSize: "14px",
+                        fontWeight: "600",
+                        color: "#333"
+                      }}>
+                        Payment Amount
+                      </label>
+                      <div style={{ position: "relative" }}>
+                        <span style={{
+                          position: "absolute",
+                          left: "16px",
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          color: "#666",
+                          fontSize: "16px",
+                          fontWeight: "500"
+                        }}>$</span>
+                        <input
+                          type="number"
+                          name="amount"
+                          value={formData.amount}
+                          onChange={handleInputChange}
+                          placeholder="0.00"
+                          min="0.01"
+                          step="0.01"
+                          style={{
+                            width: "100%",
+                            padding: "14px 16px 14px 28px",
+                            borderRadius: "10px",
+                            border: "1px solid #e0e0e0",
+                            fontSize: "14px",
+                            backgroundColor: "#f9faff",
+                            outline: "none",
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={{
+                        display: "block",
+                        marginBottom: "8px",
+                        fontSize: "14px",
+                        fontWeight: "600",
+                        color: "#333"
+                      }}>
+                        Payment Method
+                      </label>
+                      <div style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(3, 1fr)",
+                        gap: "10px"
+                      }}>
+                        {paymentMethods.map((method) => (
+                          <div 
+                            key={method}
+                            onClick={() => setFormData({...formData, method})}
+                            style={{
+                              padding: "10px",
+                              borderRadius: "10px",
+                              border: `1px solid ${formData.method === method ? "#5932EA" : "#e0e0e0"}`,
+                              backgroundColor: formData.method === method ? "#f5f3ff" : "white",
+                              cursor: "pointer",
+                              textAlign: "center",
+                              transition: "all 0.2s ease",
+                            }}
+                            onMouseOver={(e) => {
+                              if(formData.method !== method) {
+                                e.currentTarget.style.backgroundColor = "#fafafa";
+                                e.currentTarget.style.borderColor = "#d0d0d0";
+                              }
+                            }}
+                            onMouseOut={(e) => {
+                              if(formData.method !== method) {
+                                e.currentTarget.style.backgroundColor = "white";
+                                e.currentTarget.style.borderColor = "#e0e0e0";
+                              }
+                            }}
+                          >
+                            <div style={{
+                              fontSize: "13px",
+                              fontWeight: formData.method === method ? "600" : "500",
+                              color: formData.method === method ? "#5932EA" : "#555",
+                              textTransform: "capitalize"
+                            }}>
+                              {method.replace('_', ' ')}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={{
+                        display: "block",
+                        marginBottom: "8px",
+                        fontSize: "14px",
+                        fontWeight: "600",
+                        color: "#333"
+                      }}>
+                        Payment Date
+                      </label>
+                      <div style={{ position: "relative" }}>
+                        <FontAwesomeIcon 
+                          icon={faCalendarAlt} 
+                          style={{
+                            position: "absolute",
+                            left: "16px",
+                            top: "50%",
+                            transform: "translateY(-50%)",
+                            color: "#5932EA",
+                          }}
+                        />
+                        <input
+                          type="date"
+                          name="payment_date"
+                          value={formData.payment_date}
+                          onChange={handleInputChange}
+                          style={{
+                            width: "100%",
+                            padding: "14px 16px 14px 40px",
+                            borderRadius: "10px",
+                            border: "1px solid #e0e0e0",
+                            fontSize: "14px",
+                            backgroundColor: "#f9faff",
+                            outline: "none",
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{
+                    display: "flex",
+                    justifyContent: "flex-end",
+                    gap: "12px",
+                    marginTop: "30px"
+                  }}>
+                    <button
+                      onClick={() => setShowModal(false)}
+                      style={{
+                        padding: "12px 20px",
+                        backgroundColor: "#f5f5f5",
+                        color: "#333",
+                        border: "none",
+                        borderRadius: "10px",
+                        cursor: "pointer",
+                        fontWeight: "500",
+                        transition: "all 0.2s"
+                      }}
+                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#e5e5e5"}
+                      onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#f5f5f5"}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSave}
+                      style={{
+                        padding: "12px 24px",
+                        backgroundColor: "#5932EA",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "10px",
+                        cursor: "pointer",
+                        fontWeight: "600",
+                        boxShadow: "0 2px 6px rgba(89, 50, 234, 0.3)",
+                        transition: "all 0.2s",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px"
+                      }}
+                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#4321C9"}
+                      onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#5932EA"}
+                    >
+                      {currentPayment ? "Update Payment" : "Save Payment"}
+                    </button>
+                  </div>
                 </div>
               </div>
-
-              <div>
-                <label
-                  style={{
-                    display: "block",
-                    marginBottom: "5px",
-                    fontWeight: "bold",
-                  }}
-                >
-                  Payment Method:
-                </label>
-                <select
-                  name="method"
-                  value={formData.method}
-                  onChange={handleInputChange}
-                  style={{
-                    width: "100%",
-                    padding: "8px",
-                    borderRadius: "4px",
-                    border: "1px solid #ddd",
-                  }}
-                >
-                  {paymentMethods.map((method) => (
-                    <option key={method} value={method}>
-                      {method.replace('_', ' ')}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label
-                  style={{
-                    display: "block",
-                    marginBottom: "5px",
-                    fontWeight: "bold",
-                  }}
-                >
-                  Payment Date:
-                </label>
-                <input
-                  type="date"
-                  name="payment_date"
-                  value={formData.payment_date}
-                  onChange={handleInputChange}
-                  style={{
-                    width: "100%",
-                    padding: "8px",
-                    borderRadius: "4px",
-                    border: "1px solid #ddd",
-                  }}
-                />
-              </div>
             </div>
+          )}
 
+          {showDeleteModal && (
             <div
               style={{
-                marginTop: "20px",
+                position: "fixed",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: "rgba(0, 0, 0, 0.6)",
+                backdropFilter: "blur(5px)",
                 display: "flex",
-                justifyContent: "flex-end",
+                justifyContent: "center",
+                alignItems: "center",
+                zIndex: 1000,
               }}
             >
-              <button
-                onClick={() => setShowModal(false)}
+              <div
                 style={{
-                  padding: "10px 20px",
-                  backgroundColor: "#f5f5f5",
-                  color: "#333",
-                  border: "1px solid #ddd",
-                  borderRadius: "5px",
-                  marginRight: "10px",
-                  cursor: "pointer",
+                  backgroundColor: "white",
+                  borderRadius: "16px",
+                  width: "400px",
+                  overflow: "hidden",
+                  boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
+                  animation: "modalFadeIn 0.3s ease",
                 }}
               >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                style={{
-                  padding: "10px 20px",
-                  backgroundColor: "#5932EA",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: "5px",
-                  cursor: "pointer",
-                }}
-              >
-                {currentPayment ? "Update" : "Create"}
-              </button>
+                <div
+                  style={{
+                    background: "linear-gradient(135deg, #FF4D4F 0%, #D32F2F 100%)",
+                    padding: "20px 24px",
+                    color: "white",
+                  }}
+                >
+                  <h3 style={{ margin: 0, fontSize: "18px", fontWeight: "600" }}>Confirm Delete</h3>
+                </div>
+                
+                <div style={{ padding: "20px 24px" }}>
+                  <p style={{ margin: "0 0 20px 0", fontSize: "14px", lineHeight: "1.5" }}>
+                    Are you sure you want to delete this payment of <strong>${parseFloat(currentPayment?.amount).toFixed(2)}</strong> for jobsheet #{currentPayment?.jobsheet_id}?
+                    <br /><br />
+                    This action cannot be undone.
+                  </p>
+                  
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "flex-end",
+                      gap: "12px",
+                    }}
+                  >
+                    <button
+                      onClick={() => setShowDeleteModal(false)}
+                      style={{
+                        padding: "10px 16px",
+                        backgroundColor: "#f5f5f5",
+                        color: "#333",
+                        border: "none",
+                        borderRadius: "8px",
+                        cursor: "pointer",
+                        fontWeight: "500",
+                        transition: "all 0.2s",
+                      }}
+                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#e5e5e5"}
+                      onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#f5f5f5"}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleConfirmDelete}
+                      style={{
+                        padding: "10px 16px",
+                        backgroundColor: "#FF4D4F",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "8px",
+                        cursor: "pointer",
+                        fontWeight: "600",
+                        transition: "all 0.2s",
+                        boxShadow: "0 2px 6px rgba(255, 77, 79, 0.3)",
+                      }}
+                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#D32F2F"}
+                      onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#FF4D4F"}
+                    >
+                      Delete Payment
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* Delete Confirmation Modal */}
-      {showDeleteModal && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: "rgba(0, 0, 0, 0.5)",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            zIndex: 1000,
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: "white",
-              borderRadius: "8px",
-              width: "400px",
-              padding: "20px",
-              boxShadow: "0 0 10px rgba(0,0,0,0.2)",
-            }}
-          >
-            <h3 style={{ marginTop: 0 }}>Confirm Delete</h3>
-            <p>
-              Are you sure you want to delete this payment of ${parseFloat(currentPayment?.amount).toFixed(2)} for jobsheet #{currentPayment?.jobsheet_id}? This action cannot be undone.
-            </p>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "flex-end",
-                gap: "10px",
-              }}
-            >
-              <button
-                onClick={() => setShowDeleteModal(false)}
-                style={{
-                  padding: "8px 16px",
-                  backgroundColor: "#f5f5f5",
-                  color: "#333",
-                  border: "1px solid #ddd",
-                  borderRadius: "5px",
-                  cursor: "pointer",
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmDelete}
-                style={{
-                  padding: "8px 16px",
-                  backgroundColor: "#ff4d4f",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "5px",
-                  cursor: "pointer",
-                }}
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-<style>
+          <style>
             {`
-              @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-              }
-              
-              .inventory-view .ag-header {
-                background-color: #F9FBFF;
-                border-bottom: 1px solid #5932EA;
-              }
-              
-              .inventory-view .ag-header-cell {
-                color: #333333;
-                font-weight: 600;
-                font-size: 14px;
-              }
-              
-              .inventory-view .ag-row {
-                border-bottom: 1px solid #D9D9D9;
-              }
-              
-              .inventory-view .ag-row-even {
-                background-color: white;
-              }
-              
-              .inventory-view .ag-row-odd {
-                background-color: white;
-              }
-              
-              .inventory-view .ag-cell {
-                color: #292D32;
-                font-family: Poppins, sans-serif;
-                font-weight: 500;
-                font-size: 14px;
-                padding: 8px 16px;
-              }
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+            
+            @keyframes modalFadeIn {
+              from { opacity: 0; transform: scale(0.95); }
+              to { opacity: 1; transform: scale(1); }
+            }
+            
+            /* Uniform styles for AG Grid */
+.ag-theme-alpine {
+  --ag-header-height: 30px;
+  --ag-row-height: 50px;
+  --ag-header-foreground-color: #333;
+  --ag-header-background-color: #F9FBFF;
+  --ag-odd-row-background-color: #fff;
+  --ag-row-border-color: rgba(0, 0, 0, 0.1);
+  --ag-cell-horizontal-padding: 12px;
+  --ag-borders: none;
+  --ag-font-size: 14px;
+  --ag-font-family: Poppins, sans-serif; /* Usa la fuente principal de la aplicación */
+}
+
+/* Estilo de encabezado unificado */
+.ag-theme-alpine .ag-header {
+  border-bottom: 1px solid #5932EA;
+}
+
+.ag-theme-alpine .ag-cell {
+  display: flex;
+  align-items: center;
+}
+
+/* Una única clase de cabecera para todas las tablas */
+.custom-header {
+  background-color: #F9FBFF !important;
+  font-weight: 600 !important;
+  color: #333 !important;
+  border-bottom: 1px solid #5932EA !important;
+  text-align: left !important;
+  padding-left: 12px !important;
+}
+
+
             `}
           </style>
         </div>

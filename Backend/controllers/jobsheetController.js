@@ -6,17 +6,22 @@ class JobsheetController {
   // En el servidor - jobsheetController.js
   static async getAllJobsheets(req, res) {
     try {
-      const { search, state } = req.query;
+      const { search, state, vehicle_id } = req.query;
+
       const jobsheets = await JobsheetService.getAllJobsheets(search, state);
       
-      console.log("Raw jobsheets fetched:", jobsheets.length);
       
       const enrichedJobsheets = await Promise.all(jobsheets.map(async (js) => {
-        console.log(`Processing jobsheet ID ${js.id}, customer_id: ${js.customer_id}, vehicle_id: ${js.vehicle_id}`);
         
         let customer = null;
         let vehicle = null;
-        
+        let jobsheets;
+    
+        if (vehicle_id) {
+          jobsheets = await JobsheetService.getJobsheetsByVehicleId(vehicle_id);
+        } else {
+          jobsheets = await JobsheetService.getAllJobsheets(search, state);
+        }
         try {
           if (js.customer_id) {
             customer = await CustomerService.getCustomerById(js.customer_id);

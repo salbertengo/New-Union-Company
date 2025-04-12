@@ -46,7 +46,13 @@ class JobsheetService {
       throw error;
     }
   }
-
+  static async getJobsheetsByVehicleId(vehicleId) {
+    try {
+      return await JobsheetModel.getByVehicleId(vehicleId);
+    } catch (error) {
+      throw error;
+    }
+  }
   static async createJobsheet(jobsheetData) {
     try {
       return await JobsheetModel.create(jobsheetData);

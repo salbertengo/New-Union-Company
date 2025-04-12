@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const JobsheetController = require('../controllers/jobsheetController');
-const authenticateToken = require('../middleware/auth');
+const { auth } = require('../middleware/auth');
 
 // Aplicar middleware de autenticación a todas las rutas
-router.use(authenticateToken);
+router.use(auth());
 
 // Rutas para Jobsheets
 router.get('/', JobsheetController.getAllJobsheets);

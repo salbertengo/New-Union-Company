@@ -1,24 +1,15 @@
 const express = require('express');
 const InventoryController = require('../controllers/inventoryController');
-const authenticateToken = require('../middleware/auth');
+const { auth } = require('../middleware/auth');
 
 const router = express.Router();
 
-router.use(authenticateToken);
+router.use(auth());
 
-// GET /inventory
-router.get('/', InventoryController.getAll);
-
-// GET /inventory/:id
-router.get('/:id', InventoryController.getById);
-
-// POST /inventory
-router.post('/', InventoryController.create);
-
-// PUT /inventory/:id
-router.put('/:id', InventoryController.update);
-
-// DELETE /inventory/:id
-router.delete('/:id', InventoryController.delete);
+router.get('/', auth('admin'), InventoryController.getAll);
+router.get('/:id', auth('admin'), InventoryController.getById);
+router.post('/', auth('admin'), InventoryController.create);
+router.put('/:id', auth('admin'), InventoryController.update);
+router.delete('/:id', auth('admin'), InventoryController.delete);
 
 module.exports = router;

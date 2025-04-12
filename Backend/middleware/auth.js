@@ -1,29 +1,47 @@
-// middleware/auth.js
 const jwt = require('jsonwebtoken');
-const JWT_SECRET = 'your_jwt_secret_key'; // En producción, usar variable de entorno
+const JWT_SECRET = 'your_jwt_secret_key'; 
 
 /**
- * JWT authentication middleware
- * Checks for a valid JWT token in the Authorization header (Bearer <token>).
+ * JWT authentication middleware with optional role verification
+ * @param {String|Array} requiredRoles - Optional. Role(s) required to access the route
+ * @returns {Function} Express middleware function
  */
-function authenticateToken(req, res, next) {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; // "Bearer <token>"
-
-  if (!token) {
-    // Responde 401 si no hay token
-    return res.status(401).json({ error: 'Access token required' });
+function auth(requiredRoles = []) {
+  if (typeof requiredRoles === 'string') {
+    requiredRoles = [requiredRoles];
   }
 
-  jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) {
-      // Responde 403 si el token es inválido o expiró
-      return res.status(403).json({ error: 'Invalid token' });
+  return (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1]; // "Bearer <token>"
+
+    if (!token) {
+      return res.status(401).json({ error: 'Access token required' });
     }
-    // Si el token es válido, almacenamos los datos del usuario
-    req.user = user;
-    next();
-  });
+
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+      if (err) {
+        return res.status(403).json({ error: 'Invalid token' });
+      }
+      
+      req.user = user;
+      
+      if (requiredRoles.length > 0) {
+        if (!user.role || !requiredRoles.includes(user.role)) {
+          return res.status(403).json({ 
+            error: 'Access denied: insufficient permissions' 
+          });
+        }
+      }
+      
+      next();
+    });
+  };
 }
 
-module.exports = authenticateToken;
+const authenticateToken = auth();
+
+module.exports = {
+  auth,
+  authenticateToken
+};

@@ -1,10 +1,9 @@
 const express = require('express');
-const CompatibilityController = require('../controllers/compatibilityController');
-const authenticateToken = require('../middleware/auth');
-
 const router = express.Router();
+const CompatibilityController = require('../controllers/compatibilityController');
+const { auth } = require('../middleware/auth');
 
-router.use(authenticateToken);
+router.use(auth());
 
 // GET: Consultar compatibilidades con filtros
 router.get('/', CompatibilityController.getCompatibleParts);
