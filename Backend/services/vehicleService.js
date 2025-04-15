@@ -24,22 +24,16 @@ class VehicleService {
   }
 
   static async createVehicle(data) {
-    if (!data.plate || !data.model || !data.customer_id) {
-      throw new Error("Plate, model and customer ID are required");
-    }
-
-    // Verificar que el cliente existe
-    const customer = await CustomerModel.getById(data.customer_id);
-    if (!customer) {
-      throw new Error('Customer not found');
+    if (!data.plate || !data.model) {
+      throw new Error("Plate and model are required");
     }
 
     return await VehicleModel.create(data);
   }
 
   static async updateVehicle(id, data) {
-    if (!data.plate || !data.model || !data.customer_id) {
-      throw new Error("Plate, model and customer ID are required");
+    if (!data.plate || !data.model) {
+      throw new Error("Plate and model are required");
     }
 
     // Verificar que el vehículo existe
@@ -48,11 +42,7 @@ class VehicleService {
       throw new Error('Vehicle not found');
     }
 
-    // Verificar que el cliente existe
-    const customer = await CustomerModel.getById(data.customer_id);
-    if (!customer) {
-      throw new Error('Customer not found');
-    }
+
 
     return await VehicleModel.update(id, data);
   }

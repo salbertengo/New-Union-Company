@@ -30,22 +30,21 @@ class VehicleModel {
   }
 
   static async create(data) {
-    const { plate, model, customer_id } = data;
-    // Verificar que la placa no exista ya
+    const { plate, model } = data;
     const [existing] = await pool.query('SELECT id FROM vehicles WHERE plate = ?', [plate]);
     if (existing.length > 0) {
       throw new Error(`Vehicle with plate ${plate} already exists`);
     }
 
     const [result] = await pool.query(
-      'INSERT INTO vehicles (plate, model, customer_id) VALUES (?, ?, ?)',
-      [plate, model, customer_id]
+      'INSERT INTO vehicles (plate, model) VALUES (?, ?)',
+      [plate, model]
     );
     return result.insertId;
   }
 
   static async update(id, data) {
-    const { plate, model, customer_id } = data;
+    const { plate, model } = data;
     // Verificar que la placa no exista en otro vehículo
     const [existing] = await pool.query('SELECT id FROM vehicles WHERE plate = ? AND id != ?', [plate, id]);
     if (existing.length > 0) {
@@ -53,8 +52,8 @@ class VehicleModel {
     }
 
     const [result] = await pool.query(
-      'UPDATE vehicles SET plate = ?, model = ?, customer_id = ? WHERE id = ?',
-      [plate, model, customer_id, id]
+      'UPDATE vehicles SET plate = ?, model = ? WHERE id = ?',
+      [plate, model, id]
     );
     return result.affectedRows;
   }

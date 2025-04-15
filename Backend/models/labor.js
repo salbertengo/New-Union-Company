@@ -16,11 +16,11 @@ class LaborModel {
 
   async add(data) {
     try {
-      const { jobsheet_id, description, price = 0, is_completed = 0 } = data;
+      const { jobsheet_id, description, price = 0, is_completed = 0, tracking_notes = null } = data;
       
       const [result] = await pool.execute(
-        'INSERT INTO labor (jobsheet_id, description, price, is_completed) VALUES (?, ?, ?, ?)',
-        [jobsheet_id, description, price, is_completed]
+        'INSERT INTO labor (jobsheet_id, description, price, is_completed, tracking_notes) VALUES (?, ?, ?, ?, ?)',
+        [jobsheet_id, description, price, is_completed, tracking_notes]
       );
       
       if (is_completed) {
@@ -33,6 +33,7 @@ class LaborModel {
         description,
         price,
         is_completed,
+        tracking_notes,
         created_at: new Date()
       };
     } catch (error) {
@@ -43,7 +44,7 @@ class LaborModel {
 
   async update(id, data) {
     try {
-      const { description, price, is_completed } = data;
+      const { description, price, is_completed, tracking_notes, is_billed } = data;
       
       // Obtener datos actuales para comparar cambios
       const [currentLabor] = await pool.execute(
@@ -87,6 +88,22 @@ class LaborModel {
           updateFields.push('completed_at = ?');
           params.push(completedAt);
         }
+      }
+      
+      if (tracking_notes !== undefined) {
+        updateFields.push('tracking_notes = ?');
+        params.push(tracking_notes);
+      }
+      
+      if (is_billed !== undefined) {
+        updateFields.push('is_billed = ?');
+        params.push(is_billed);
+      }
+      
+      // Check if there are fields to update
+      if (updateFields.length === 0) {
+        console.log('No fields to update for labor ID:', id);
+        return false; // No fields to update
       }
       
       query += updateFields.join(', ') + ' WHERE id = ?';

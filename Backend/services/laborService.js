@@ -37,25 +37,29 @@ class LaborService {
     }
   }
 
-  async updateLabor(id, laborData) {
+  async updateLabor(id, data) {
     try {
-      // Si está marcado como completado, asegurarse de que tenga precio
-      if (laborData.is_completed && (!laborData.price || laborData.price <= 0)) {
-        console.log(laborData.price)
-        throw new Error('Labor completada debe tener un precio válido');
+      // Check if any updateable fields exist
+      const updateableFields = ['description', 'price', 'is_completed', 'tracking_notes', 'is_billed'];
+      const hasValidFields = updateableFields.some(field => data[field] !== undefined);
+      
+      if (!hasValidFields) {
+        throw new Error('No valid fields provided for update');
       }
       
-      const success = await LaborModel.update(id, laborData);
-      if (!success) {
+      // FIX: Change laborModel to LaborModel (notice the capital L)
+      const result = await LaborModel.update(id, data);
+      
+      if (!result) {
         throw new Error('No se pudo actualizar la labor');
       }
-      return success;
+      
+      return result;
     } catch (error) {
       console.error('Error in laborService.updateLabor:', error);
       throw error;
     }
   }
-
   async deleteLabor(id) {
     try {
       const success = await LaborModel.delete(id);

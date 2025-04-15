@@ -56,6 +56,7 @@ const JobsheetView = () => {
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [editingLaborId, setEditingLaborId] = useState(null);
   const [editedLaborPrice, setEditedLaborPrice] = useState("");
+  const [laborIsBilled, setLaborIsBilled] = useState(true);
   
   const [newItem, setNewItem] = useState({
     name: "",
@@ -74,6 +75,8 @@ const JobsheetView = () => {
   const [laborDescription, setLaborDescription] = useState("");
   const [laborPrice, setLaborPrice] = useState("");
   const [showLaborModal, setShowLaborModal] = useState(false);
+  const [laborTrackingNotes, setLaborTrackingNotes] = useState("");
+  const [editingTrackingLaborId, setEditingTrackingLaborId] = useState(null);
 
   const [formData, setFormData] = useState({
     customer_id: "",
@@ -1008,6 +1011,7 @@ const JobsheetView = () => {
 
         // Recargar lista de items
         fetchJobsheetItems(currentJobsheet.id);
+        await refreshCurrentJobsheetData();
       } else {
         console.error("Error adding item:", response.status, errorMessage);
 
@@ -1101,6 +1105,7 @@ const JobsheetView = () => {
 
         // Recargar los jobsheets para actualizar totales
         fetchJobsheets(searchTerm);
+        await refreshCurrentJobsheetData();
       } else {
         console.error("Error deleting item:", response.status);
         setNotification({
@@ -1479,12 +1484,16 @@ const JobsheetView = () => {
           description: laborDescription,
           price: laborPrice ? parseFloat(laborPrice) : 0,
           is_completed: false,
+          is_billed: laborIsBilled,
+          tracking_notes: laborTrackingNotes,
         }),
       });
 
       if (response.ok) {
         setLaborDescription("");
         setLaborPrice("");
+        setLaborIsBilled(true);
+        setLaborTrackingNotes("");
 
         fetchLabors(currentJobsheet.id);
         fetchJobsheets(searchTerm, statusFilter);
@@ -1588,6 +1597,36 @@ const JobsheetView = () => {
     }
   };
 
+  const handleUpdateLaborTracking = async (laborId, notes) => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+      setIsLoading(true);
+      const response = await fetch(`http://localhost:3000/labor/${laborId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ tracking_notes: notes }),
+      });
+      if (response.ok) {
+        fetchLabors(currentJobsheet.id);
+        setEditingTrackingLaborId(null);
+        setNotification({ show: true, message: "Tracking notes updated", type: "success" });
+        setTimeout(() => setNotification({ show: false }), 2000);
+      } else {
+        setNotification({ show: true, message: "Error updating tracking notes", type: "error" });
+        setTimeout(() => setNotification({ show: false }), 2000);
+      }
+    } catch (error) {
+      setNotification({ show: true, message: "Error: " + error.message, type: "error" });
+      setTimeout(() => setNotification({ show: false }), 2000);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleDeleteLabor = async (id) => {
     try {
       const token = localStorage.getItem("token");
@@ -1656,6 +1695,79 @@ const JobsheetView = () => {
     });
     setInventorySearchTerm("");
     setShowInventoryResults(false);
+  };
+
+  const handleToggleLaborCompleted = async (labor) => {
+    const updates = {
+      is_completed: labor.is_completed === 1 ? 0 : 1,
+    };
+    await handleUpdateLabor(labor.id, updates);
+  };
+
+  const handleToggleLaborBilled = async (labor) => {
+    const updates = {
+      is_billed: labor.is_billed === false ? true : false,
+    };
+    await handleUpdateLabor(labor.id, updates);
+  };
+
+  const refreshCurrentJobsheetData = async () => {
+    if (!currentJobsheet) return;
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    try {
+      // Refresca jobsheet
+      const response = await fetch(`http://localhost:3000/jobsheets/${currentJobsheet.id}`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (response.ok) {
+        const freshJobsheet = await response.json();
+        setCurrentJobsheet(freshJobsheet);
+      }
+      // Refresca items
+      const itemsResponse = await fetch(`http://localhost:3000/jobsheets/${currentJobsheet.id}/items`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (itemsResponse.ok) {
+        const items = await itemsResponse.json();
+        setJobsheetItems(items);
+      }
+      // Refresca labors
+      const laborsResponse = await fetch(`http://localhost:3000/labor/jobsheet/${currentJobsheet.id}`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (laborsResponse.ok) {
+        const labors = await laborsResponse.json();
+        setLabors(labors);
+      }
+      // Refresca payments
+      const paymentsResponse = await fetch(`http://localhost:3000/jobsheets/payments/jobsheet/${currentJobsheet.id}`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (paymentsResponse.ok) {
+        const payments = await paymentsResponse.json();
+        setJobsheetPayments(payments);
+      }
+    } catch (e) {
+      // No hacer nada
+    }
+  };
+
+  const handleOpenInvoiceModal = async () => {
+    await refreshCurrentJobsheetData();
+    setShowInvoiceModalFromPayments(true);
   };
 
   return (
@@ -1899,7 +2011,8 @@ const JobsheetView = () => {
                     borderRight: "1px solid rgba(0,0,0,0.06)",
                     display: "flex",
                     flexDirection: "column",
-                    overflow: "hidden",
+                    overflowY: "auto",
+                    maxHeight: "calc(92vh - 140px)",
                   }}
                 >
                   <div style={{ padding: "20px", overflowY: "auto" }}>
@@ -2441,7 +2554,6 @@ const JobsheetView = () => {
                           strokeWidth="2"
                           strokeLinecap="round"
                           strokeLinejoin="round"
-                          style={{ marginRight: "8px" }}
                         >
                           <line x1="12" y1="1" x2="12" y2="23"></line>
                           <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
@@ -2866,7 +2978,7 @@ const JobsheetView = () => {
                           </p>
                         </div>
                         <button
-                          onClick={() => setShowInvoiceModalFromPayments(true)}
+                          onClick={handleOpenInvoiceModal}
                           style={{
                             padding: "10px 18px",
                             backgroundColor: "#6A1B9A",
@@ -2920,9 +3032,11 @@ const JobsheetView = () => {
                     display: "flex",
                     flexDirection: "column",
                     overflow: "hidden",
+                    height: "100%",
+                    minHeight: 0
                   }}
                 >
-                  <div style={{ marginBottom: "20px" }}>
+                  <div style={{ marginBottom: "20px", flex: 1, overflowY: "auto", minHeight: 0 }}>
                     <h3
                       style={{
                         margin: "0 0 16px 0",
@@ -3617,2090 +3731,213 @@ const JobsheetView = () => {
             </div>
           </div>
         )}
-
+{showInvoiceModalFromPayments && currentJobsheet && (
+  <Invoice
+    isOpen={showInvoiceModalFromPayments}
+    onClose={() => setShowInvoiceModalFromPayments(false)}
+    jobsheet={currentJobsheet}
+    items={jobsheetItems}
+    labors={labors}
+    payments={jobsheetPayments}
+    taxName={taxName}
+    taxRate={taxRate}
+  />
+)}
         <style>
           {`
-    @keyframes modalFadeIn {
-      0% { opacity: 0; transform: scale(0.95); }
-      100% { opacity: 1; transform: scale(1); }
-    }
-  `}
+            @keyframes modalFadeIn {
+              0% { opacity: 0; transform: scale(0.95); }
+              100% { opacity: 1; transform: scale(1); }
+            }
+            @keyframes fadeIn {
+              from { opacity: 0; }
+              to { opacity: 1; }
+            }
+            @keyframes slideIn {
+              from { transform: translateX(20px); opacity: 0; }
+              to { transform: translateX(0); opacity: 1; }
+            }
+            @keyframes spin {
+              0% { transform: rotate(0deg);}
+              100% { transform: rotate(360deg);}
+            }
+          `}
         </style>
-        {showItemsModal && currentJobsheet && (
-          <div
-            style={{
-              position: "fixed",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backgroundColor: "rgba(0, 0, 0, 0.6)",
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              zIndex: 1000,
-              backdropFilter: "blur(3px)",
-              transition: "all 0.3s ease",
-            }}
-          >
-            <div
-              style={{
-                backgroundColor: "white",
-                borderRadius: "12px",
-                width: "850px",
-                maxHeight: "90vh",
-                boxShadow:
-                  "0 10px 30px rgba(0,0,0,0.15), 0 1px 8px rgba(0,0,0,0.12)",
-                display: "flex",
-                flexDirection: "column",
-                overflow: "hidden",
-                animation: "modalFadeIn 0.3s ease",
-              }}
-            >
-              {/* Header Bar with improved styling */}
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  padding: "18px 24px",
-                  borderBottom: "1px solid rgba(0,0,0,0.06)",
-                  backgroundColor: "#5932EA",
-                  color: "white",
-                }}
-              >
-                <div>
-                  <h2
-                    style={{ margin: 0, fontSize: "20px", fontWeight: "600" }}
-                  >
-                    Manage Items
-                  </h2>
-                  <p
-                    style={{
-                      margin: "4px 0 0 0",
-                      opacity: "0.8",
-                      fontSize: "14px",
-                    }}
-                  >
-                    Job Sheet #{currentJobsheet.id} •{" "}
-                    {currentJobsheet.customer_name || "Customer"}
-                  </p>
-                </div>
-                <button
-                  onClick={() => setShowItemsModal(false)}
-                  style={{
-                    background: "rgba(255,255,255,0.2)",
-                    border: "none",
-                    color: "white",
-                    width: "32px",
-                    height: "32px",
-                    borderRadius: "50%",
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: "18px",
-                    transition: "background-color 0.2s",
-                  }}
-                  onMouseOver={(e) =>
-                    (e.currentTarget.style.backgroundColor =
-                      "rgba(255,255,255,0.3)")
-                  }
-                  onMouseOut={(e) =>
-                    (e.currentTarget.style.backgroundColor =
-                      "rgba(255,255,255,0.2)")
-                  }
-                >
-                  ×
-                </button>
-              </div>
-
-              {/* Main content area - split layout */}
-              <div style={{ display: "flex", height: "calc(90vh - 160px)" }}>
-                {/* Left panel - Current items */}
-                <div
-                  style={{
-                    width: "55%",
-                    padding: "20px 24px",
-                    borderRight: "1px solid rgba(0,0,0,0.06)",
-                    display: "flex",
-                    flexDirection: "column",
-                    overflow: "hidden",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      marginBottom: "16px",
-                    }}
-                  >
-                    <h3
-                      style={{
-                        margin: 0,
-                        fontSize: "16px",
-                        fontWeight: "600",
-                        color: "#333",
-                      }}
-                    >
-                      Current Items
-                    </h3>
-                    <div
-                      style={{
-                        backgroundColor: "#f0f8ff",
-                        padding: "6px 12px",
-                        borderRadius: "6px",
-                        color: "#5932EA",
-                        fontSize: "14px",
-                        fontWeight: "600",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "6px",
-                      }}
-                    >
-                      <svg
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        xmlns="http://www.w3.org/2000/svg"
-                      >
-                        <path
-                          d="M12 8V12L15 15"
-                          stroke="#5932EA"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                        />
-                        <circle
-                          cx="12"
-                          cy="12"
-                          r="9"
-                          stroke="#5932EA"
-                          strokeWidth="2"
-                        />
-                      </svg>
-                      {jobsheetItems.length} items · $
-                      {jobsheetItems
-                        .reduce(
-                          (sum, item) =>
-                            sum + parseFloat(item.price) * item.quantity,
-                          0
-                        )
-                        .toFixed(2)}
-                    </div>
-                  </div>
-
-                  <div
-                    style={{
-                      overflowY: "auto",
-                      flexGrow: 1,
-                      backgroundColor:
-                        jobsheetItems.length > 0 ? "transparent" : "#f9fafc",
-                      borderRadius: jobsheetItems.length > 0 ? "0" : "8px",
-                    }}
-                  >
-                    {jobsheetItems.length === 0 ? (
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          padding: "60px 20px",
-                          color: "#8c8c8c",
-                          textAlign: "center",
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: "70px",
-                            height: "70px",
-                            backgroundColor: "#F5F5F5",
-                            borderRadius: "50%",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            marginBottom: "16px",
-                          }}
-                        >
-                          <svg
-                            width="32"
-                            height="32"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            xmlns="http://www.w3.org/2000/svg"
-                          >
-                            <path
-                              d="M20 7H4C2.89543 7 2 7.89543 2 9V19C2 20.1046 2.89543 21 4 21H20C21.1046 21 22 20.1046 22 19V9C22 7.89543 21.1046 7 20 7Z"
-                              stroke="#AAAAAA"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                            />
-                            <path
-                              d="M16 7V5C16 3.89543 15.1046 3 14 3H10C8.89543 3 8 3.89543 8 5V7"
-                              stroke="#AAAAAA"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                            />
-                            <path
-                              d="M12 12V16"
-                              stroke="#AAAAAA"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                            />
-                            <path
-                              d="M9 14H15"
-                              stroke="#AAAAAA"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                            />
-                          </svg>
-                        </div>
-                        <p
-                          style={{
-                            margin: "0 0 8px 0",
-                            fontSize: "16px",
-                            fontWeight: "500",
-                          }}
-                        >
-                          No items added yet
-                        </p>
-                        <p
-                          style={{
-                            margin: 0,
-                            fontSize: "14px",
-                            maxWidth: "260px",
-                          }}
-                        >
-                          Use the search on the right to find and add items to
-                          this job sheet
-                        </p>
-                      </div>
-                    ) : (
-                      <div style={{ padding: "4px" }}>
-                        {jobsheetItems.map((item) => (
-                          <div
-                            key={item.id}
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              marginBottom: "12px",
-                              padding: "12px",
-                              borderRadius: "8px",
-                              backgroundColor: "white",
-                              boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-                              border: "1px solid rgba(0,0,0,0.05)",
-                              transition: "transform 0.2s, box-shadow 0.2s",
-                              position: "relative",
-                            }}
-                            onMouseOver={(e) => {
-                              e.currentTarget.style.transform =
-                                "translateY(-1px)";
-                              e.currentTarget.style.boxShadow =
-                                "0 4px 6px rgba(0,0,0,0.08)";
-                            }}
-                            onMouseOut={(e) => {
-                              e.currentTarget.style.transform = "translateY(0)";
-                              e.currentTarget.style.boxShadow =
-                                "0 1px 3px rgba(0,0,0,0.08)";
-                            }}
-                          >
-                            <div
-                              style={{
-                                width: "42px",
-                                height: "42px",
-                                backgroundColor: "#f0f0ff",
-                                borderRadius: "6px",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                flexShrink: 0,
-                                color: "#5932EA",
-                                fontSize: "18px",
-                                fontWeight: "600",
-                              }}
-                            >
-                              {item.name.charAt(0).toUpperCase()}
-                            </div>
-
-                            <div
-                              style={{
-                                marginLeft: "14px",
-                                flexGrow: 1,
-                                width: "calc(100% - 180px)",
-                              }}
-                            >
-                              <div
-                                style={{
-                                  fontSize: "15px",
-                                  fontWeight: "600",
-                                  color: "#333",
-                                  whiteSpace: "nowrap",
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                }}
-                              >
-                                {item.name}
-                              </div>
-                              <div
-                                style={{
-                                  fontSize: "13px",
-                                  color: "#888",
-                                  marginTop: "2px",
-                                }}
-                              >
-                                ${parseFloat(item.price).toFixed(2)} per unit
-                              </div>
-                            </div>
-
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                marginLeft: "8px",
-                                flexShrink: 0,
-                              }}
-                            >
-                              <div
-                                style={{
-                                  width: "28px",
-                                  height: "28px",
-                                  display: "flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  backgroundColor: "#f9fafc",
-                                  borderRadius: "4px",
-                                  fontSize: "13px",
-                                }}
-                              >
-                                {item.quantity}
-                              </div>
-                              <div
-                                style={{
-                                  margin: "0 12px",
-                                  fontSize: "15px",
-                                  fontWeight: "600",
-                                  color: "#5932EA",
-                                }}
-                              >
-                                $
-                                {(
-                                  parseFloat(item.price) * item.quantity
-                                ).toFixed(2)}
-                              </div>
-                              <button
-                                onClick={() => handleDeleteItem(item.id)}
-                                style={{
-                                  backgroundColor: "#fff0f0",
-                                  color: "#ff4d4f",
-                                  border: "none",
-                                  borderRadius: "6px",
-                                  width: "28px",
-                                  height: "28px",
-                                  display: "flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  cursor: "pointer",
-                                  transition: "all 0.2s",
-                                }}
-                                onMouseOver={(e) => {
-                                  e.currentTarget.style.backgroundColor =
-                                    "#ffd6d6";
-                                }}
-                                onMouseOut={(e) => {
-                                  e.currentTarget.style.backgroundColor =
-                                    "#fff0f0";
-                                }}
-                              >
-                                <FontAwesomeIcon icon={faTrash} size="sm" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-
-                        {/* Total area */}
-                        <div
-                          style={{
-                            marginTop: "20px",
-                            padding: "16px",
-                            borderRadius: "8px",
-                            backgroundColor: "#f8f9ff",
-                            boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
-                            border: "1px solid rgba(89, 50, 234, 0.1)",
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                            }}
-                          >
-                            <div style={{ color: "#666", fontSize: "14px" }}>
-                              Subtotal
-                            </div>
-                            <div
-                              style={{ fontWeight: "500", fontSize: "14px" }}
-                            >
-                              $
-                              {jobsheetItems
-                                .reduce(
-                                  (sum, item) =>
-                                    sum +
-                                    parseFloat(item.price) * item.quantity,
-                                  0
-                                )
-                                .toFixed(2)}
-                            </div>
-                          </div>
-                          <div
-                            style={{
-                              marginTop: "12px",
-                              display: "flex",
-                              justifyContent: "space-between",
-                              paddingTop: "12px",
-                              borderTop: "1px dashed rgba(0,0,0,0.1)",
-                            }}
-                          >
-                            <div
-                              style={{
-                                color: "#333",
-                                fontSize: "16px",
-                                fontWeight: "600",
-                              }}
-                            >
-                              Total
-                            </div>
-                            <div
-                              style={{
-                                color: "#5932EA",
-                                fontWeight: "600",
-                                fontSize: "16px",
-                              }}
-                            >
-                              $
-                              {jobsheetItems
-                                .reduce(
-                                  (sum, item) =>
-                                    sum +
-                                    parseFloat(item.price) * item.quantity,
-                                  0
-                                )
-                                .toFixed(2)}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Right panel - Add new items */}
-                <div
-                  style={{
-                    width: "45%",
-                    padding: "20px 24px",
-                    display: "flex",
-                    flexDirection: "column",
-                    overflow: "hidden",
-                    backgroundColor: "#fafbfc",
-                  }}
-                >
-                  <h3
-                    style={{
-                      margin: "0 0 16px 0",
-                      fontSize: "16px",
-                      fontWeight: "600",
-                      color: "#333",
-                    }}
-                  >
-                    Add Items
-                  </h3>
-
-                  {/* Search bar with improved styling */}
-                  <div style={{ position: "relative", marginBottom: "20px" }}>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        backgroundColor: "white",
-                        border: "1px solid #e0e0e0",
-                        boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-                        borderRadius: "8px",
-                        padding: "0 8px",
-                        transition: "all 0.2s",
-                      }}
-                      onFocus={(e) => {
-                        e.currentTarget.style.borderColor = "#5932EA";
-                        e.currentTarget.style.boxShadow =
-                          "0 0 0 3px rgba(89, 50, 234, 0.1)";
-                      }}
-                      onBlur={(e) => {
-                        e.currentTarget.style.borderColor = "#e0e0e0";
-                        e.currentTarget.style.boxShadow =
-                          "0 1px 3px rgba(0,0,0,0.05)";
-                      }}
-                    >
-                      <FontAwesomeIcon
-                        icon={faSearch}
-                        style={{
-                          color: "#5932EA",
-                          margin: "0 10px",
-                        }}
-                      />
-                      <input
-                        ref={searchInputRef}
-                        type="text"
-                        placeholder="Search inventory by name or SKU..."
-                        value={inventorySearchTerm}
-                        onChange={handleInventorySearch}
-                        onFocus={() => setShowInventoryResults(true)}
-                        style={{
-                          flex: 1,
-                          border: "none",
-                          outline: "none",
-                          padding: "12px 0",
-                          fontSize: "14px",
-                          backgroundColor: "transparent",
-                        }}
-                      />
-                      {inventorySearchTerm && (
-                        <button
-                          onClick={() => {
-                            setInventorySearchTerm("");
-                            setFilteredInventory([]);
-                          }}
-                          style={{
-                            background: "none",
-                            border: "none",
-                            cursor: "pointer",
-                            fontSize: "14px",
-                            color: "#999",
-                            width: "24px",
-                            height: "24px",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            marginRight: "6px",
-                          }}
-                        >
-                          ×
-                        </button>
-                      )}
-                      {isLoading && (
-                        <div
-                          style={{
-                            width: "18px",
-                            height: "18px",
-                            border: "2px solid rgba(89, 50, 234, 0.1)",
-                            borderLeft: "2px solid #5932EA",
-                            borderRadius: "50%",
-                            animation: "spin 1s linear infinite",
-                            marginRight: "10px",
-                          }}
-                        ></div>
-                      )}
-                    </div>
-
-                    {/* Search results */}
-                    {showInventoryResults && filteredInventory.length > 0 && (
-                      <div
-                        style={{
-                          position: "absolute",
-                          top: "calc(100% + 8px)",
-                          left: 0,
-                          right: 0,
-                          backgroundColor: "white",
-                          border: "1px solid #e0e0e0",
-                          borderRadius: "8px",
-                          maxHeight: "300px",
-                          overflowY: "auto",
-                          zIndex: 10,
-                          boxShadow:
-                            "0 6px 16px -8px rgba(0,0,0,0.1), 0 9px 28px 0 rgba(0,0,0,0.05)",
-                        }}
-                      >
-                        {filteredInventory.map((item, index) => (
-                          <div
-                            key={item.id}
-                            className="inventory-item"
-                            tabIndex="0"
-                            onClick={() => handleSelectInventoryItem(item)}
-                            style={{
-                              padding: "12px 16px",
-                              cursor: "pointer",
-                              borderBottom:
-                                index < filteredInventory.length - 1
-                                  ? "1px solid #f0f0f0"
-                                  : "none",
-                              transition: "background-color 0.2s",
-                              display: "flex",
-                              alignItems: "center",
-                              outline: "none",
-                            }}
-                            onMouseEnter={(e) =>
-                              (e.target.style.backgroundColor = "#f5f5f5")
-                            }
-                            onMouseLeave={(e) =>
-                              (e.target.style.backgroundColor = "transparent")
-                            }
-                          >
-                            <div
-                              style={{
-                                width: "36px",
-                                height: "36px",
-                                backgroundColor: "#5932EA10",
-                                borderRadius: "6px",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                marginRight: "12px",
-                                color: "#5932EA",
-                                fontWeight: "600",
-                                fontSize: "16px",
-                              }}
-                            >
-                              {item.name.charAt(0).toUpperCase()}
-                            </div>
-                            <div style={{ flex: 1 }}>
-                              <div
-                                style={{ fontWeight: "500", fontSize: "14px" }}
-                              >
-                                {item.name}
-                              </div>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  justifyContent: "space-between",
-                                  marginTop: "2px",
-                                }}
-                              >
-                                <div
-                                  style={{ fontSize: "12px", color: "#666" }}
-                                >
-                                  <span>SKU: {item.sku || "N/A"}</span>
-                                  <span
-                                    style={{
-                                      marginLeft: "12px",
-                                      color:
-                                        item.stock > 0 ? "#2e7d32" : "#d32f2f",
-                                      padding: "1px 6px",
-                                      backgroundColor:
-                                        item.stock > 0 ? "#e8f5e9" : "#ffebee",
-                                      borderRadius: "4px",
-                                      fontSize: "11px",
-                                      fontWeight: "500",
-                                    }}
-                                  >
-                                    {item.stock > 0
-                                      ? `${item.stock} in stock`
-                                      : "No stock"}
-                                  </span>
-                                </div>
-                                <div
-                                  style={{
-                                    fontWeight: "600",
-                                    color: "#5932EA",
-                                    fontSize: "13px",
-                                  }}
-                                >
-                                  ${parseFloat(item.sale).toFixed(2)}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Empty search results */}
-                    {showInventoryResults &&
-                      inventorySearchTerm &&
-                      filteredInventory.length === 0 &&
-                      !isLoading && (
-                        <div
-                          style={{
-                            position: "absolute",
-                            top: "calc(100% + 8px)",
-                            left: 0,
-                            right: 0,
-                            padding: "20px",
-                            backgroundColor: "white",
-                            border: "1px solid #e0e0e0",
-                            borderRadius: "8px",
-                            color: "#666",
-                            fontSize: "14px",
-                            textAlign: "center",
-                            boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
-                          }}
-                        >
-                          <div style={{ marginBottom: "8px" }}>
-                            <svg
-                              width="36"
-                              height="36"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              xmlns="http://www.w3.org/2000/svg"
-                            >
-                              <path
-                                d="M15.5 15.5L19 19"
-                                stroke="#AAAAAA"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                              />
-                              <circle
-                                cx="11"
-                                cy="11"
-                                r="6"
-                                stroke="#AAAAAA"
-                                strokeWidth="2"
-                              />
-                              <path
-                                d="M8 11H14"
-                                stroke="#AAAAAA"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                              />
-                            </svg>
-                          </div>
-                          <p style={{ margin: "0", fontWeight: "500" }}>
-                            No results found
-                          </p>
-                          <p
-                            style={{
-                              margin: "4px 0 0 0",
-                              color: "#888",
-                              fontSize: "13px",
-                            }}
-                          >
-                            We couldn't find any products that match "
-                            {inventorySearchTerm}"
-                          </p>
-                        </div>
-                      )}
-                  </div>
-
-                  {/* Selected item preview */}
-                  {newItem.product_id ? (
-                    <div
-                      style={{
-                        padding: "16px",
-                        backgroundColor: "white",
-                        borderRadius: "8px",
-                        border: "1px solid #e0e4ff",
-                        boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-                        animation: "fadeIn 0.3s ease",
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          marginBottom: "16px",
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: "42px",
-                            height: "42px",
-                            backgroundColor: "#f0f0ff",
-                            borderRadius: "6px",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            flexShrink: 0,
-                            color: "#5932EA",
-                            fontSize: "18px",
-                            fontWeight: "600",
-                          }}
-                        >
-                          {newItem.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div style={{ marginLeft: "14px", flex: 1 }}>
-                          <div style={{ fontWeight: "600", fontSize: "16px" }}>
-                            {newItem.name}
-                          </div>
-                          <div
-                            style={{
-                              fontSize: "13px",
-                              color: "#5932EA",
-                              marginTop: "4px",
-                            }}
-                          >
-                            ${parseFloat(newItem.price).toFixed(2)} per unit
-                          </div>
-                        </div>
-                      </div>
-
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          backgroundColor: "#f8f9ff",
-                          padding: "12px 16px",
-                          borderRadius: "6px",
-                        }}
-                      >
-                        <div>
-                          <label
-                            style={{
-                              display: "block",
-                              fontSize: "13px",
-                              color: "#666",
-                              marginBottom: "6px",
-                            }}
-                          >
-                            Quantity
-                          </label>
-                          <div
-                            style={{ display: "flex", alignItems: "center" }}
-                          >
-                            <button
-                              onClick={() =>
-                                setNewItem({
-                                  ...newItem,
-                                  quantity: Math.max(1, newItem.quantity - 1),
-                                })
-                              }
-                              style={{
-                                width: "30px",
-                                height: "30px",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                backgroundColor: "#f0f0f0",
-                                border: "1px solid #ddd",
-                                borderRadius: "4px 0 0 4px",
-                                cursor: "pointer",
-                                fontSize: "16px",
-                              }}
-                            >
-                              −
-                            </button>
-
-                            <input
-                              type="number"
-                              value={newItem.quantity}
-                              min="1"
-                              onChange={(e) =>
-                                setNewItem({
-                                  ...newItem,
-                                  quantity: parseInt(e.target.value) || 1,
-                                })
-                              }
-                              style={{
-                                width: "50px",
-                                textAlign: "center",
-                                padding: "5px 0",
-                                border: "1px solid #ddd",
-                                borderLeft: "none",
-                                borderRight: "none",
-                                outline: "none",
-                                fontSize: "14px",
-                                fontWeight: "500",
-                              }}
-                            />
-
-                            <button
-                              onClick={() =>
-                                setNewItem({
-                                  ...newItem,
-                                  quantity: newItem.quantity + 1,
-                                })
-                              }
-                              style={{
-                                width: "30px",
-                                height: "30px",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                backgroundColor: "#f0f0f0",
-                                border: "1px solid #ddd",
-                                borderRadius: "0 4px 4px 0",
-                                cursor: "pointer",
-                                fontSize: "16px",
-                              }}
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
-
-                        <div>
-                          <div
-                            style={{
-                              fontSize: "13px",
-                              color: "#666",
-                              marginBottom: "6px",
-                              textAlign: "right",
-                            }}
-                          >
-                            Total
-                          </div>
-                          <div
-                            style={{
-                              fontWeight: "600",
-                              color: "#5932EA",
-                              fontSize: "16px",
-                            }}
-                          >
-                            $
-                            {(
-                              parseFloat(newItem.price) * newItem.quantity
-                            ).toFixed(2)}
-                          </div>
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={handleAddItem}
-                        style={{
-                          marginTop: "16px",
-                          width: "100%",
-                          padding: "12px",
-                          backgroundColor: "#5932EA",
-                          color: "white",
-                          border: "none",
-                          borderRadius: "6px",
-                          cursor: "pointer",
-                          fontWeight: "500",
-                          fontSize: "14px",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          gap: "8px",
-                          transition: "background-color 0.2s",
-                        }}
-                        onMouseOver={(e) =>
-                          (e.currentTarget.style.backgroundColor = "#4321C9")
-                        }
-                        onMouseOut={(e) =>
-                          (e.currentTarget.style.backgroundColor = "#5932EA")
-                        }
-                        disabled={isLoading}
-                      >
-                        {isLoading ? (
-                          <div
-                            style={{
-                              width: "18px",
-                              height: "18px",
-                              border: "2px solid rgba(255,255,255,0.3)",
-                              borderLeft: "2px solid white",
-                              borderRadius: "50%",
-                              animation: "spin 1s linear infinite",
-                            }}
-                          ></div>
-                        ) : (
-                          <>
-                            <svg
-                              width="18"
-                              height="18"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              xmlns="http://www.w3.org/2000/svg"
-                            >
-                              <path
-                                d="M12 5V19"
-                                stroke="white"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                              />
-                              <path
-                                d="M5 12H19"
-                                stroke="white"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                              />
-                            </svg>
-                            Add to Job Sheet
-                          </>
-                        )}
-                      </button>
-
-                      <button
-                        onClick={() =>
-                          setNewItem({
-                            name: "",
-                            quantity: 1,
-                            price: 0,
-                            product_id: null,
-                          })
-                        }
-                        style={{
-                          marginTop: "8px",
-                          width: "100%",
-                          padding: "8px",
-                          backgroundColor: "transparent",
-                          color: "#666",
-                          border: "none",
-                          cursor: "pointer",
-                          fontSize: "13px",
-                        }}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <div
-                      style={{
-                        flex: 1,
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        padding: "30px 20px",
-                        backgroundColor: "white",
-                        borderRadius: "8px",
-                        border: "1px dashed #ddd",
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: "60px",
-                          height: "60px",
-                          backgroundColor: "#f5f5fc",
-                          borderRadius: "50%",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          marginBottom: "16px",
-                        }}
-                      >
-                        <svg
-                          width="30"
-                          height="30"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          xmlns="http://www.w3.org/2000/svg"
-                        >
-                          <path
-                            d="M21 16V8.00002C20.9996 7.6493 20.9071 7.30483 20.7315 7.00119C20.556 6.69754 20.3037 6.44539 20 6.27002L13 2.27002C12.696 2.09449 12.3511 2.00208 12 2.00208C11.6489 2.00208 11.304 2.09449 11 2.27002L4 6.27002C3.69626 6.44539 3.44398 6.69754 3.26846 7.00119C3.09294 7.30483 3.00036 7.6493 3 8.00002V16C3.00036 16.3508 3.09294 16.6952 3.26846 16.9989C3.44398 17.3025 3.69626 17.5547 4 17.73L11 21.73C11.304 21.9056 11.6489 21.998 12 21.998C12.3511 21.998 12.696 21.9056 13 21.73L20 17.73C20.3037 17.5547 20.556 17.3025 20.7315 16.9989C20.9071 16.6952 20.9996 16.3508 21 16Z"
-                            stroke="#5932EA"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                          <path
-                            d="M3.27002 6.96002L12 12L20.73 6.96002"
-                            stroke="#5932EA"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                          <path
-                            d="M12 22.08V12"
-                            stroke="#5932EA"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      </div>
-                      <p
-                        style={{
-                          margin: "0 0 8px 0",
-                          fontSize: "16px",
-                          fontWeight: "500",
-                          color: "#333",
-                        }}
-                      >
-                        Select an item to add
-                      </p>
-                      <p
-                        style={{
-                          margin: 0,
-                          fontSize: "14px",
-                          color: "#888",
-                          textAlign: "center",
-                          maxWidth: "240px",
-                        }}
-                      >
-                        Use the search box above to find products in your
-                        inventory
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Notification */}
-                  {notification.show && (
-                    <div
-                      style={{
-                        position: "absolute",
-                        bottom: "20px",
-                        right: "20px",
-                        padding: "12px 16px",
-                        borderRadius: "8px",
-                        backgroundColor:
-                          notification.type === "success"
-                            ? "#f0fff6"
-                            : "#fff0f0",
-                        border: `1px solid ${
-                          notification.type === "success"
-                            ? "#b7f0d1"
-                            : "#ffccc7"
-                        }`,
-                        color:
-                          notification.type === "success"
-                            ? "#389e0d"
-                            : "#cf1322",
-                        boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-                        maxWidth: "280px",
-                        zIndex: 1100,
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "10px",
-                        animation: "slideIn 0.3s ease",
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: "24px",
-                          height: "24px",
-                          borderRadius: "50%",
-                          backgroundColor:
-                            notification.type === "success"
-                              ? "#d9f7be"
-                              : "#ffccc7",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          flexShrink: 0,
-                        }}
-                      >
-                        {notification.type === "success" ? (
-                          <svg
-                            width="14"
-                            height="14"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            xmlns="http://www.w3.org/2000/svg"
-                          >
-                            <path
-                              d="M20 6L9 17L4 12"
-                              stroke="#389e0d"
-                              strokeWidth="3"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
-                        ) : (
-                          <svg
-                            width="14"
-                            height="14"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            xmlns="http://www.w3.org/2000/svg"
-                          >
-                            <path
-                              d="M18 6L6 18"
-                              stroke="#cf1322"
-                              strokeWidth="3"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                            <path
-                              d="M6 6L18 18"
-                              stroke="#cf1322"
-                              strokeWidth="3"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
-                        )}
-                      </div>
-                      <div>
-                        <div style={{ fontWeight: "500", fontSize: "14px" }}>
-                          {notification.type === "success"
-                            ? "Success"
-                            : "Error"}
-                        </div>
-                        <div style={{ fontSize: "13px", marginTop: "2px" }}>
-                          {notification.message}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Footer actions */}
-              <div
-                style={{
-                  padding: "16px 24px",
-                  borderTop: "1px solid rgba(0,0,0,0.06)",
-                  display: "flex",
-                  justifyContent: "flex-end",
-                  backgroundColor: "#fafbfc",
-                }}
-              >
-                <button
-                  onClick={() => setShowItemsModal(false)}
-                  style={{
-                    padding: "10px 24px",
-                    backgroundColor: "#5932EA",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "10px",
-                    cursor: "pointer",
-                    fontSize: "14px",
-                    fontWeight: "600",
-                    transition: "all 0.2s",
-                    boxShadow: "0 2px 6px rgba(89, 50, 234, 0.2)",
-                  }}
-                  onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#4321C9"}
-                  onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#5932EA"}
-                >
-                  Close
-                </button>
-        
-              </div>
-
-              {/* CSS Keyframes */}
-              <style jsx>{`
-                @keyframes modalFadeIn {
-                  from {
-                    opacity: 0;
-                    transform: translateY(10px);
-                  }
-                  to {
-                    opacity: 1;
-                    transform: translateY(0);
-                  }
-                }
-                @keyframes fadeIn {
-                  from {
-                    opacity: 0;
-                  }
-                  to {
-                    opacity: 1;
-                  }
-                }
-                @keyframes slideIn {
-                  from {
-                    transform: translateX(20px);
-                    opacity: 0;
-                  }
-                  to {
-                    transform: translateX(0);
-                    opacity: 1;
-                  }
-                }
-              `}</style>
-            </div>
-          </div>
-        )}
 {showLaborModal && currentJobsheet && (
-  <div
-    style={{
-      position: "fixed",
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: "rgba(0, 0, 0, 0.6)",
-      backdropFilter: "blur(5px)",
+  <div style={{
+    position: "fixed",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: "rgba(40,40,60,0.25)",
+    zIndex: 2000,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    backdropFilter: "blur(2px)"
+  }}>
+    <div style={{
+      background: "#fff",
+      borderRadius: 18,
+      width: 800,
+      maxWidth: "95vw",
+      maxHeight: "90vh",
+      boxShadow: "0 8px 32px rgba(60,60,100,0.18)",
       display: "flex",
-      justifyContent: "center",
-      alignItems: "center",
-      zIndex: 1000,
-    }}
-  >
-    <div
-      style={{
-        backgroundColor: "white",
-        borderRadius: "16px",
-        width: "800px",
-        maxHeight: "85vh", 
-        boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
+      flexDirection: "column",
+      overflow: "hidden"
+    }}>
+      {/* Header with vehicle data */}
+      <div style={{
         display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
-      }}
-    >
-      {/* Cabecera con degradado */}
-      <div
-        style={{
-          background: "linear-gradient(135deg, #5932EA 0%, #4321C9 100%)",
-          padding: "24px 30px",
-          color: "white",
-          position: "relative",
-          overflow: "hidden",
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            right: 0,
-            width: "200px",
-            height: "100%",
-            background: "linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.1) 100%)",
-            transform: "skewX(-20deg) translateX(30%)",
-          }}
-        ></div>
-        
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "10px" }}>
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" 
-                  stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-              </svg>
-              <h2 style={{ margin: 0, fontSize: "22px", fontWeight: "600" }}>
-                Labor Management
-              </h2>
-            </div>
-            <p style={{ margin: "0", fontSize: "14px", opacity: "0.9" }}>
-              Job Sheet #{currentJobsheet.id} • {currentJobsheet.customer_name || "Customer"} 
-              • {currentJobsheet.vehicle_model || "Vehicle"}
-            </p>
-          </div>
-          <button
-            onClick={() => setShowLaborModal(false)}
-            style={{
-              background: "rgba(255,255,255,0.2)",
-              border: "none",
-              color: "white",
-              width: "32px",
-              height: "32px",
-              borderRadius: "50%",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: "18px",
-              transition: "background-color 0.2s",
-              position: "relative",  
-              zIndex: 10,          
-              userSelect: "none"    
-            
-            }}
-            onMouseOver={(e) =>
-              (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.3)")
-            }
-            onMouseOut={(e) =>
-              (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.2)")
-            }
-          >
-            ×
-          </button>
-        </div>
-        
-        {/* Resumen de estadísticas */}
-        <div style={{ 
-          display: "flex", 
-          gap: "16px", 
-          marginTop: "16px",
-          color: "white",
-        }}>
-          <div style={{ 
-            background: "rgba(255,255,255,0.15)", 
-            padding: "10px 16px", 
-            borderRadius: "12px",
-            flex: 1
-          }}>
-            <div style={{ fontSize: "13px", opacity: "0.9", marginBottom: "4px" }}>Total Labor</div>
-            <div style={{ fontSize: "20px", fontWeight: "700" }}>
-              ${labors.reduce((sum, labor) => sum + parseFloat(labor.price || 0), 0).toFixed(2)}
-            </div>
-          </div>
-          
-          <div style={{ 
-            background: "rgba(255,255,255,0.15)", 
-            padding: "10px 16px", 
-            borderRadius: "12px",
-            flex: 1 
-          }}>
-            <div style={{ fontSize: "13px", opacity: "0.9", marginBottom: "4px" }}>Completed</div>
-            <div style={{ display: "flex", alignItems: "baseline", gap: "6px" }}>
-              <div style={{ fontSize: "20px", fontWeight: "700" }}>
-                {labors.filter(labor => labor.is_completed === 1).length}
-              </div>
-              <div style={{ fontSize: "14px", opacity: "0.8" }}>
-                of {labors.length} tasks
-              </div>
-            </div>
-          </div>
-          
-          <div style={{ 
-            background: "rgba(255,255,255,0.15)", 
-            padding: "10px 16px", 
-            borderRadius: "12px",
-            flex: 1 
-          }}>
-            <div style={{ fontSize: "13px", opacity: "0.9", marginBottom: "4px" }}>Billed Amount</div>
-            <div style={{ fontSize: "20px", fontWeight: "700" }}>
-              ${labors.filter(labor => labor.is_completed === 1).reduce((sum, labor) => sum + parseFloat(labor.price || 0), 0).toFixed(2)}
-            </div>
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "22px 28px 12px 28px",
+        borderBottom: "1px solid #f0f0f0",
+        background: "#f7f7fb"
+      }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#333" }}>
+            Labor & Services
+          </h2>
+          <div style={{ fontSize: 14, color: "#888", marginTop: 4, display: "flex", alignItems: "center", gap: 16 }}>
+            <span><strong>Customer:</strong> {currentJobsheet.customer_name || "Customer"}</span>
+            <span><strong>Vehicle:</strong> {currentJobsheet.vehicle_model || "Vehicle"}</span>
+            <span><strong>Plate:</strong> {currentJobsheet.license_plate || "No plate"}</span>
           </div>
         </div>
+        <button onClick={() => setShowLaborModal(false)} style={{
+          background: "#f2f2f7",
+          border: "none",
+          borderRadius: "50%",
+          width: 38,
+          height: 38,
+          fontSize: 22,
+          color: "#666",
+          cursor: "pointer",
+          fontWeight: 700,
+          transition: "background 0.2s"
+        }}>×</button>
       </div>
-
-      {/* Área de contenido principal */}
-      <div style={{ display: "flex", height: "calc(85vh - 170px)", overflow: "hidden" }}>
-        {/* Panel izquierdo - Lista de labores */}
-        <div style={{ 
-          width: "60%", 
-          overflow: "auto",
-          padding: "20px",
-          borderRight: "1px solid #eee",
-        }}>
-          <div style={{ marginBottom: "16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "600", color: "#333" }}>Labor Tasks</h3>
-            
-            <div style={{
-              color: "#5932EA",
-              backgroundColor: "#f0f0ff",
-              padding: "6px 12px",
-              borderRadius: "8px",
-              fontSize: "13px",
-              fontWeight: "600",
-            }}>
-              ${labors.filter(labor => labor.is_completed === 1).reduce((sum, labor) => sum + parseFloat(labor.price || 0), 0).toFixed(2)}
-            </div>
+      <div style={{ padding: "28px", background: "#f9faff", flex: 1, overflowY: "auto" }}>
+        {labors.length === 0 ? (
+          <div style={{ backgroundColor: "#f9faff", padding: 40, textAlign: "center", borderRadius: 12, border: "1px dashed #ccc", color: "#888" }}>
+            <div style={{ fontSize: 18, marginBottom: 10 }}>No labor/services registered</div>
+            <div style={{ fontSize: 15 }}>This job sheet has no labor or service tasks yet.</div>
           </div>
-          
-          {/* Lista de labores */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-            {labors.length === 0 ? (
-              <div style={{
-                padding: "40px 20px",
-                backgroundColor: "#f9faff",
-                borderRadius: "12px",
-                textAlign: "center",
-                color: "#888",
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+            {labors.map(labor => (
+              <div key={labor.id} style={{
+                background: "#fff",
+                border: "1px solid #e0e0e0",
+                borderRadius: 12,
+                padding: 20,
+                boxShadow: "0 1px 4px rgba(60,60,100,0.06)",
                 display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: "12px",
+                alignItems: "flex-start",
+                gap: 18,
+                position: "relative"
               }}>
                 <div style={{
-                  width: "60px",
-                  height: "60px",
+                  width: 48,
+                  height: 48,
                   borderRadius: "50%",
-                  backgroundColor: "#f0f0ff",
+                  background: labor.is_completed === 1 ? "#e8f5e9" : "#f4f4f4",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
+                  fontSize: 22,
+                  color: labor.is_completed === 1 ? "#00AB55" : "#aaa"
                 }}>
-                  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" 
-                      stroke="#5932EA" strokeWidth="2" strokeLinecap="round" fill="none"/>
-                  </svg>
+                  {labor.is_completed === 1 ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#00AB55" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#aaa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                  )}
                 </div>
-                <div style={{ fontSize: "16px", fontWeight: "500" }}>No labor tasks added yet</div>
-                <div style={{ fontSize: "14px" }}>Add your first labor task using the form</div>
-              </div>
-            ) : (
-              <>
-                {labors.map((labor) => (
-                  <div key={labor.id} style={{
-                    backgroundColor: "white",
-                    borderRadius: "12px",
-                    border: `1px solid ${labor.is_completed ? '#E3F9E5' : '#f0f0f0'}`,
-                    padding: "16px",
-                    transition: "all 0.2s ease",
-                    boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-                    position: "relative",
-                    overflow: "hidden",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = "translateY(-2px)";
-                    e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.08)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = "translateY(0)";
-                    e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.05)";
-                  }}
-                  >
-                    {labor.is_completed === 1 && (
-                      <div style={{
-                        position: "absolute",
-                        top: 0,
-                        right: 0,
-                        width: "80px",
-                        height: "80px",
-                        background: "#E3F9E5",
-                        transform: "rotate(45deg) translate(20px, -50px)",
-                        zIndex: 0,
-                      }}></div>
-                    )}
-                    
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "12px", position: "relative", zIndex: 1 }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: "16px", fontWeight: "600" }}>
-                          {labor.description}
-                        </div>
-                        {labor.is_completed === 1 && labor.completed_at && (
-                          <div style={{ fontSize: "12px", color: "#00AB55", marginTop: "4px", display: "flex", alignItems: "center", gap: "4px" }}>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M20 6L9 17L4 12" stroke="#00AB55" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                            Completed: {new Date(labor.completed_at).toLocaleDateString()}
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Price section - conditionally show edit mode */}
-                      {editingLaborId === labor.id ? (
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                          <div style={{ position: "relative" }}>
-                            <span style={{
-                              position: "absolute",
-                              left: "8px",
-                              top: "50%",
-                              transform: "translateY(-50%)",
-                              color: "#666",
-                              fontSize: "14px",
-                            }}>$</span>
-                            <input
-                              type="number"
-                              value={editedLaborPrice}
-                              onChange={(e) => setEditedLaborPrice(e.target.value)}
-                              min="0"
-                              step="0.01"
-                              style={{
-                                width: "80px",
-                                padding: "6px 8px 6px 20px",
-                                fontSize: "15px",
-                                fontWeight: "600",
-                                border: "1px solid #5932EA",
-                                borderRadius: "6px",
-                                outline: "none",
-                              }}
-                            />
-                          </div>
-                          <button
-                            onClick={handleSaveEditedLabor}
-                            style={{
-                              backgroundColor: "#5932EA",
-                              color: "white",
-                              border: "none",
-                              borderRadius: "6px",
-                              width: "28px",
-                              height: "28px",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              cursor: "pointer",
-                            }}
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M20 6L9 17L4 12" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                          </button>
-                          <button
-                            onClick={() => setEditingLaborId(null)}
-                            style={{
-                              backgroundColor: "#f5f5f5",
-                              color: "#666",
-                              border: "none",
-                              borderRadius: "6px",
-                              width: "28px",
-                              height: "28px",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              cursor: "pointer",
-                            }}
-                          >
-                            ×
-                          </button>
-                        </div>
-                      ) : (
-                        <div style={{ 
-                          fontSize: "18px", 
-                          fontWeight: "700", 
-                          color: labor.is_completed ? "#00AB55" : "#666",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "8px"
-                        }}>
-                          ${parseFloat(labor.price || 0).toFixed(2)}
-                          <button
-                            onClick={() => handleEditLabor(labor)}
-                            style={{
-                              background: "none",
-                              border: "none",
-                              color: "#5932EA",
-                              padding: "4px",
-                              borderRadius: "4px",
-                              cursor: "pointer",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#f0f0ff"}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-                          >
-                            <FontAwesomeIcon icon={faEdit} size="sm" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", position: "relative", zIndex: 1 }}>
-                      <label className="modern-toggle" style={{
-                        position: "relative",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        cursor: "pointer",
-                        marginRight: "10px",
-                      }}>
-                        <input
-                          type="checkbox"
-                          checked={labor.is_completed === 1}
-                          onChange={(e) => {
-                            const laborPrice = parseFloat(labor.price || 0);
-                            handleUpdateLabor(labor.id, {
-                              is_completed: e.target.checked ? 1 : 0,
-                              price: laborPrice > 0 ? laborPrice : 0.01,
-                            });
-                          }}
-                          style={{ position: "absolute", opacity: 0 }}
-                        />
-                        <div style={{
-                          width: "44px",
-                          height: "24px",
-                          backgroundColor: labor.is_completed === 1 ? "#00AB55" : "#E0E0E0",
-                          borderRadius: "12px",
-                          transition: "0.4s",
-                          padding: "2px",
-                          marginRight: "8px",
-                        }}>
-                          <div style={{
-                            width: "20px",
-                            height: "20px",
-                            borderRadius: "50%",
-                            backgroundColor: "white",
-                            transition: "0.4s",
-                            transform: labor.is_completed === 1 ? "translateX(20px)" : "translateX(0)",
-                            boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
-                          }}></div>
-                        </div>
-                        <span style={{
-                          fontSize: "14px",
-                          fontWeight: "500",
-                          color: labor.is_completed === 1 ? "#00AB55" : "#666",
-                        }}>
-                          {labor.is_completed === 1 ? "Completed" : "Mark Complete"}
-                        </span>
-                      </label>
-                      
-                      <button
-                        onClick={() => handleDeleteLabor(labor.id)}
-                        style={{
-                          background: "none",
-                          border: "none",
-                          color: "#FF4D4F",
-                          padding: "8px",
-                          borderRadius: "8px",
-                          cursor: "pointer",
-                          transition: "all 0.2s",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "4px",
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#fff0f0"}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-                      >
-                        <FontAwesomeIcon icon={faTrash} />
-                        <span>Remove</span>
-                      </button>
-                    </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: 17, color: "#333", marginBottom: 4 }}>{labor.description}</div>
+                  <div style={{ fontSize: 14, color: labor.is_completed === 1 ? "#00AB55" : "#888", marginBottom: 6 }}>
+                    {labor.is_completed === 1 ? "Completed" : "Pending"}
                   </div>
-                ))}
-              </>
-            )}
-          </div>
-        </div>
-        
-        {/* Panel derecho - Formulario para añadir labor */}
-        <div style={{ 
-  width: "40%", 
-  padding: "20px 25px", // Increased right padding from 20px to 25px
-  display: "flex",
-  flexDirection: "column", 
-  backgroundColor: "#fafbfd",
-  justifyContent: "flex-start",
-}}>
-  <div style={{ marginBottom: "20px", width: "100%" }}>
-    <h3 style={{ margin: "0 0 16px 0", fontSize: "16px", fontWeight: "600", color: "#333" }}>
-      Add New Labor
-    </h3>
-            
-            {notification.show && (
-              <div
-              style={{
-                padding: "12px 16px",
-                marginBottom: "16px",
-                borderRadius: "10px",
-                backgroundColor: notification.type === "success" ? "#E3F9E5" : "#FFF0F0",
-                border: `1px solid ${notification.type === "success" ? "#A5E8B7" : "#FFCCC7"}`,
-                color: notification.type === "success" ? "#00AB55" : "#FF4D4F",
-                display: "flex",
-                alignItems: "center",
-                gap: "10px",
-              }}
-              >
-                {notification.type === "success" ? (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M20 6L9 17L4 12" stroke="#00AB55" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                ) : (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M18 6L6 18" stroke="#FF4D4F" strokeWidth="3" strokeLinecap="round"/>
-                    <path d="M6 6L18 18" stroke="#FF4D4F" strokeWidth="3" strokeLinecap="round"/>
-                  </svg>
-                )}
-                <div style={{ fontWeight: "500" }}>{notification.message}</div>
-              </div>
-            )}
-            
-            <div style={{ 
-              backgroundColor: "white", 
-              borderRadius: "12px",
-              padding: "20px",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-              width: "100%", 
-              boxSizing: "border-box", // Important - ensure padding is included in width
-
-            }}>
-              <div style={{ marginBottom: "16px" }}>
-                <label style={{ 
-                  display: "block", 
-                  marginBottom: "8px", 
-                  fontSize: "14px", 
-                  fontWeight: "500", 
-                  color: "#333" 
-                }}>
-                  Description
-                </label>
-                <input
-                  type="text"
-                  value={laborDescription}
-                  onChange={(e) => setLaborDescription(e.target.value)}
-                  placeholder="E.g. Engine diagnostics, Oil change, etc."
-                  style={{
-                    width: "100%",
-                    padding: "12px 16px",
-                    borderRadius: "10px",
-                    border: "1px solid #e0e0e0",
-                    fontSize: "14px",
-                    backgroundColor: "#fafbfd",
-                    transition: "all 0.2s",
-                    outline: "none",
-                    boxSizing: "border-box", // Important - include padding in width calculation
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = "#5932EA";
-                    e.target.style.boxShadow = "0 0 0 3px rgba(89, 50, 234, 0.1)";
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = "#e0e0e0";
-                    e.target.style.boxShadow = "none";
-                  }}
-                />
-              </div>
-              
-              <div style={{ marginBottom: "20px" }}>
-                <label style={{ 
-                  display: "block", 
-                  marginBottom: "8px", 
-                  fontSize: "14px", 
-                  fontWeight: "500", 
-                  color: "#333" 
-                }}>
-                  Cost ($)
-                </label>
-                <div style={{ 
-                  position: "relative",
-                  width: "100%" // Ensure container takes full width
-                }}>
-                  <span style={{
-                    position: "absolute",
-                    left: "16px",
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    color: "#777",
-                    fontSize: "16px",
-                    zIndex: 1 // Ensure dollar sign appears above input
-                  }}>$</span>
-                  <input
-                    type="number"
-                    value={laborPrice}
-                    onChange={(e) => setLaborPrice(e.target.value)}
-                    placeholder="0.00"
-                    min="0"
-                    step="0.01"
-                    style={{
-                      width: "100%",
-                      padding: "12px 16px 12px 28px",
-                      borderRadius: "10px",
-                      border: "1px solid #e0e0e0",
-                      fontSize: "14px",
-                      backgroundColor: "#fafbfd",
-                      transition: "all 0.2s",
-                      outline: "none",
-                      boxSizing: "border-box", // Important - include padding in width calculation
-                    }}
-                    onFocus={(e) => {
-                      e.target.style.borderColor = "#5932EA";
-                      e.target.style.boxShadow = "0 0 0 3px rgba(89, 50, 234, 0.1)";
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = "#e0e0e0";
-                      e.target.style.boxShadow = "none";
-                    }}
-                  />
+                  <div style={{ fontSize: 14, color: "#555", marginBottom: 8 }}>
+                    <strong>Price:</strong> ${parseFloat(labor.price || 0).toFixed(2)}
+                  </div>
+                  <div style={{ fontSize: 13, color: labor.tracking_notes ? "#444" : "#aaa", fontStyle: labor.tracking_notes ? "normal" : "italic", background: "#f7f9fc", borderRadius: 8, padding: 10, marginTop: 4 }}>
+                    {labor.tracking_notes || 'No technical notes for this task.'}
+                  </div>
                 </div>
               </div>
-              
-              <button
-                onClick={handleAddLabor}
-                style={{
-                  width: "100%",
-                  padding: "14px",
-                  backgroundColor: "#5932EA",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "10px",
-                  cursor: "pointer",
-                  fontWeight: "600",
-                  fontSize: "14px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "8px",
-                  transition: "all 0.2s",
-                  boxShadow: "0 2px 6px rgba(89, 50, 234, 0.3)",
-                }}
-                onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#4321C9"}
-                onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#5932EA"}
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <div
-                    style={{
-                      width: "20px",
-                      height: "20px",
-                      border: "2px solid rgba(255,255,255,0.3)",
-                      borderTop: "2px solid white",
-                      borderRadius: "50%",
-                      animation: "spin 1s linear infinite",
-                    }}
-                  ></div>
-                ) : (
-                  <>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M12 5V19" stroke="white" strokeWidth="2" strokeLinecap="round"/>
-                      <path d="M5 12H19" stroke="white" strokeWidth="2" strokeLinecap="round"/>
-                    </svg>
-                    Add Labor Task
-                  </>
-                )}
-              </button>
-            </div>
+            ))}
           </div>
-          
-         
-        </div>
+        )}
       </div>
-      
-      {/* Footer */}
-      <div style={{
-        padding: "16px 24px",
-        borderTop: "1px solid #eee",
-        display: "flex",
-        justifyContent: "flex-end",
-        alignItems: "center",
-        backgroundColor: "#fafbfd",
-      }}>
-        <button
-          onClick={() => setShowLaborModal(false)}
-          style={{
-            padding: "10px 24px",
-            backgroundColor: "#5932EA",
-            color: "white",
-            border: "none",
-            borderRadius: "10px",
-            cursor: "pointer",
-            fontSize: "14px",
-            fontWeight: "600",
-            transition: "all 0.2s",
-            boxShadow: "0 2px 6px rgba(89, 50, 234, 0.2)",
-          }}
-          onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#4321C9"}
-          onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#5932EA"}
-        >
-          Close
-        </button>
-      </div>
-      
-      {/* CSS Animations */}
-      <style jsx="true">{`
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        
-        @keyframes slideUp {
-          from { 
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to { 
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
   </div>
 )}
-        {/* Delete Confirmation Modal */}
-        {showDeleteModal && (
-          <div
-            style={{
-              position: "fixed",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backgroundColor: "rgba(0, 0, 0, 0.5)",
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              zIndex: 1000,
-            }}
-          >
-            <div
-              style={{
-                backgroundColor: "white",
-                borderRadius: "8px",
-                width: "400px",
-                padding: "20px",
-                boxShadow: "0 0 10px rgba(0,0,0,0.2)",
-              }}
-            >
-              <h3 style={{ marginTop: 0 }}>Confirm Delete</h3>
-              <p>
-                Are you sure you want to delete this job sheet? This action
-                cannot be undone.
-              </p>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "flex-end",
-                  gap: "10px",
-                }}
-              >
-                <button
-                  onClick={() => setShowDeleteModal(false)}
-                  style={{
-                    padding: "8px 16px",
-                    backgroundColor: "#f5f5f5",
-                    color: "#333",
-                    border: "1px solid #ddd",
-                    borderRadius: "5px",
-                    cursor: "pointer",
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleConfirmDelete}
-                  style={{
-                    padding: "8px 16px",
-                    backgroundColor: "#ff4d4f",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "5px",
-                    cursor: "pointer",
-                  }}
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <style>
-          {`
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-          
-          /* Estilos uniformes para AG Grid */
-.ag-theme-alpine {
-  --ag-header-height: 30px;
-  --ag-row-height: 50px;
-  --ag-header-foreground-color: #333;
-  --ag-header-background-color: #F9FBFF;
-  --ag-odd-row-background-color: #fff;
-  --ag-row-border-color: rgba(0, 0, 0, 0.1);
-  --ag-cell-horizontal-padding: 12px;
-  --ag-borders: none;
-  --ag-font-size: 14px;
-  --ag-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-}
-          
-.ag-theme-alpine .ag-header {
-  border-bottom: 1px solid #5932EA;
-}
-          
-.ag-theme-alpine .ag-cell {
-  display: flex;
-  align-items: center;
-}
-
-.custom-header {
-  background-color: #F9FBFF !important;
-  font-weight: 600 !important;
-  color: #333 !important;
-  border-bottom: 1px solid #5932EA !important;
-  text-align: left !important;
-  padding-left: 12px !important;
-}
-          
-          /* Estilo uniforme para botones de estado */
-          .status-btn {
-            padding: 4px 10px;
-            font-size: 12px;
-            font-weight: 500;
-            border-radius: 12px;
-            cursor: pointer;
-            text-transform: capitalize;
-            min-width: 90px;
-            text-align: center;
-          }
-        `}
-        </style>
+{showDeleteModal && (
+  <div style={{
+    position: "fixed",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 2000
+  }}>
+    <div style={{
+      background: "#fff",
+      borderRadius: 12,
+      padding: 32,
+      minWidth: 320,
+      boxShadow: "0 4px 24px rgba(0,0,0,0.18)",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center"
+    }}>
+      <h2 style={{margin: 0, marginBottom: 16, fontSize: 20, color: '#C62828'}}>Confirm Deletion</h2>
+      <p style={{margin: 0, marginBottom: 24, color: '#444', textAlign: 'center'}}>
+        Are you sure you want to delete this jobsheet?<br/>This action cannot be undone.
+      </p>
+      <div style={{display: 'flex', gap: 16}}>
+        <button
+          onClick={() => setShowDeleteModal(false)}
+          style={{
+            padding: '10px 18px',
+            backgroundColor: '#f5f5f5',
+            color: '#333',
+            border: 'none',
+            borderRadius: 8,
+            cursor: 'pointer',
+            fontWeight: 500
+          }}
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleConfirmDelete}
+          style={{
+            padding: '10px 18px',
+            backgroundColor: '#C62828',
+            color: 'white',
+            border: 'none',
+            borderRadius: 8,
+            cursor: 'pointer',
+            fontWeight: 600
+          }}
+        >
+          Delete
+        </button>
       </div>
-      {showInvoiceModalFromPayments && currentJobsheet && (
-        <Invoice
-          isOpen={showInvoiceModalFromPayments}
-          onClose={() => setShowInvoiceModalFromPayments(false)}
-          jobsheet={currentJobsheet}
-          items={jobsheetItems}
-          labors={labors}
-          payments={jobsheetPayments}
-          totalPaid={jobsheetPayments.reduce(
-            (sum, payment) => sum + parseFloat(payment.amount || 0),
-            0
-          )}
-          taxRate={taxRate}
-          taxName={taxName}
-        />
-      )}
+    </div>
+  </div>
+)}
+      </div>
     </>
   );
 };

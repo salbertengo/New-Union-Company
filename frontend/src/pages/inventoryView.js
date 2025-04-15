@@ -440,8 +440,6 @@ const InventoryView = () => {
           </select>
           <button
             onClick={handleAddProduct}
-            onMouseEnter={() => setIsHovered(true)}
-            onMouseLeave={() => setIsHovered(false)}
             style={{
               padding: '10px 20px',
               backgroundColor: isHovered ? '#4321C9' : '#5932EA',
@@ -449,8 +447,11 @@ const InventoryView = () => {
               border: 'none',
               borderRadius: '5px',
               cursor: 'pointer',
-              transition: 'background-color 0.3s ease'
+              transition: 'background-color 0.3s ease',
+              fontWeight: 600
             }}
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
           >
             Add Product
           </button>

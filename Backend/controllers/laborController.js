@@ -19,7 +19,7 @@ class LaborController {
   
   static async addLabor(req, res) {
     try {
-      const { jobsheet_id, description, price, is_completed } = req.body;
+      const { jobsheet_id, description, price, is_completed, tracking_notes } = req.body;
       
       if (!jobsheet_id) {
         return res.status(400).json({ error: 'Jobsheet ID es requerido' });
@@ -29,7 +29,8 @@ class LaborController {
         jobsheet_id,
         description,
         price,
-        is_completed
+        is_completed,
+        tracking_notes
       });
       
       res.status(201).json(labor);
@@ -47,17 +48,48 @@ class LaborController {
   static async updateLabor(req, res) {
     try {
       const { id } = req.params;
-      const { description, price, is_completed } = req.body;
+      
+      console.log('Update labor request body:', req.body);
       
       if (!id) {
         return res.status(400).json({ error: 'ID de labor es requerido' });
       }
       
-      await LaborService.updateLabor(id, {
-        description,
-        price,
-        is_completed
+      const updateData = {};
+      const fields = ['description', 'price', 'is_completed', 'tracking_notes', 'is_billed'];
+      
+      fields.forEach(field => {
+        if (req.body[field] !== undefined) {
+          // For boolean/integer fields, always convert to 0/1
+          if (field === 'is_billed' || field === 'is_completed') {
+            const val = req.body[field];
+            if (val === true || val === 'true' || val === 1 || val === '1') {
+              updateData[field] = 1;
+            } else if (val === false || val === 'false' || val === 0 || val === '0') {
+              updateData[field] = 0;
+            } else {
+              // If value is not clearly true/false, ignore it
+              return;
+            }
+          } 
+          // Handle price field
+          else if (field === 'price') {
+            updateData[field] = parseFloat(req.body[field]) || 0;
+          } 
+          // Handle text fields
+          else {
+            updateData[field] = req.body[field];
+          }
+        }
       });
+      
+      console.log('Processed update data:', updateData);
+      
+      if (Object.keys(updateData).length === 0) {
+        return res.status(400).json({ error: 'No se proporcionaron campos válidos para actualizar' });
+      }
+      
+      await LaborService.updateLabor(id, updateData);
       
       res.json({ message: 'Labor actualizada exitosamente' });
     } catch (err) {
@@ -72,7 +104,6 @@ class LaborController {
       res.status(500).json({ error: 'Error interno del servidor' });
     }
   }
-  
   static async deleteLabor(req, res) {
     try {
       const { id } = req.params;

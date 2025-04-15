@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faSearch, faMotorcycle, faPlus, 
-  faListCheck, faTools, faSave, faTimes, faCheck, faInfoCircle
+  faListCheck, faTools, faSave, faTimes, faCheck
 } from '@fortawesome/free-solid-svg-icons';
 
 const CreateJobsheetModal = ({ 
@@ -27,211 +27,99 @@ const CreateJobsheetModal = ({
   // Control for temporary vehicle
   const [isTemporaryVehicle, setIsTemporaryVehicle] = useState(false);
   
-  // Service notes array (unifies customerRequests + diagnostics)
+  // Service notes array (unifica customerRequests + diagnostics)
   const [serviceNotes, setServiceNotes] = useState([]);
-  // New note text
+  // Nuevo texto de nota
   const [newNote, setNewNote] = useState('');
 
-  // Ref for plate search
+  // Ref para búsqueda de placa
   const plateInputRef = useRef(null);
   const plateSearchTimeout = useRef(null);
 
-  // Oil type selector modal state
-  const [showOilTypeSelector, setShowOilTypeSelector] = useState(false);
-  const quickBtnStyle = {
-    background: '#f0f0ff',
-    color: '#5932EA',
-    border: 'none',
-    borderRadius: 10,
-    fontWeight: 500,
-    fontSize: 14,
-    padding: '10px 8px',
-    cursor: 'pointer',
-    transition: 'background 0.2s',
-    boxShadow: '0 1px 2px rgba(89,50,234,0.04)'
-  };
-
-  // --- Quick Service Categories and Subcategories ---
-  const serviceCategories = [
-    {
-      name: 'Engine',
-      items: [
-        'Does not start',
-        'Makes noise',
-        'Oil leak',
-        'Power loss',
-        'Stalls',
-        'Excessive smoke',
-        'Abnormal vibration',
-      ]
-    },
-    {
-      name: 'Maintenance',
-      items: [
-        'Oil change',
-        'Air filter replacement',
-        'Spark plug replacement',
-        'Valve adjustment',
-        'General maintenance',
-      ]
-    },
-    {
-      name: 'Wheels',
-      items: [
-        'Front tire replacement',
-        'Rear tire replacement',
-        'Flat tire',
-        'Unbalanced',
-        'Wheel noise',
-      ]
-    },
-    {
-      name: 'Brakes',
-      items: [
-        'Poor braking',
-        'Brake noise',
-        'Spongy brake',
-        'Pad replacement',
-        'Fluid leak',
-      ]
-    },
-    {
-      name: 'Electrical',
-      items: [
-        'Battery not charging',
-        'Lights not working',
-        'Electric start failure',
-        'Horn failure',
-        'Dashboard failure',
-      ]
-    },
-    {
-      name: 'Transmission',
-      items: [
-        'Loose chain',
-        'Drive kit replacement',
-        'Transmission noise',
-        'Gear jumps',
-      ]
-    },
-    {
-      name: 'Suspension',
-      items: [
-        'Suspension oil leak',
-        'Hard suspension',
-        'Suspension noise',
-        'Unbalanced',
-      ]
-    },
-  ];
-  const [selectedCategory, setSelectedCategory] = useState(null);
-
-  // Estado para nuevo customer
-  const [newCustomer, setNewCustomer] = useState({ name: '', phone: '', email: '', address: '' });
-  const [createdCustomerId, setCreatedCustomerId] = useState(null);
-  const [creatingCustomer, setCreatingCustomer] = useState(false);
-
-  // Search motorcycles by plate
-  const searchMotorcyclesByPlate = async (plate) => {
-    if (!plate || plate.length < 2) {
-      setSearchResults([]);
-      return;
+  // Efecto para enfocar el input de placa al abrir
+  useEffect(() => {
+    if (isOpen && plateInputRef.current) {
+      plateInputRef.current.focus();
     }
-    setIsLoading(true);
-    try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(`http://localhost:3000/vehicles?search=${encodeURIComponent(plate)}`, {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setSearchResults(data);
-      } else {
-        setSearchResults([]);
-      }
-    } catch (error) {
-      setSearchResults([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  }, [isOpen]);
 
-  // Show notification helper
-  const showNotification = (message, type = "info") => {
+  // Notificaciones simples
+  const showNotification = (message, type) => {
     setNotification({ show: true, message, type });
-    setTimeout(() => setNotification({ show: false, message: '', type: '' }), 2500);
+    setTimeout(() => setNotification({ show: false, message: '', type: '' }), 3000);
   };
 
-  // Handle modal close
+  // Limpieza al cerrar modal
   const handleClose = () => {
     setStep('plate-search');
     setPlateNumber('');
     setSearchResults([]);
     setSelectedVehicle(null);
+    setNewVehicleDetails({ plate: '', model: '' });
+    setIsTemporaryVehicle(false);
     setServiceNotes([]);
     setNewNote('');
-    setNotification({ show: false, message: '', type: '' });
-    onClose && onClose();
+    onClose();
   };
 
-  // Handle vehicle selection
+  // Búsqueda de placa
+  const handlePlateSearch = (e) => {
+    const value = e.target.value;
+    setPlateNumber(value);
+
+    if (plateSearchTimeout.current) {
+      clearTimeout(plateSearchTimeout.current);
+    }
+
+    if (value.trim().length >= 2) {
+      plateSearchTimeout.current = setTimeout(async () => {
+        setIsLoading(true);
+        try {
+          const token = localStorage.getItem("token");
+          if (!token) return;
+
+          const response = await fetch(
+            `http://localhost:3000/vehicles?search=${encodeURIComponent(value)}`,
+            {
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+            }
+          );
+          if (response.ok) {
+            const data = await response.json();
+            setSearchResults(data);
+          } else {
+            console.error("Search failed with status:", response.status);
+            setSearchResults([]);
+          }
+        } catch (error) {
+          console.error("Error searching vehicles:", error);
+          showNotification("Error searching vehicles", "error");
+          setSearchResults([]);
+        } finally {
+          setIsLoading(false);
+        }
+      }, 300);
+    } else {
+      setSearchResults([]);
+    }
+  };
+
+  // Seleccionar vehículo de la lista
   const handleSelectVehicle = (vehicle) => {
     setSelectedVehicle(vehicle);
     setStep('confirm');
   };
 
-  // Show form to create vehicle
+  // Mostrar formulario para crear vehículo
   const showCreateVehicleForm = () => {
-    setNewVehicleDetails({ ...newVehicleDetails, plate: plateNumber }); // siempre setea la patente actual
+    setNewVehicleDetails({ ...newVehicleDetails, plate: plateNumber });
     setStep('new-vehicle');
   };
 
-  // Crear customer
-  const handleCreateCustomer = async () => {
-    if (!newCustomer.name) {
-      showNotification('Customer name is required', 'error');
-      return;
-    }
-    setCreatingCustomer(true);
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:3000/customers', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(newCustomer),
-      });
-      if (response.ok) {
-        const data = await response.json();
-        // Asociar el vehículo al nuevo customer
-        await fetch(`http://localhost:3000/vehicles/${selectedVehicle.id}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ ...selectedVehicle, customer_id: data.id })
-        });
-        setSelectedVehicle({ ...selectedVehicle, customer_id: data.id, customer_name: newCustomer.name });
-        showNotification('Customer created and associated', 'success');
-        setStep('confirm');
-      } else {
-        const err = await response.json();
-        showNotification(err.error || 'Error creating customer', 'error');
-      }
-    } catch (e) {
-      showNotification('Error creating customer', 'error');
-    } finally {
-      setCreatingCustomer(false);
-    }
-  };
-
-  // Create vehicle
+  // Crear vehículo
   const handleCreateVehicle = async (assignCustomerLater = false) => {
     if (!newVehicleDetails.plate || !newVehicleDetails.model) {
       showNotification("License plate and model are required", "error");
@@ -246,7 +134,7 @@ const CreateJobsheetModal = ({
       const vehicleData = {
         plate: newVehicleDetails.plate,
         model: newVehicleDetails.model,
-        customer_id: 1 // SIEMPRE crear primero con customer_id 1
+        customer_id: isTemporaryVehicle || assignCustomerLater ? null : 1
       };
   
       const response = await fetch("http://localhost:3000/vehicles", {
@@ -261,17 +149,17 @@ const CreateJobsheetModal = ({
       if (response.ok) {
         const responseData = await response.json();
 
-        // Create an object with the base info
+        // Creamos un objeto con la info base
         const vehicle = {
           id: responseData.id || Date.now(),
           plate: newVehicleDetails.plate,
           model: newVehicleDetails.model,
-          customer_id: 1
+          customer_id: isTemporaryVehicle || assignCustomerLater ? null : 1
         };
         
         setSelectedVehicle(vehicle);
         showNotification("Motorcycle created successfully", "success");
-        setStep('post-vehicle-options'); // Nuevo paso: opciones tras crear moto
+        setStep('confirm');
       } else {
         try {
           const errorData = await response.json();
@@ -289,10 +177,20 @@ const CreateJobsheetModal = ({
     }
   };
 
-  // Cambia la lógica: los labors se crean solo después de crear el jobsheet, usando el jobsheet_id real
-  // 1. Guarda los requerimientos en serviceNotes (como antes)
-  // 2. Al crear el jobsheet, después del POST, crea los labors con el jobsheet_id devuelto
+  // Agregar nota a la lista
+  const addServiceNote = () => {
+    if (newNote.trim()) {
+      setServiceNotes(prev => [...prev, { id: Date.now(), text: newNote.trim() }]);
+      setNewNote('');
+    }
+  };
 
+  // Eliminar una nota
+  const deleteServiceNote = (id) => {
+    setServiceNotes(prev => prev.filter(n => n.id !== id));
+  };
+
+  // Crear el jobsheet
   const handleCreateJobsheet = async () => {
     if (!selectedVehicle) {
       showNotification("Please select or create a motorcycle first", "error");
@@ -309,7 +207,9 @@ const CreateJobsheetModal = ({
         vehicle_id: selectedVehicle.id,
         customer_id: selectedVehicle.customer_id || null,
         state: "pending",
+        // Enviamos el texto de las notas como "description"
         description: filteredNotes.map(n => n.text).join('\n'),
+        // Dejar vacío service_notes o adaptarlo a tu lógica
         service_notes: ""
       };
 
@@ -323,24 +223,6 @@ const CreateJobsheetModal = ({
       });
 
       if (response.ok) {
-        const jobsheet = await response.json();
-        // Crear labors para cada requerimiento
-        for (const note of filteredNotes) {
-          await fetch("http://localhost:3000/labor", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              jobsheet_id: jobsheet.id,
-              description: note.text,
-              price: 0,
-              is_completed: false,
-              vehicle_id: selectedVehicle.id
-            })
-          });
-        }
         showNotification("Jobsheet created successfully", "success");
         setTimeout(() => {
           if (refreshJobsheets) refreshJobsheets();
@@ -350,42 +232,12 @@ const CreateJobsheetModal = ({
         showNotification("Error creating jobsheet", "error");
       }
     } catch (error) {
+      console.error("Error creating jobsheet:", error);
       showNotification("Error creating jobsheet", "error");
     } finally {
       setIsLoading(false);
     }
   };
-
-  // addServiceNote y addServiceNoteFromButton solo agregan a serviceNotes, no llaman a createLabor
-  const addServiceNote = () => {
-    if (newNote.trim()) {
-      setServiceNotes(prev => [...prev, { id: Date.now(), text: newNote.trim() }]);
-      setNewNote('');
-    }
-  };
-
-  function addServiceNoteFromButton(text) {
-    setServiceNotes(prev => {
-      if (prev.some(n => n.text === text)) return prev;
-      return [...prev, { id: Date.now() + Math.random(), text }];
-    });
-  }
-
-  // Delete a note
-  const deleteServiceNote = (id) => {
-    setServiceNotes(prev => prev.filter(n => n.id !== id));
-  };
-
-  // Handle oil change click
-  function handleOilChangeClick() {
-    setShowOilTypeSelector(true);
-  }
-
-  // Select oil type
-  function selectOilType(type) {
-    addServiceNoteFromButton(`Oil change (${type})`);
-    setShowOilTypeSelector(false);
-  }
 
   if (!isOpen) return null;
 
@@ -437,10 +289,8 @@ const CreateJobsheetModal = ({
               <p style={{ margin: "4px 0 0 0", opacity: "0.8", fontSize: "14px" }}>
                 {step === 'plate-search' && "Enter license plate to find motorcycle"}
                 {step === 'new-vehicle' && "Create new motorcycle"}
-                {step === 'post-vehicle-options' && "Motorcycle created"}
                 {step === 'confirm' && "Confirm motorcycle details"}
                 {step === 'service-notes' && "Add service details"}
-                {step === 'new-customer' && "Create new customer"}
               </p>
             </div>
             <button
@@ -594,7 +444,8 @@ const CreateJobsheetModal = ({
                   </p>
                 </div>
               </div>
-              {/* Search Input simple */}
+              
+              {/* Search Input */}
               <div style={{ position: "relative", marginBottom: "20px" }}>
                 <div style={{
                   display: "flex",
@@ -610,7 +461,7 @@ const CreateJobsheetModal = ({
                     ref={plateInputRef}
                     type="text"
                     value={plateNumber}
-                    onChange={e => { setPlateNumber(e.target.value); searchMotorcyclesByPlate(e.target.value); }}
+                    onChange={handlePlateSearch}
                     placeholder="Enter license plate..."
                     style={{
                       flex: 1,
@@ -633,6 +484,7 @@ const CreateJobsheetModal = ({
                   )}
                 </div>
               </div>
+
               {/* Search Results */}
               {searchResults.length > 0 ? (
                 <div style={{
@@ -719,6 +571,7 @@ const CreateJobsheetModal = ({
                   </div>
                 </div>
               ) : null}
+
               {/* Actions */}
               <div style={{
                 display: "flex",
@@ -743,7 +596,7 @@ const CreateJobsheetModal = ({
                   Clear
                 </button>
                 <button
-                    onClick={showCreateVehicleForm}
+                  onClick={showCreateVehicleForm}
                   disabled={!plateNumber}
                   style={{
                     padding: "10px 15px",
@@ -770,7 +623,7 @@ const CreateJobsheetModal = ({
             </div>
           )}
 
-          {/* Step 3: Create New Vehicle */}
+          {/* Step 2: Create New Vehicle */}
           {step === 'new-vehicle' && (
             <div style={{ animation: "fadeIn 0.3s" }}>
               <h3 style={{ margin: "0 0 20px 0", fontSize: "18px" }}>
@@ -788,11 +641,7 @@ const CreateJobsheetModal = ({
                 <input
                   type="text"
                   value={newVehicleDetails.plate}
-                  onChange={e => {
-                    setNewVehicleDetails({...newVehicleDetails, plate: e.target.value});
-                    setPlateNumber(e.target.value); // sincroniza con el input anterior
-                  }}
-                  placeholder="Enter license plate..."
+                  onChange={e => setNewVehicleDetails({...newVehicleDetails, plate: e.target.value})}
                   style={{
                     width: "100%",
                     padding: "15px",
@@ -844,74 +693,49 @@ const CreateJobsheetModal = ({
                   Back
                 </button>
                 
-                <button
-                  onClick={() => handleCreateVehicle()}
-                  style={{
-                    padding: "12px 15px",
-                    backgroundColor: "#5932EA",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "8px",
-                    fontSize: "14px",
-                    fontWeight: "500",
-                    transition: "background-color 0.2s"
-                  }}
-                  onMouseOver={e => e.currentTarget.style.backgroundColor = "#4321C9"}
-                  onMouseOut={e => e.currentTarget.style.backgroundColor = "#5932EA"}
-                >
-                  Create & Continue
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Step 4: Post Vehicle Options */}
-          {step === 'post-vehicle-options' && selectedVehicle && (
-            <div style={{ animation: "fadeIn 0.3s" }}>
-              <h3 style={{ margin: "0 0 20px 0", fontSize: "18px" }}>
-                Motorcycle created
-              </h3>
-              <div style={{ marginBottom: 20 }}>
-                <div style={{ fontWeight: 600, fontSize: 16 }}>
-                  {selectedVehicle.plate?.toUpperCase()} - {selectedVehicle.model}
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <button
+                    onClick={() => {
+                      setIsTemporaryVehicle(true);
+                      handleCreateVehicle(true);
+                    }}
+                    style={{
+                      padding: "12px 15px",
+                      backgroundColor: "#e0e0e0",
+                      border: "none",
+                      borderRadius: "8px",
+                      fontSize: "14px",
+                      fontWeight: "500",
+                      transition: "background-color 0.2s"
+                    }}
+                    onMouseOver={e => e.currentTarget.style.backgroundColor = "#d0d0d0"}
+                    onMouseOut={e => e.currentTarget.style.backgroundColor = "#e0e0e0"}
+                  >
+                    Create Without Customer
+                  </button>
+                  <button
+                    onClick={() => handleCreateVehicle()}
+                    style={{
+                      padding: "12px 15px",
+                      backgroundColor: "#5932EA",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "8px",
+                      fontSize: "14px",
+                      fontWeight: "500",
+                      transition: "background-color 0.2s"
+                    }}
+                    onMouseOver={e => e.currentTarget.style.backgroundColor = "#4321C9"}
+                    onMouseOut={e => e.currentTarget.style.backgroundColor = "#5932EA"}
+                  >
+                    Create & Continue
+                  </button>
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 16 }}>
-                <button
-                  style={{
-                    padding: '12px 15px',
-                    backgroundColor: '#5932EA',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontSize: '14px',
-                    fontWeight: '500',
-                    transition: 'background-color 0.2s',
-                    cursor: 'pointer'
-                  }}
-                  onClick={() => setStep('new-customer')}
-                >
-                  Associate to New Customer
-                </button>
-                <button
-                  style={{
-                    padding: '12px 15px',
-                    backgroundColor: '#e0e0e0',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontSize: '14px',
-                    fontWeight: '500',
-                    cursor: 'pointer'
-                  }}
-                  onClick={() => setStep('confirm')}
-                >
-                  Continue Without Customer
-                </button>
-              </div>
             </div>
           )}
 
-          {/* Step 5: Confirm Vehicle */}
+          {/* Step 3: Confirm Vehicle */}
           {step === 'confirm' && selectedVehicle && (
             <div style={{ animation: "fadeIn 0.3s" }}>
               <div style={{
@@ -1000,7 +824,7 @@ const CreateJobsheetModal = ({
                   marginBottom: "15px"
                 }}>
                   <button
-                    onClick={() => setStep('post-vehicle-options')}
+                    onClick={() => setStep('plate-search')}
                     style={{
                       padding: "12px 15px",
                       backgroundColor: "transparent",
@@ -1042,86 +866,12 @@ const CreateJobsheetModal = ({
             </div>
           )}
 
-          {/* Step 6: Service Notes (Enhanced) */}
+          {/* Step 4: Service Notes (Simplified) */}
           {step === 'service-notes' && (
             <div style={{ animation: "fadeIn 0.3s" }}>
               <h3 style={{ margin: "0 0 20px 0", fontSize: "18px", fontWeight: "600" }}>
                 Service Notes / Problems
               </h3>
-
-              {/* Quick Service Categories & Subcategories */}
-              {!selectedCategory ? (
-                <div style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(3, 1fr)",
-                  gap: "12px",
-                  marginBottom: "18px"
-                }}>
-                  {serviceCategories.map(cat => (
-                    <button
-                      key={cat.name}
-                      type="button"
-                      className="quick-btn"
-                      style={{ ...quickBtnStyle, fontSize: 16, fontWeight: 600, padding: '18px 8px' }}
-                      onClick={() => setSelectedCategory(cat)}
-                    >
-                      {cat.name}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <>
-                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
-                    <button
-                      style={{ ...quickBtnStyle, background: '#eee', color: '#333', marginRight: 10, padding: '8px 14px' }}
-                      onClick={() => setSelectedCategory(null)}
-                    >
-                      ← Back
-                    </button>
-                    <span style={{ fontWeight: 600, fontSize: 16 }}>{selectedCategory.name}</span>
-                  </div>
-                  <div style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(2, 1fr)",
-                    gap: "10px",
-                    marginBottom: "18px"
-                  }}>
-                    {selectedCategory.items.map(item => (
-                      <button
-                        key={item}
-                        type="button"
-                        className={`quick-btn${serviceNotes.some(n => n.text === item) ? ' selected' : ''}`}
-                        style={quickBtnStyle}
-                        onClick={() => {
-                          if(item === 'Oil change') handleOilChangeClick();
-                          else addServiceNoteFromButton(item);
-                        }}
-                      >
-                        {item}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-
-              {/* Oil type selector modal */}
-              {showOilTypeSelector && (
-                <div style={{
-                  position: 'fixed', left: 0, top: 0, right: 0, bottom: 0,
-                  background: 'rgba(0,0,0,0.2)', zIndex: 2000,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center'
-                }}>
-                  <div style={{ background: 'white', borderRadius: 12, padding: 24, minWidth: 260, boxShadow: '0 2px 12px rgba(0,0,0,0.12)' }}>
-                    <h4 style={{ margin: 0, marginBottom: 12 }}>Select oil type</h4>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      <button style={quickBtnStyle} onClick={() => selectOilType('Mineral')}>Mineral</button>
-                      <button style={quickBtnStyle} onClick={() => selectOilType('Semi-synthetic')}>Semi-synthetic</button>
-                      <button style={quickBtnStyle} onClick={() => selectOilType('Synthetic')}>Synthetic</button>
-                    </div>
-                    <button style={{ ...quickBtnStyle, marginTop: 18, background: '#eee', color: '#333' }} onClick={() => setShowOilTypeSelector(false)}>Cancel</button>
-                  </div>
-                </div>
-              )}
 
               <div style={{ marginBottom: "15px" }}>
                 <label style={{ 
@@ -1166,63 +916,41 @@ const CreateJobsheetModal = ({
                 </div>
               </div>
 
-              {/* Service notes as chips, always visible */}
               {serviceNotes.length > 0 && (
                 <div style={{
                   marginBottom: "15px",
                   backgroundColor: "#f9fafc",
                   border: "1px solid #e0e0e0",
                   borderRadius: "12px",
-                  padding: "15px",
-                  display: 'flex',
-                  flexWrap: 'wrap',
-                  gap: '8px',
-                  minHeight: 48
+                  padding: "15px"
                 }}>
+                  <h4 style={{ margin: "0 0 10px 0", fontSize: "15px", fontWeight: "600" }}>
+                    Added Notes:
+                  </h4>
                   {serviceNotes.map((note, idx) => (
-                    <div key={note.id} className={`note-chip${idx === serviceNotes.length-1 ? ' selected' : ''}`}>
-                      <FontAwesomeIcon icon={faListCheck} style={{fontSize:14}} />
-                      <span>{note.text}</span>
+                    <div key={note.id} style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      marginBottom: "8px",
+                      padding: "8px 12px",
+                      backgroundColor: "#fff",
+                      borderRadius: "8px",
+                      border: "1px solid #eee"
+                    }}>
+                      <span style={{ fontSize: "14px" }}>{idx + 1}. {note.text}</span>
                       <button
                         onClick={() => deleteServiceNote(note.id)}
                         style={{
                           backgroundColor: "transparent",
                           border: "none",
                           color: "#d9534f",
-                          cursor: "pointer",
-                          fontSize: 16,
-                          marginLeft: 2
+                          cursor: "pointer"
                         }}
-                        title="Remove"
                       >
                         <FontAwesomeIcon icon={faTimes} />
                       </button>
                     </div>
                   ))}
-                </div>
-              )}
-
-              {/* Visual summary before creating Job Sheet */}
-              {step === 'service-notes' && selectedVehicle && (
-                <div style={{
-                  background: '#f0f0ff',
-                  border: '1px solid #e0e0e0',
-                  borderRadius: 12,
-                  padding: 16,
-                  marginBottom: 18,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 18
-                }}>
-                  <FontAwesomeIcon icon={faMotorcycle} style={{fontSize:32, color:'#5932EA'}} />
-                  <div>
-                    <div style={{fontWeight:600, fontSize:17}}>{selectedVehicle.plate?.toUpperCase() || 'No Plate'}</div>
-                    <div style={{fontSize:15, color:'#444'}}>{selectedVehicle.model}</div>
-                  </div>
-                  <div style={{marginLeft:'auto', textAlign:'right'}}>
-                    <div style={{fontSize:14, color:'#888'}}>Notes:</div>
-                    <div style={{fontWeight:500, fontSize:15}}>{serviceNotes.length} added</div>
-                  </div>
                 </div>
               )}
 
@@ -1287,87 +1015,6 @@ const CreateJobsheetModal = ({
               </div>
             </div>
           )}
-
-          {/* Step 7: Create New Customer */}
-          {step === 'new-customer' && (
-            <div style={{ animation: "fadeIn 0.3s", maxWidth: 400 }}>
-              <h3 style={{ margin: "0 0 20px 0", fontSize: "18px" }}>Create New Customer</h3>
-              <div style={{ marginBottom: 12 }}>
-                <label style={{ display: 'block', fontWeight: 500, marginBottom: 4 }}>Name*</label>
-                <input
-                  type="text"
-                  value={newCustomer.name}
-                  onChange={e => setNewCustomer({ ...newCustomer, name: e.target.value })}
-                  style={{ width: '100%', padding: 10, borderRadius: 6, border: '1px solid #e0e0e0', fontSize: 15 }}
-                  placeholder="Customer name"
-                />
-              </div>
-              <div style={{ marginBottom: 12 }}>
-                <label style={{ display: 'block', fontWeight: 500, marginBottom: 4 }}>Phone</label>
-                <input
-                  type="text"
-                  value={newCustomer.phone}
-                  onChange={e => setNewCustomer({ ...newCustomer, phone: e.target.value })}
-                  style={{ width: '100%', padding: 10, borderRadius: 6, border: '1px solid #e0e0e0', fontSize: 15 }}
-                  placeholder="Phone number"
-                />
-              </div>
-              <div style={{ marginBottom: 12 }}>
-                <label style={{ display: 'block', fontWeight: 500, marginBottom: 4 }}>Email</label>
-                <input
-                  type="email"
-                  value={newCustomer.email}
-                  onChange={e => setNewCustomer({ ...newCustomer, email: e.target.value })}
-                  style={{ width: '100%', padding: 10, borderRadius: 6, border: '1px solid #e0e0e0', fontSize: 15 }}
-                  placeholder="Email address"
-                />
-              </div>
-              <div style={{ marginBottom: 18 }}>
-                <label style={{ display: 'block', fontWeight: 500, marginBottom: 4 }}>Address</label>
-                <input
-                  type="text"
-                  value={newCustomer.address}
-                  onChange={e => setNewCustomer({ ...newCustomer, address: e.target.value })}
-                  style={{ width: '100%', padding: 10, borderRadius: 6, border: '1px solid #e0e0e0', fontSize: 15 }}
-                  placeholder="Address (optional)"
-                />
-              </div>
-              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-                <button
-                  onClick={() => setStep('post-vehicle-options')}
-                  style={{
-                    padding: '10px 16px',
-                    background: '#eee',
-                    border: 'none',
-                    borderRadius: 8,
-                    fontSize: 14,
-                    color: '#444',
-                    fontWeight: 500,
-                    cursor: 'pointer'
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleCreateCustomer}
-                  disabled={creatingCustomer || !newCustomer.name}
-                  style={{
-                    padding: '10px 16px',
-                    background: '#5932EA',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: 8,
-                    fontSize: 14,
-                    fontWeight: 500,
-                    cursor: creatingCustomer || !newCustomer.name ? 'not-allowed' : 'pointer',
-                    opacity: creatingCustomer || !newCustomer.name ? 0.7 : 1
-                  }}
-                >
-                  {creatingCustomer ? 'Saving...' : 'Create Customer'}
-                </button>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Footer */}
@@ -1385,11 +1032,9 @@ const CreateJobsheetModal = ({
             flex: 1
           }}>
             {step === 'plate-search' && 'Step 1: Find motorcycle'}
-            {step === 'new-vehicle' && 'Step 2: Create new motorcycle'}
-            {step === 'post-vehicle-options' && 'Step 3: Motorcycle created'}
-            {step === 'confirm' && 'Step 4: Confirm motorcycle'}
-            {step === 'service-notes' && 'Step 5: Service details'}
-            {step === 'new-customer' && 'Step 6: Create new customer'}
+            {step === 'new-vehicle' && 'Step 1: Create new motorcycle'}
+            {step === 'confirm' && 'Step 2: Confirm motorcycle'}
+            {step === 'service-notes' && 'Step 3: Service details'}
           </div>
         </div>
 
@@ -1410,39 +1055,6 @@ const CreateJobsheetModal = ({
           @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
-          }
-          .quick-btn {
-            transition: box-shadow 0.18s, transform 0.18s, background 0.18s;
-            will-change: transform, box-shadow;
-          }
-          .quick-btn:hover, .quick-btn:focus {
-            transform: scale(1.07);
-            box-shadow: 0 4px 16px rgba(89,50,234,0.13);
-            background: #e6e6fa;
-            outline: none;
-          }
-          .quick-btn.selected {
-            background: #5932EA;
-            color: white;
-            box-shadow: 0 2px 8px rgba(89,50,234,0.18);
-          }
-          .note-chip {
-            transition: box-shadow 0.18s, background 0.18s;
-            box-shadow: 0 1px 4px rgba(89,50,234,0.07);
-            background: #f0f0ff;
-            color: #5932EA;
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            border-radius: 20px;
-            padding: 7px 16px;
-            font-size: 15px;
-            margin-bottom: 0;
-          }
-          .note-chip.selected {
-            background: #5932EA;
-            color: white;
           }
         `}</style>
       </div>
