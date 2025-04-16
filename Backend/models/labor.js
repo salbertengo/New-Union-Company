@@ -161,7 +161,7 @@ class LaborModel {
       
       // 2. Get sum of COMPLETED labors only
       const [laborResult] = await pool.execute(
-        'SELECT SUM(price) as labor_total FROM labor WHERE jobsheet_id = ? AND is_completed = 1',
+        'SELECT SUM(price) as labor_total FROM labor WHERE jobsheet_id = ? AND is_billed = 1 AND is_completed = 1',
         [jobsheetId]
       );
       

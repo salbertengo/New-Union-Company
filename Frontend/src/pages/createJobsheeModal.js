@@ -8,7 +8,8 @@ import {
 const CreateJobsheetModal = ({ 
   isOpen, 
   onClose, 
-  refreshJobsheets 
+  refreshJobsheets,
+  editingJobsheet // <-- NUEVA PROP
 }) => {
   // Main states
   const [step, setStep] = useState('plate-search'); 
@@ -387,6 +388,26 @@ const CreateJobsheetModal = ({
     setShowOilTypeSelector(false);
   }
 
+  // Nuevo: Pre-cargar datos si editingJobsheet cambia
+  useEffect(() => {
+    if (editingJobsheet) {
+      setStep('confirm');
+      setSelectedVehicle({
+        id: editingJobsheet.vehicle_id,
+        plate: editingJobsheet.vehicle_plate || editingJobsheet.plate,
+        model: editingJobsheet.vehicle_model || editingJobsheet.model,
+        customer_id: editingJobsheet.customer_id,
+        customer_name: editingJobsheet.customer_name
+      });
+      setServiceNotes(
+        editingJobsheet.description
+          ? editingJobsheet.description.split('\n').map((text, i) => ({ id: Date.now() + i, text }))
+          : []
+      );
+      // Si tienes más campos, precárgalos aquí
+    }
+  }, [editingJobsheet]);
+
   if (!isOpen) return null;
 
   return (
@@ -432,10 +453,12 @@ const CreateJobsheetModal = ({
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
             <div>
               <h2 style={{ margin: 0, fontSize: "20px", fontWeight: "600" }}>
-                Quick Job Reception
+                {editingJobsheet ? "Edit Job Sheet" : "Quick Job Reception"}
               </h2>
               <p style={{ margin: "4px 0 0 0", opacity: "0.8", fontSize: "14px" }}>
-                {step === 'plate-search' && "Enter license plate to find motorcycle"}
+                {editingJobsheet
+                  ? "You are editing an existing job sheet. Changes will be saved."
+                  : step === 'plate-search' && "Enter license plate to find motorcycle"}
                 {step === 'new-vehicle' && "Create new motorcycle"}
                 {step === 'post-vehicle-options' && "Motorcycle created"}
                 {step === 'confirm' && "Confirm motorcycle details"}

@@ -11,7 +11,10 @@ import {
   faSearch,
   faBoxOpen,
   faTools,
-  faMoneyBillWave
+  faMoneyBillWave,
+  faCheck,
+  faPlus,
+  faExclamationCircle,
 } from "@fortawesome/free-solid-svg-icons";
 import "@fortawesome/fontawesome-svg-core/styles.css";
 import Invoice from "../components/invoice";
@@ -20,6 +23,7 @@ import {
   ActionButton, 
   ActionButtonsContainer 
 } from '../components/common/ActionButtons';
+import Joyride, { STATUS } from 'react-joyride';
 
 ModuleRegistry.registerModules([ClientSideRowModelModule]);
 
@@ -56,8 +60,7 @@ const JobsheetView = () => {
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [editingLaborId, setEditingLaborId] = useState(null);
   const [editedLaborPrice, setEditedLaborPrice] = useState("");
-  const [laborIsBilled, setLaborIsBilled] = useState(true);
-  
+  const [laborIsBilled, setLaborIsBilled] = useState(false);  
   const [newItem, setNewItem] = useState({
     name: "",
     quantity: 1,
@@ -77,6 +80,9 @@ const JobsheetView = () => {
   const [showLaborModal, setShowLaborModal] = useState(false);
   const [laborTrackingNotes, setLaborTrackingNotes] = useState("");
   const [editingTrackingLaborId, setEditingTrackingLaborId] = useState(null);
+  const [showBillingConfirmModal, setShowBillingConfirmModal] = useState(false);
+  const [laborToUnbill, setLaborToUnbill] = useState(null);
+const [editingJobsheet, setEditingJobsheet] = useState(null);
 
   const [formData, setFormData] = useState({
     customer_id: "",
@@ -86,118 +92,161 @@ const JobsheetView = () => {
     date_created: new Date().toISOString().split("T")[0],
   });
 
+  // Add states for the guided tour
+  const [runTour, setRunTour] = useState(false);
+  const [tourSteps, setTourSteps] = useState([
+    {
+      target: '.labor-task-list',
+      content: 'This area displays all labor tasks for the current job sheet. Tasks are color-coded based on their completion status.',
+      placement: 'left',
+      disableBeacon: true,
+    },
+    {
+      target: '.add-labor-form',
+      content: 'Add new labor or service tasks using this form. Fill in the description, price, and any technical notes.',
+      placement: 'right',
+    },
+    {
+      target: '.billing-toggle',
+      content: 'Toggle whether a task should be included in the final invoice. Billing items require a price while non-billing items don\'t.',
+      placement: 'top',
+    },
+    {
+      target: '.labor-tracking-notes',
+      content: 'Add technical notes to track progress and document important details about the work performed.',
+      placement: 'bottom',
+    },
+    {
+      target: '.labor-actions',
+      content: 'Manage tasks using these action buttons. Mark tasks as complete, edit notes, or remove tasks as needed.',
+      placement: 'left',
+    },
+    {
+      target: '.labor-summary',
+      content: 'View a summary of all labor tasks, including completion stats and total value of work performed.',
+      placement: 'top',
+    },
+  ]);
+
+  const handleJoyrideCallback = (data) => {
+    const { status } = data;
+    if ([STATUS.FINISHED, STATUS.SKIPPED].includes(status)) {
+      setRunTour(false);
+    }
+  };
+
   const columnDefs = [
-    {
-      headerName: "ID",
-      field: "id",
-      width: 80,
-      suppressMenu: true,
-      headerClass: "custom-header-sumary",
-    },
-    {
-      headerName: "Customer",
-      field: "customer_name",
-      suppressMenu: true,
-      headerClass: "custom-header-sumary",
-    },
-    {
-      headerName: "Model",
-      field: "vehicle_model",
-      suppressMenu: true,
-      headerClass: "custom-header-sumary",
-    },
-    {
-      headerName: "Plate",
-      field: "license_plate",
-      suppressMenu: true,
-      headerClass: "custom-header-sumary",
-      width: 120,
-      cellRenderer: (params) => {
-        if (!params.data) return null;
-
-        // Formato para placas: dos letras, cuatro números, una letra
-        let plate = params.value || "AB1234C";
-
-        // Asegurarse de que tenga formato argentino
-        if (!/^[A-Z]{2}\d{4}[A-Z]$/.test(plate)) {
-          // Intentar formatear la placa existente
-          const parts = plate.replace(/[^A-Z0-9]/gi, "").toUpperCase();
-          if (parts.length >= 7) {
-            const letters = parts.replace(/[^A-Z]/g, "");
-            const numbers = parts.replace(/[^0-9]/g, "");
-
-            if (letters.length >= 3 && numbers.length >= 4) {
-              plate = `${letters.substring(0, 2)}${numbers.substring(
-                0,
-                4
-              )}${letters.substring(2, 3)}`;
-            }
-          }
-        }
-
-        // Dividir la placa: dos letras arriba, los números y la letra restante abajo
-        const topPart = plate.substring(0, 2);
-        const bottomPart = plate.substring(2);
-
-        return (
-          <div style={{ display: "flex", justifyContent: "center" }}>
-            <div
-              style={{
-                width: "54px",
-                height: "32px",
-                backgroundColor: "black",
-                border: "1px solid #444",
-                borderRadius: "3px",
-                display: "grid",
-                gridTemplateRows: "40% 60%",
-                overflow: "hidden",
-              }}
-            >
-              <div
-                style={{
-                  color: "white",
-                  fontFamily: "monospace",
-                  fontWeight: "bold",
-                  fontSize: "13px",
-                  textAlign: "center",
-                  borderBottom: "1px solid #444",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                {topPart}
-              </div>
-              <div
-                style={{
-                  color: "white",
-                  fontFamily: "monospace",
-                  fontWeight: "bold",
-                  fontSize: "13px",
-                  textAlign: "center",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                {bottomPart}
-              </div>
-            </div>
-          </div>
-        );
-      },
-    },
-    {
-      headerName: "Created",
-      field: "created_at",
-      suppressMenu: true,
-      headerClass: "custom-header-sumary",
-      cellRenderer: (params) => {
-        if (!params.data.created_at) return "—";
-        const date = new Date(params.data.created_at);
-        return date.toLocaleDateString();
-      },
-    },
+     {
+       headerName: "ID",
+       field: "id",
+       width: 80,
+       suppressMenu: true,
+       headerClass: "custom-header",
+     },
+     {
+       headerName: "Customer",
+       field: "customer_name",
+       suppressMenu: true,
+       headerClass: "custom-header",
+     },
+     {
+       headerName: "Model",
+       field: "vehicle_model",
+       suppressMenu: true,
+       headerClass: "custom-header",
+     },
+     {
+       headerName: "Plate",
+       field: "license_plate",
+       suppressMenu: true,
+       headerClass: "custom-header",
+       width: 120,
+       cellRenderer: (params) => {
+         if (!params.data) return null;
+ 
+         // Formato para placas: dos letras, cuatro números, una letra
+         let plate = params.value || "AB1234C";
+ 
+         // Asegurarse de que tenga formato argentino
+         if (!/^[A-Z]{2}\d{4}[A-Z]$/.test(plate)) {
+           // Intentar formatear la placa existente
+           const parts = plate.replace(/[^A-Z0-9]/gi, "").toUpperCase();
+           if (parts.length >= 7) {
+             const letters = parts.replace(/[^A-Z]/g, "");
+             const numbers = parts.replace(/[^0-9]/g, "");
+ 
+             if (letters.length >= 3 && numbers.length >= 4) {
+               plate = `${letters.substring(0, 2)}${numbers.substring(
+                 0,
+                 4
+               )}${letters.substring(2, 3)}`;
+             }
+           }
+         }
+ 
+         // Dividir la placa: dos letras arriba, los números y la letra restante abajo
+         const topPart = plate.substring(0, 2);
+         const bottomPart = plate.substring(2);
+ 
+         return (
+           <div style={{ display: "flex", justifyContent: "center" }}>
+             <div
+               style={{
+                 width: "54px",
+                 height: "32px",
+                 backgroundColor: "black",
+                 border: "1px solid #444",
+                 borderRadius: "3px",
+                 display: "grid",
+                 gridTemplateRows: "40% 60%",
+                 overflow: "hidden",
+               }}
+             >
+               <div
+                 style={{
+                   color: "white",
+                   fontFamily: "monospace",
+                   fontWeight: "bold",
+                   fontSize: "14px",
+                   textAlign: "center",
+                   borderBottom: "1px solid #444",
+                   display: "flex",
+                   alignItems: "center",
+                   justifyContent: "center",
+                 }}
+               >
+                 {topPart}
+               </div>
+               <div
+                 style={{
+                   color: "white",
+                   fontFamily: "monospace",
+                   fontWeight: "bold",
+                   fontSize: "14px",
+                   textAlign: "center",
+                   display: "flex",
+                   alignItems: "center",
+                   justifyContent: "center",
+                 }}
+               >
+                 {bottomPart}
+               </div>
+             </div>
+           </div>
+         );
+       },
+     },
+     {
+       headerName: "Created",
+       field: "created_at",
+       suppressMenu: true,
+       headerClass: "custom-header",
+       cellRenderer: (params) => {
+         if (!params.data.created_at) return "—";
+         const date = new Date(params.data.created_at);
+         return date.toLocaleDateString();
+       },
+     },
     {
       headerName: "State",
       field: "state",
@@ -319,14 +368,63 @@ const JobsheetView = () => {
     },
   ];
 
+  const renderPlate = (plate) => {
+    // Dividir la placa: dos letras arriba, los números y la letra restante abajo
+    const topPart = plate.substring(0, 2);
+    const bottomPart = plate.substring(2);
+
+    return (
+      <div style={{ display: "flex", justifyContent: "center" }}>
+        <div
+          style={{
+            width: "54px",
+            height: "32px",
+            backgroundColor: "black",
+            border: "1px solid #444",
+            borderRadius: "3px",
+            display: "grid",
+            gridTemplateRows: "40% 60%",
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              color: "white",
+              fontFamily: "monospace",
+              fontWeight: "bold",
+              fontSize: "13px",
+              textAlign: "center",
+              borderBottom: "1px solid #444",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {topPart}
+          </div>
+          <div
+            style={{
+              color: "white",
+              fontFamily: "monospace",
+              fontWeight: "bold",
+              fontSize: "13px",
+              textAlign: "center",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {bottomPart}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const onGridReady = (params) => {
     gridRef.current = params.api;
   };
-  const handleEditLabor = (labor) => {
-    setEditingLaborId(labor.id);
-    setEditedLaborPrice(labor.price || "0");
-  };
+
   const handleSaveEditedLabor = async () => {
     if (!editingLaborId) return;
     
@@ -867,20 +965,7 @@ const JobsheetView = () => {
   };
 
   const handleEdit = (jobsheet) => {
-    setCurrentJobsheet(jobsheet);
-    setFormData({
-      customer_id: jobsheet.customer_id,
-      vehicle_id: jobsheet.vehicle_id,
-      description: jobsheet.description || "",
-      state: jobsheet.state || "pending",
-      date_created:
-        jobsheet.date_created?.split("T")[0] ||
-        new Date().toISOString().split("T")[0],
-    });
-
-    setSelectedCustomerName(jobsheet.customer_name || "");
-
-    fetchVehicles(jobsheet.customer_id);
+    setEditingJobsheet(jobsheet);
     setShowModal(true);
   };
 
@@ -984,12 +1069,10 @@ const JobsheetView = () => {
         }),
       });
 
-      // Intentar obtener el cuerpo de la respuesta como JSON
       const responseData = await response.text();
       let errorMessage = responseData;
 
       try {
-        // Intentar parsear como JSON si es posible
         const jsonData = JSON.parse(responseData);
         errorMessage =
           jsonData.error || jsonData.message || "Error desconocido";
@@ -1012,6 +1095,7 @@ const JobsheetView = () => {
         // Recargar lista de items
         fetchJobsheetItems(currentJobsheet.id);
         await refreshCurrentJobsheetData();
+        
       } else {
         console.error("Error adding item:", response.status, errorMessage);
 
@@ -1038,6 +1122,7 @@ const JobsheetView = () => {
       setIsLoading(false);
     }
   };
+
 
   // Función auxiliar para cargar items
   const fetchJobsheetItems = async (jobsheetId) => {
@@ -1460,19 +1545,30 @@ const JobsheetView = () => {
         message: "Please enter a valid labor description",
         type: "error",
       });
-      setTimeout(() => setNotification({ show: false }), 3000);
+      setTimeout(() => setNotification({ show: false }), 6000);
       return;
     }
-
+  
+    // Solo validar el precio si se va a facturar
+    if (laborIsBilled && (!laborPrice || parseFloat(laborPrice) <= 0)) {
+      setNotification({
+        show: true,
+        message: "Please enter a valid price for billable labor",
+        type: "error",
+      });
+      setTimeout(() => setNotification({ show: false }), 6000);
+      return;
+    }
+  
     try {
       const token = localStorage.getItem("token");
       if (!token) return;
-
+  
       setIsLoading(true);
-
-      // Guardar la descripción para el mensaje
-      const currentDescription = laborDescription;
-
+  
+      // Si no es facturable, establecer explícitamente el precio como 0
+      const priceToSend = laborIsBilled ? (laborPrice ? parseFloat(laborPrice) : 0) : 0;
+  
       const response = await fetch(`http://localhost:3000/labor`, {
         method: "POST",
         headers: {
@@ -1482,38 +1578,38 @@ const JobsheetView = () => {
         body: JSON.stringify({
           jobsheet_id: currentJobsheet.id,
           description: laborDescription,
-          price: laborPrice ? parseFloat(laborPrice) : 0,
+          price: priceToSend,
           is_completed: false,
           is_billed: laborIsBilled,
           tracking_notes: laborTrackingNotes,
         }),
       });
-
+  
       if (response.ok) {
         setLaborDescription("");
         setLaborPrice("");
         setLaborIsBilled(true);
         setLaborTrackingNotes("");
-
+  
         fetchLabors(currentJobsheet.id);
         fetchJobsheets(searchTerm, statusFilter);
-
+  
         setNotification({
           show: true,
-          message: `"${currentDescription}" added successfully`,
+          message: `Labor "${laborDescription}" added successfully`,
           type: "success",
         });
-        setTimeout(() => setNotification({ show: false }), 3000);
+        setTimeout(() => setNotification({ show: false }), 6000);
       } else {
         const errorData = await response.text();
         console.error("Error adding labor:", errorData);
-
+  
         setNotification({
           show: true,
           message: "Error adding labor",
           type: "error",
         });
-        setTimeout(() => setNotification({ show: false }), 3000);
+        setTimeout(() => setNotification({ show: false }), 6000);
       }
     } catch (error) {
       console.error("Error adding labor:", error);
@@ -1522,38 +1618,38 @@ const JobsheetView = () => {
         message: "Error: " + error.message,
         type: "error",
       });
-      setTimeout(() => setNotification({ show: false }), 3000);
+      setTimeout(() => setNotification({ show: false }), 6000);
     } finally {
       setIsLoading(false);
     }
   };
+
+
+  
   const handleUpdateLabor = async (id, updates) => {
     try {
       const token = localStorage.getItem("token");
       if (!token) return;
-
+  
       setIsLoading(true);
-
-      // Only validate price if we're specifically setting is_completed to 1 (completed)
-      // AND we're not also providing a price in the same update
-      if (updates.is_completed === 1 && !updates.price) {
-        // Find the current labor to check its existing price
-        const currentLabor = labors.find((labor) => labor.id === id);
-        if (
-          !currentLabor ||
-          !currentLabor.price ||
-          parseFloat(currentLabor.price) <= 0
-        ) {
+  
+      // Encontrar la labor actual para verificar sus datos
+      const currentLabor = labors.find((labor) => labor.id === id);
+      
+      // Solo validar precio si se está completando Y está marcada para facturación
+      if (updates.is_completed === 1 && !updates.price && currentLabor && currentLabor.is_billed === 1) {
+        // Verificar si ya existe un precio
+        if (!currentLabor.price || parseFloat(currentLabor.price) <= 0) {
           setNotification({
             show: true,
-            message: "Please enter a valid price for the completed labor",
+            message: "Please enter a valid price for billable labor",
             type: "error",
           });
-          setTimeout(() => setNotification({ show: false }), 3000);
+          setTimeout(() => setNotification({ show: false }), 6000);
           return;
         }
       }
-
+  
       const response = await fetch(`http://localhost:3000/labor/${id}`, {
         method: "PUT",
         headers: {
@@ -1562,27 +1658,27 @@ const JobsheetView = () => {
         },
         body: JSON.stringify(updates),
       });
-
+  
       if (response.ok) {
         fetchLabors(currentJobsheet.id);
-        fetchJobsheets(searchTerm, statusFilter); // Para actualizar totales
-
+        fetchJobsheets(searchTerm, statusFilter);
+  
         setNotification({
           show: true,
           message: "Labor updated successfully",
           type: "success",
         });
-        setTimeout(() => setNotification({ show: false }), 3000);
+        setTimeout(() => setNotification({ show: false }), 6000);
       } else {
         const errorData = await response.text();
         console.error("Error updating labor:", errorData);
-
+  
         setNotification({
           show: true,
           message: "Error updating labor",
           type: "error",
         });
-        setTimeout(() => setNotification({ show: false }), 3000);
+        setTimeout(() => setNotification({ show: false }), 6000);
       }
     } catch (error) {
       console.error("Error updating labor:", error);
@@ -1591,7 +1687,7 @@ const JobsheetView = () => {
         message: "Error: " + error.message,
         type: "error",
       });
-      setTimeout(() => setNotification({ show: false }), 3000);
+      setTimeout(() => setNotification({ show: false }), 6000);
     } finally {
       setIsLoading(false);
     }
@@ -1705,9 +1801,21 @@ const JobsheetView = () => {
   };
 
   const handleToggleLaborBilled = async (labor) => {
-    const updates = {
-      is_billed: labor.is_billed === false ? true : false,
-    };
+    let updates;
+    
+    // Modificar la función para también resetear el precio cuando se desmarca is_billed
+    if (labor.is_billed === 1) {
+      // Si estaba marcado y lo vamos a desmarcar, reseteamos el precio a cero
+      updates = {
+        is_billed: 0,
+        price: 0  // Resetear el precio cuando no se va a facturar
+      };
+    } else {
+      // Si no estaba marcado y lo vamos a marcar, solo cambiamos is_billed
+      updates = {
+        is_billed: 1
+      };
+    }
     await handleUpdateLabor(labor.id, updates);
   };
 
@@ -1769,6 +1877,11 @@ const JobsheetView = () => {
     await refreshCurrentJobsheetData();
     setShowInvoiceModalFromPayments(true);
   };
+
+  // Calcular el total de productos y labores completadas
+  const totalItems = jobsheetItems.reduce((sum, item) => sum + parseFloat(item.price) * item.quantity, 0);
+  const totalLabors = labors.filter(labor => labor.is_completed === 1).reduce((sum, labor) => sum + parseFloat(labor.price || 0), 0);
+  const subtotal = totalItems + totalLabors;
 
   return (
     <>
@@ -1903,14 +2016,1296 @@ const JobsheetView = () => {
 
         {/* Create/Edit Modal */}
         {showModal && (
-  <CreateJobsheetModal
-    isOpen={showModal}
-    onClose={() => setShowModal(false)}
-    currentJobsheet={currentJobsheet}
-    refreshJobsheets={fetchJobsheets}
-  />
+          <CreateJobsheetModal
+  isOpen={showModal}
+  onClose={() => setShowModal(false)}
+  refreshJobsheets={fetchJobsheets}
+  editingJobsheet={editingJobsheet}
+/>
 )}
         
+
+
+
+
+        {showItemsModal && currentJobsheet && (
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: "rgba(0, 0, 0, 0.6)",
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              zIndex: 1000,
+              backdropFilter: "blur(3px)",
+              transition: "all 0.3s ease",
+            }}
+          >
+            <div
+              style={{
+                backgroundColor: "white",
+                borderRadius: "12px",
+                width: "850px",
+                maxHeight: "90vh",
+                boxShadow:
+                  "0 10px 30px rgba(0,0,0,0.15), 0 1px 8px rgba(0,0,0,0.12)",
+                display: "flex",
+                flexDirection: "column",
+                overflow: "hidden",
+                animation: "modalFadeIn 0.3s ease",
+              }}
+            >
+              {/* Header Bar with improved styling */}
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  padding: "18px 24px",
+                  borderBottom: "1px solid rgba(0,0,0,0.06)",
+                  backgroundColor: "#5932EA",
+                  color: "white",
+                }}
+              >
+                <div>
+                  <h2
+                    style={{ margin: 0, fontSize: "20px", fontWeight: "600" }}
+                  >
+                    Manage Items
+                  </h2>
+                  <p
+                    style={{
+                      margin: "4px 0 0 0",
+                      opacity: "0.8",
+                      fontSize: "14px",
+                    }}
+                  >
+                    Job Sheet #{currentJobsheet.id} •{" "}
+                    {currentJobsheet.customer_name || "Customer"}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowItemsModal(false)}
+                  style={{
+                    background: "rgba(255,255,255,0.2)",
+                    border: "none",
+                    color: "white",
+                    width: "32px",
+                    height: "32px",
+                    borderRadius: "50%",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: "18px",
+                    transition: "background-color 0.2s",
+                  }}
+                  onMouseOver={(e) =>
+                    (e.currentTarget.style.backgroundColor =
+                      "rgba(255,255,255,0.3)")
+                  }
+                  onMouseOut={(e) =>
+                    (e.currentTarget.style.backgroundColor =
+                      "rgba(255,255,255,0.2)")
+                  }
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* Main content area - split layout */}
+              <div style={{ display: "flex", height: "calc(90vh - 160px)" }}>
+                {/* Left panel - Current items */}
+                <div
+                  style={{
+                    width: "55%",
+                    padding: "20px 24px",
+                    borderRight: "1px solid rgba(0,0,0,0.06)",
+                    display: "flex",
+                    flexDirection: "column",
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: "16px",
+                    }}
+                  >
+                    <h3
+                      style={{
+                        margin: 0,
+                        fontSize: "16px",
+                        fontWeight: "600",
+                        color: "#333",
+                      }}
+                    >
+                      Current Items
+                    </h3>
+                    <div
+                      style={{
+                        backgroundColor: "#f0f8ff",
+                        padding: "6px 12px",
+                        borderRadius: "6px",
+                        color: "#5932EA",
+                        fontSize: "14px",
+                        fontWeight: "600",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                      }}
+                    >
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path
+                          d="M12 12V16"
+                          stroke="#5932EA"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                        />
+                        <circle
+                          cx="12"
+                          cy="12"
+                          r="9"
+                          stroke="#5932EA"
+                          strokeWidth="2"
+                        />
+                      </svg>
+                      {jobsheetItems.length} items · $
+                      {jobsheetItems
+                        .reduce(
+                          (sum, item) =>
+                            sum + parseFloat(item.price) * item.quantity,
+                          0
+                        )
+                        .toFixed(2)}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      overflowY: "auto",
+                      flexGrow: 1,
+                      backgroundColor:
+                        jobsheetItems.length > 0 ? "transparent" : "#f9fafc",
+                      borderRadius: jobsheetItems.length > 0 ? "0" : "8px",
+                    }}
+                  >
+                    {jobsheetItems.length === 0 ? (
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          padding: "60px 20px",
+                          color: "#8c8c8c",
+                          textAlign: "center",
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: "70px",
+                            height: "70px",
+                            backgroundColor: "#F5F5F5",
+                            borderRadius: "50%",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            marginBottom: "16px",
+                          }}
+                        >
+                          <svg
+                            width="32"
+                            height="32"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            xmlns="http://www.w3.org/2000/svg"
+                          >
+                            <path
+                              d="M20 7H4C2.89543 7 2 7.89543 2 9V19C2 20.1046 2.89543 21 4 21H20C21.1046 21 22 20.1046 22 19V9C22 7.89543 21.1046 7 20 7Z"
+                              stroke="#AAAAAA"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                            />
+                            <path
+                              d="M16 7V5C16 3.89543 15.1046 3 14 3H10C8.89543 3 8 3.89543 8 5V7"
+                              stroke="#AAAAAA"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                            />
+                            <path
+                              d="M12 12V16"
+                              stroke="#AAAAAA"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                            />
+                            <path
+                              d="M9 14H15"
+                              stroke="#AAAAAA"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                            />
+                          </svg>
+                        </div>
+                        <p
+                          style={{
+                            margin: "0 0 8px 0",
+                            fontSize: "16px",
+                            fontWeight: "500",
+                          }}
+                        >
+                          No items added yet
+                        </p>
+                        <p
+                          style={{
+                            margin: 0,
+                            fontSize: "14px",
+                            maxWidth: "260px",
+                          }}
+                        >
+                          Use the search on the right to find and add items to
+                          this job sheet
+                        </p>
+                      </div>
+                    ) : (
+                      <div style={{ padding: "4px" }}>
+                        {jobsheetItems.map((item) => (
+                          <div
+                            key={item.id}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              marginBottom: "12px",
+                              padding: "12px",
+                              borderRadius: "8px",
+                              backgroundColor: "white",
+                              boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+                              border: "1px solid rgba(0,0,0,0.05)",
+                              transition: "transform 0.2s, box-shadow 0.2s",
+                              position: "relative",
+                            }}
+                            onMouseOver={(e) => {
+                              e.currentTarget.style.transform =
+                                "translateY(-1px)";
+                              e.currentTarget.style.boxShadow =
+                                "0 4px 6px rgba(0,0,0,0.08)";
+                            }}
+                            onMouseOut={(e) => {
+                              e.currentTarget.style.transform = "translateY(0)";
+                              e.currentTarget.style.boxShadow =
+                                "0 1px 3px rgba(0,0,0,0.08)";
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: "42px",
+                                height: "42px",
+                                backgroundColor: "#f0f0ff",
+                                borderRadius: "6px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                flexShrink: 0,
+                                color: "#5932EA",
+                                fontSize: "18px",
+                                fontWeight: "600",
+                              }}
+                            >
+                              {item.name.charAt(0).toUpperCase()}
+                            </div>
+
+                            <div
+                              style={{
+                                marginLeft: "14px",
+                                flexGrow: 1,
+                                width: "calc(100% - 180px)",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  fontSize: "15px",
+                                  fontWeight: "600",
+                                  color: "#333",
+                                  whiteSpace: "nowrap",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                }}
+                              >
+                                {item.name}
+                              </div>
+                              <div
+                                style={{
+                                  fontSize: "14px",
+                                  color: "#888",
+                                  marginTop: "2px",
+                                }}
+                              >
+                                ${parseFloat(item.price).toFixed(2)} per unit
+                              </div>
+                            </div>
+
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                marginLeft: "8px",
+                                flexShrink: 0,
+                              }}
+                            >
+                              <div
+                                style={{
+                                  width: "28px",
+                                  height: "28px",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  backgroundColor: "#f9fafc",
+                                  borderRadius: "4px",
+                                  fontSize: "14px",
+                                }}
+                              >
+                                {item.quantity}
+                              </div>
+                              <div
+                                style={{
+                                  margin: "0 12px",
+                                  fontSize: "15px",
+                                  fontWeight: "600",
+                                  color: "#5932EA",
+                                }}
+                              >
+                                $
+                                {(
+                                  parseFloat(item.price) * item.quantity
+                                ).toFixed(2)}
+                              </div>
+                              <button
+                                onClick={() => handleDeleteItem(item.id)}
+                                style={{
+                                  backgroundColor: "#fff0f0",
+                                  color: "#ff4d4f",
+                                  border: "none",
+                                  borderRadius: "6px",
+                                  width: "28px",
+                                  height: "28px",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  cursor: "pointer",
+                                  transition: "all 0.2s",
+                                }}
+                                onMouseOver={(e) => {
+                                  e.currentTarget.style.backgroundColor =
+                                    "#ffd6d6";
+                                }}
+                                onMouseOut={(e) => {
+                                  e.currentTarget.style.backgroundColor =
+                                    "#fff0f0";
+                                }}
+                              >
+                                <FontAwesomeIcon icon={faTrash} size="sm" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+
+                        {/* Total area */}
+                        <div
+                          style={{
+                            marginTop: "20px",
+                            padding: "16px",
+                            borderRadius: "8px",
+                            backgroundColor: "#f8f9ff",
+                            boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+                            border: "1px solid rgba(89, 50, 234, 0.1)",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                            }}
+                          >
+                            <div style={{ color: "#666", fontSize: "14px" }}>
+                              Subtotal
+                            </div>
+                            <div
+                              style={{ fontWeight: "500", fontSize: "14px" }}
+                            >
+                              $
+                              {jobsheetItems
+                                .reduce(
+                                  (sum, item) =>
+                                    sum +
+                                    parseFloat(item.price) * item.quantity,
+                                  0
+                                )
+                                .toFixed(2)}
+                            </div>
+                          </div>
+                          <div
+                            style={{
+                              marginTop: "12px",
+                              display: "flex",
+                              justifyContent: "space-between",
+                              paddingTop: "12px",
+                              borderTop: "1px dashed rgba(0,0,0,0.1)",
+                            }}
+                          >
+                            <div
+                              style={{
+                                color: "#333",
+                                fontSize: "16px",
+                                fontWeight: "600",
+                              }}
+                            >
+                              Total
+                            </div>
+                            <div
+                              style={{
+                                color: "#5932EA",
+                                fontWeight: "600",
+                                fontSize: "16px",
+                              }}
+                            >
+                              $
+                              {jobsheetItems
+                                .reduce(
+                                  (sum, item) =>
+                                    sum +
+                                    parseFloat(item.price) * item.quantity,
+                                  0
+                                )
+                                .toFixed(2)}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right panel - Add new items */}
+                <div
+                  style={{
+                    width: "45%",
+                    padding: "20px 24px",
+                    display: "flex",
+                    flexDirection: "column",
+                    overflow: "hidden",
+                    backgroundColor: "#fafbfc",
+                  }}
+                >
+                  <h3
+                    style={{
+                      margin: "0 0 16px 0",
+                      fontSize: "16px",
+                      fontWeight: "600",
+                      color: "#333",
+                    }}
+                  >
+                    Add Items
+                  </h3>
+
+                  {/* Search bar with improved styling */}
+                  <div style={{ position: "relative", marginBottom: "20px" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        backgroundColor: "white",
+                        border: "1px solid #e0e0e0",
+                        boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+                        borderRadius: "8px",
+                        padding: "0 8px",
+                        transition: "all 0.2s",
+                      }}
+                      onFocus={(e) => {
+                        e.currentTarget.style.borderColor = "#5932EA";
+                        e.currentTarget.style.boxShadow =
+                          "0 0 0 3px rgba(89, 50, 234, 0.1)";
+                      }}
+                      onBlur={(e) => {
+                        e.currentTarget.style.borderColor = "#e0e0e0";
+                        e.currentTarget.style.boxShadow =
+                          "0 1px 3px rgba(0,0,0,0.05)";
+                      }}
+                    >
+                      <FontAwesomeIcon
+                        icon={faSearch}
+                        style={{
+                          color: "#5932EA",
+                          margin: "0 10px",
+                        }}
+                      />
+                      <input
+                        ref={searchInputRef}
+                        type="text"
+                        placeholder="Search inventory by name or SKU..."
+                        value={inventorySearchTerm}
+                        onChange={handleInventorySearch}
+                        onFocus={() => setShowInventoryResults(true)}
+                        style={{
+                          flex: 1,
+                          border: "none",
+                          outline: "none",
+                          padding: "12px 0",
+                          fontSize: "14px",
+                          backgroundColor: "transparent",
+                        }}
+                      />
+                      {inventorySearchTerm && (
+                        <button
+                          onClick={() => {
+                            setInventorySearchTerm("");
+                            setFilteredInventory([]);
+                          }}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            cursor: "pointer",
+                            fontSize: "14px",
+                            color: "#999",
+                            width: "24px",
+                            height: "24px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            marginRight: "6px",
+                          }}
+                        >
+                          ×
+                        </button>
+                      )}
+                      {isLoading && (
+                        <div
+                          style={{
+                            width: "18px",
+                            height: "18px",
+                            border: "2px solid rgba(89, 50, 234, 0.1)",
+                            borderLeft: "2px solid #5932EA",
+                            borderRadius: "50%",
+                            animation: "spin 1s linear infinite",
+                            marginRight: "10px",
+                          }}
+                        ></div>
+                      )}
+                    </div>
+
+                    {/* Search results */}
+                    {showInventoryResults && filteredInventory.length > 0 && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: "calc(100% + 8px)",
+                          left: 0,
+                          right: 0,
+                          backgroundColor: "white",
+                          border: "1px solid #e0e0e0",
+                          borderRadius: "8px",
+                          maxHeight: "300px",
+                          overflowY: "auto",
+                          zIndex: 10,
+                          boxShadow:
+                            "0 6px 16px -8px rgba(0,0,0,0.1), 0 9px 28px 0 rgba(0,0,0,0.05)",
+                        }}
+                      >
+                        {filteredInventory.map((item, index) => (
+                          <div
+                            key={item.id}
+                            className="inventory-item"
+                            tabIndex="0"
+                            onClick={() => handleSelectInventoryItem(item)}
+                            style={{
+                              padding: "12px 16px",
+                              cursor: "pointer",
+                              borderBottom:
+                                index < filteredInventory.length - 1
+                                  ? "1px solid #f0f0f0"
+                                  : "none",
+                              transition: "background-color 0.2s",
+                              display: "flex",
+                              alignItems: "center",
+                              outline: "none",
+                            }}
+                            onMouseEnter={(e) =>
+                              (e.target.style.backgroundColor = "#f5f5f5")
+                            }
+                            onMouseLeave={(e) =>
+                              (e.target.style.backgroundColor = "transparent")
+                            }
+                          >
+                            <div
+                              style={{
+                                width: "36px",
+                                height: "36px",
+                                backgroundColor: "#5932EA10",
+                                borderRadius: "6px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                marginRight: "12px",
+                                color: "#5932EA",
+                                fontWeight: "600",
+                                fontSize: "16px",
+                              }}
+                            >
+                              {item.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <div
+                                style={{ fontWeight: "500", fontSize: "14px" }}
+                              >
+                                {item.name}
+                              </div>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  marginTop: "2px",
+                                }}
+                              >
+                                <div
+                                  style={{ fontSize: "14px", color: "#666" }}
+                                >
+                                  <span>SKU: {item.sku || "N/A"}</span>
+                                  <span
+                                    style={{
+                                      marginLeft: "12px",
+                                      color:
+                                        item.stock > 0 ? "#2e7d32" : "#d32f2f",
+                                      padding: "1px 6px",
+                                      backgroundColor:
+                                        item.stock > 0 ? "#e8f5e9" : "#ffebee",
+                                      borderRadius: "4px",
+                                      fontSize: "11px",
+                                      fontWeight: "500",
+                                    }}
+                                  >
+                                    {item.stock > 0
+                                      ? `${item.stock} in stock`
+                                      : "No stock"}
+                                  </span>
+                                </div>
+                                <div
+                                  style={{
+                                    fontWeight: "600",
+                                    color: "#5932EA",
+                                    fontSize: "14px",
+                                  }}
+                                >
+                                  ${parseFloat(item.sale).toFixed(2)}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Empty search results */}
+                    {showInventoryResults &&
+                      inventorySearchTerm &&
+                      filteredInventory.length === 0 &&
+                      !isLoading && (
+                        <div
+                          style={{
+                            position: "absolute",
+                            top: "calc(100% + 8px)",
+                            left: 0,
+                            right: 0,
+                            padding: "20px",
+                            backgroundColor: "white",
+                            border: "1px solid #e0e0e0",
+                            borderRadius: "8px",
+                            color: "#666",
+                            fontSize: "14px",
+                            textAlign: "center",
+                            boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+                          }}
+                        >
+                          <div style={{ marginBottom: "8px" }}>
+                            <svg
+                              width="36"
+                              height="36"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              xmlns="http://www.w3.org/2000/svg"
+                            >
+                              <path
+                                d="M15.5 15.5L19 19"
+                                stroke="#AAAAAA"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                              />
+                              <circle
+                                cx="11"
+                                cy="11"
+                                r="6"
+                                stroke="#AAAAAA"
+                                strokeWidth="2"
+                              />
+                              <path
+                                d="M8 11H14"
+                                stroke="#AAAAAA"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                              />
+                            </svg>
+                          </div>
+                          <p style={{ margin: "0", fontWeight: "500" }}>
+                            No results found
+                          </p>
+                          <p
+                            style={{
+                              margin: "4px 0 0 0",
+                              color: "#888",
+                              fontSize: "14px",
+                            }}
+                          >
+                            We couldn't find any products that match "
+                            {inventorySearchTerm}"
+                          </p>
+                        </div>
+                      )}
+                  </div>
+
+                  {/* Selected item preview */}
+                  {newItem.product_id ? (
+                    <div
+                      style={{
+                        padding: "16px",
+                        backgroundColor: "white",
+                        borderRadius: "8px",
+                        border: "1px solid #e0e4ff",
+                        boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+                        animation: "fadeIn 0.3s ease",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          marginBottom: "16px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: "42px",
+                            height: "42px",
+                            backgroundColor: "#f0f0ff",
+                            borderRadius: "6px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            flexShrink: 0,
+                            color: "#5932EA",
+                            fontSize: "18px",
+                            fontWeight: "600",
+                          }}
+                        >
+                          {newItem.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div style={{ marginLeft: "14px", flex: 1 }}>
+                          <div style={{ fontWeight: "600", fontSize: "16px" }}>
+                            {newItem.name}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "14px",
+                              color: "#5932EA",
+                              marginTop: "4px",
+                            }}
+                          >
+                            ${parseFloat(newItem.price).toFixed(2)} per unit
+                          </div>
+                        </div>
+                      </div>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          backgroundColor: "#f8f9ff",
+                          padding: "12px 16px",
+                          borderRadius: "6px",
+                        }}
+                      >
+                        <div>
+                          <label
+                            style={{
+                              display: "block",
+                              fontSize: "14px",
+                              color: "#666",
+                              marginBottom: "6px",
+                            }}
+                          >
+                            Quantity
+                          </label>
+                          <div
+                            style={{ display: "flex", alignItems: "center" }}
+                          >
+                            <button
+                              onClick={() =>
+                                setNewItem({
+                                  ...newItem,
+                                  quantity: Math.max(1, newItem.quantity - 1),
+                                })
+                              }
+                              style={{
+                                width: "30px",
+                                height: "30px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                backgroundColor: "#f0f0f0",
+                                border: "1px solid #ddd",
+                                borderRadius: "4px 0 0 4px",
+                                cursor: "pointer",
+                                fontSize: "16px",
+                              }}
+                            >
+                              −
+                            </button>
+
+                            <input
+                              type="number"
+                              value={newItem.quantity}
+                              min="1"
+                              onChange={(e) =>
+                                setNewItem({
+                                  ...newItem,
+                                  quantity: parseInt(e.target.value) || 1,
+                                })
+                              }
+                              style={{
+                                width: "50px",
+                                textAlign: "center",
+                                padding: "5px 0",
+                                border: "1px solid #ddd",
+                                borderLeft: "none",
+                                borderRight: "none",
+                                outline: "none",
+                                fontSize: "14px",
+                                fontWeight: "500",
+                              }}
+                            />
+
+                            <button
+                              onClick={() =>
+                                setNewItem({
+                                  ...newItem,
+                                  quantity: newItem.quantity + 1,
+                                })
+                              }
+                              style={{
+                                width: "30px",
+                                height: "30px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                backgroundColor: "#f0f0f0",
+                                border: "1px solid #ddd",
+                                borderRadius: "0 4px 4px 0",
+                                cursor: "pointer",
+                                fontSize: "16px",
+                              }}
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+
+                        <div>
+                          <div
+                            style={{
+                              fontSize: "14px",
+                              color: "#666",
+                              marginBottom: "6px",
+                              textAlign: "right",
+                            }}
+                          >
+                            Total
+                          </div>
+                          <div
+                            style={{
+                              fontWeight: "600",
+                              color: "#5932EA",
+                              fontSize: "16px",
+                            }}
+                          >
+                            $
+                            {(
+                              parseFloat(newItem.price) * newItem.quantity
+                            ).toFixed(2)}
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={handleAddItem}
+                        style={{
+                          marginTop: "16px",
+                          width: "100%",
+                          padding: "12px",
+                          backgroundColor: "#5932EA",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "6px",
+                          cursor: "pointer",
+                          fontWeight: "500",
+                          fontSize: "14px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: "8px",
+                          transition: "background-color 0.2s",
+                        }}
+                        onMouseOver={(e) =>
+                          (e.currentTarget.style.backgroundColor = "#4321C9")
+                        }
+                        onMouseOut={(e) =>
+                          (e.currentTarget.style.backgroundColor = "#5932EA")
+                        }
+                        disabled={isLoading}
+                      >
+                        {isLoading ? (
+                          <div
+                            style={{
+                              width: "18px",
+                              height: "18px",
+                              border: "2px solid rgba(255,255,255,0.3)",
+                              borderLeft: "2px solid white",
+                              borderRadius: "50%",
+                              animation: "spin 1s linear infinite",
+                            }}
+                          ></div>
+                        ) : (
+                          <>
+                            <svg
+                              width="18"
+                              height="18"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              xmlns="http://www.w3.org/2000/svg"
+                            >
+                              <path
+                                d="M12 5V19"
+                                stroke="white"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                              />
+                              <path
+                                d="M5 12H19"
+                                stroke="white"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                              />
+                            </svg>
+                            Add to Job Sheet
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        onClick={() =>
+                          setNewItem({
+                            name: "",
+                            quantity: 1,
+                            price: 0,
+                            product_id: null,
+                          })
+                        }
+                        style={{
+                          marginTop: "8px",
+                          width: "100%",
+                          padding: "8px",
+                          backgroundColor: "transparent",
+                          color: "#666",
+                          border: "none",
+                          cursor: "pointer",
+                          fontSize: "14px",
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        flex: 1,
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: "30px 20px",
+                        backgroundColor: "white",
+                        borderRadius: "8px",
+                        border: "1px dashed #ddd",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: "60px",
+                          height: "60px",
+                          backgroundColor: "#f5f5fc",
+                          borderRadius: "50%",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          marginBottom: "16px",
+                        }}
+                      >
+                        <svg
+                          width="30"
+                          height="30"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <path
+                            d="M21 16V8.00002C20.9996 7.6493 20.9071 7.30483 20.7315 7.00119C20.556 6.69754 20.3037 6.44539 20 6.27002L13 2.27002C12.696 2.09449 12.3511 2.00208 12 2.00208C11.6489 2.00208 11.304 2.09449 11 2.27002L4 6.27002C3.69626 6.44539 3.44398 6.69754 3.26846 7.00119C3.09294 7.30483 3.00036 7.6493 3 8.00002V16C3.00036 16.3508 3.09294 16.6952 3.26846 16.9989C3.44398 17.3025 3.69626 17.5547 4 17.73L11 21.73C11.304 21.9056 11.6489 21.998 12 21.998C12.3511 21.998 12.696 21.9056 13 21.73L20 17.73C20.3037 17.5547 20.556 17.3025 20.7315 16.9989C20.9071 16.6952 20.9996 16.3508 21 16Z"
+                            stroke="#5932EA"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                          <path
+                            d="M3.27002 6.96002L12 12L20.73 6.96002"
+                            stroke="#5932EA"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                          <path
+                            d="M12 22.08V12"
+                            stroke="#5932EA"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </div>
+                      <p
+                        style={{
+                          margin: "0 0 8px 0",
+                          fontSize: "16px",
+                          fontWeight: "500",
+                          color: "#333",
+                        }}
+                      >
+                        Select an item to add
+                      </p>
+                      <p
+                        style={{
+                          margin: 0,
+                          fontSize: "14px",
+                          color: "#888",
+                          textAlign: "center",
+                          maxWidth: "240px",
+                        }}
+                      >
+                        Use the search box above to find products in your
+                        inventory
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Notification */}
+                  {notification.show && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        bottom: "20px",
+                        right: "20px",
+                        padding: "12px 16px",
+                        borderRadius: "8px",
+                        backgroundColor:
+                          notification.type === "success"
+                            ? "#f0fff6"
+                            : "#fff0f0",
+                        border: `1px solid ${
+                          notification.type === "success"
+                            ? "#b7f0d1"
+                            : "#ffccc7"
+                        }`,
+                        color:
+                          notification.type === "success"
+                            ? "#389e0d"
+                            : "#cf1322",
+                        boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+                        maxWidth: "280px",
+                        zIndex: 1100,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "10px",
+                        animation: "slideIn 0.3s ease",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: "24px",
+                          height: "24px",
+                          borderRadius: "50%",
+                          backgroundColor:
+                            notification.type === "success"
+                              ? "#d9f7be"
+                              : "#ffccc7",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexShrink: 0,
+                        }}
+                      >
+                        {notification.type === "success" ? (
+                          <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            xmlns="http://www.w3.org/2000/svg"
+                          >
+                            <path
+                              d="M20 6L9 17L4 12"
+                              stroke="#389e0d"
+                              strokeWidth="3"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        ) : (
+                          <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            xmlns="http://www.w3.org/2000/svg"
+                          >
+                            <path
+                              d="M18 6L6 18"
+                              stroke="#cf1322"
+                              strokeWidth="3"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                            <path
+                              d="M6 6L18 18"
+                              stroke="#cf1322"
+                              strokeWidth="3"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        )}
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: "500", fontSize: "14px" }}>
+                          {notification.type === "success"
+                            ? "Success"
+                            : "Error"}
+                        </div>
+                        <div style={{ fontSize: "14px", marginTop: "2px" }}>
+                          {notification.message}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Footer actions */}
+              <div
+                style={{
+                  padding: "16px 24px",
+                  borderTop: "1px solid rgba(0,0,0,0.06)",
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  backgroundColor: "#fafbfc",
+                }}
+              >
+                <button
+                  onClick={() => setShowItemsModal(false)}
+                  style={{
+                    padding: "10px 24px",
+                    backgroundColor: "#5932EA",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "10px",
+                    cursor: "pointer",
+                    fontSize: "14px",
+                    fontWeight: "600",
+                    transition: "all 0.2s",
+                    boxShadow: "0 2px 6px rgba(89, 50, 234, 0.2)",
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#4321C9"}
+                  onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#5932EA"}
+                >
+                  Close
+                </button>
+        
+              </div>
+
+              {/* CSS Keyframes */}
+              <style jsx>{`
+                @keyframes modalFadeIn {
+                  from {
+                    opacity: 0;
+                    transform: translateY(10px);
+                  }
+                  to {
+                    opacity: 1;
+                    transform: translateY(0);
+                  }
+                }
+                @keyframes fadeIn {
+                  from {
+                    opacity: 0;
+                  }
+                  to {
+                    opacity: 1;
+                  }
+                }
+                @keyframes slideIn {
+                  from {
+                    transform: translateX(20px);
+                    opacity: 0;
+                  }
+                  to {
+                    transform: translateX(0);
+                    opacity: 1;
+                  }
+                }
+              `}</style>
+            </div>
+          </div>
+        )}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         {showPaymentsModal && currentJobsheet && (
           <div
             style={{
@@ -2042,30 +3437,10 @@ const JobsheetView = () => {
                         >
                           Total to pay
                         </div>
-                        <div
-                          style={{
-                            fontSize: "22px",
-                            fontWeight: "700",
-                            color: "#0277BD",
-                            display: "flex",
-                            alignItems: "baseline",
-                          }}
-                        >
-                          $
-                          {parseFloat(
-                            currentJobsheet.total_amount || 0
-                          ).toFixed(2)}
-                          <span
-                            style={{
-                              fontSize: "14px",
-                              fontWeight: "400",
-                              color: "#777",
-                              marginLeft: "5px",
-                            }}
-                          >
-                            + taxes
-                          </span>
-                        </div>
+                        <div style={{ fontSize: "22px", fontWeight: "700", color: "#0277BD", display: "flex", alignItems: "baseline" }}>
+  ${subtotal.toFixed(2)}
+  <span style={{ fontSize: "14px", fontWeight: "400", color: "#777", marginLeft: "5px" }}>+ taxes</span>
+</div>
                       </div>
 
                       <div
@@ -2120,19 +3495,11 @@ const JobsheetView = () => {
                               fontSize: "12px",
                               fontWeight: "500",
                               backgroundColor:
-                                currentJobsheet.amount_paid >=
-                                currentJobsheet.total_amount
-                                  ? "#E8F5E9"
-                                  : currentJobsheet.amount_paid > 0
-                                  ? "#FFF3E0"
-                                  : "#FFEBEE",
-                              color:
-                                currentJobsheet.amount_paid >=
-                                currentJobsheet.total_amount
-                                  ? "#2E7D32"
-                                  : currentJobsheet.amount_paid > 0
-                                  ? "#E65100"
-                                  : "#C62828",
+                              currentJobsheet.amount_paid >= currentJobsheet.total_amount
+                                ? "#2E7D32"
+                                : currentJobsheet.amount_paid > 0
+                                ? "#E65100"
+                                : "#C62828",
                             }}
                           >
                             {currentJobsheet.amount_paid > 0
@@ -2378,9 +3745,8 @@ const JobsheetView = () => {
                           strokeWidth="2"
                           strokeLinecap="round"
                           strokeLinejoin="round"
-                          style={{ marginRight: "8px" }}
                         >
-                          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+                          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1-7.94-7.94l-3.76 3.76z"></path>
                         </svg>
                         Labor and Services
                       </h3>
@@ -2832,11 +4198,8 @@ const JobsheetView = () => {
                         {/* Cálculo del impuesto */}
                         {(() => {
                           // Calcular el monto total sin impuestos
-                          const totalItems = jobsheetItems.reduce(
-                            (sum, item) =>
-                              sum + parseFloat(item.price) * item.quantity,
-                            0
-                          );
+                          const totalItems = jobsheetItems.reduce((sum, item) => sum + parseFloat(item.price) * item.quantity, 0);
+
                           const totalLabors = labors
                             .filter((labor) => labor.is_completed === 1)
                             .reduce(
@@ -3763,116 +5126,882 @@ const JobsheetView = () => {
             }
           `}
         </style>
-{showLaborModal && currentJobsheet && (
-  <div style={{
-    position: "fixed",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    background: "rgba(40,40,60,0.25)",
-    zIndex: 2000,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    backdropFilter: "blur(2px)"
-  }}>
-    <div style={{
-      background: "#fff",
-      borderRadius: 18,
-      width: 800,
-      maxWidth: "95vw",
-      maxHeight: "90vh",
-      boxShadow: "0 8px 32px rgba(60,60,100,0.18)",
+        {showLaborModal && currentJobsheet && (
+  <div
+    style={{
+      position: "fixed",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: "rgba(0, 0, 0, 0.6)",
       display: "flex",
-      flexDirection: "column",
-      overflow: "hidden"
-    }}>
-      {/* Header with vehicle data */}
-      <div style={{
+      justifyContent: "center",
+      alignItems: "center",
+      zIndex: 1000,
+      backdropFilter: "blur(3px)",
+      transition: "all 0.3s ease",
+    }}
+  >
+    <div
+      style={{
+        backgroundColor: "white",
+        borderRadius: "14px",
+        width: "950px",
+        maxHeight: "92vh",
+        boxShadow: "0 10px 30px rgba(0,0,0,0.15), 0 1px 8px rgba(0,0,0,0.12)",
         display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "22px 28px 12px 28px",
-        borderBottom: "1px solid #f0f0f0",
-        background: "#f7f7fb"
-      }}>
+        flexDirection: "column",
+        overflow: "hidden",
+        animation: "modalFadeIn 0.3s ease",
+      }}
+    >
+      {/* Encabezado con información del trabajo */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: "18px 24px",
+          borderBottom: "1px solid rgba(0,0,0,0.06)",
+          background: "linear-gradient(135deg, #FF9800 0%, #F57C00 100%)",
+          color: "white",
+          position: "relative",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            right: 0,
+            width: "200px",
+            height: "100%",
+            background: "linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.1) 100%)",
+            transform: "skewX(-20deg) translateX(30%)",
+          }}
+        ></div>
         <div>
-          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#333" }}>
-            Labor & Services
-          </h2>
-          <div style={{ fontSize: 14, color: "#888", marginTop: 4, display: "flex", alignItems: "center", gap: 16 }}>
-            <span><strong>Customer:</strong> {currentJobsheet.customer_name || "Customer"}</span>
-            <span><strong>Vehicle:</strong> {currentJobsheet.vehicle_model || "Vehicle"}</span>
-            <span><strong>Plate:</strong> {currentJobsheet.license_plate || "No plate"}</span>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "10px" }}>
+            <FontAwesomeIcon icon={faTools} style={{ fontSize: '24px' }}/>
+            <h2 style={{ margin: 0, fontSize: "20px", fontWeight: "600" }}>
+              Labor & Services Management
+            </h2>
           </div>
+          <p style={{ margin: "4px 0 0 0", opacity: "0.9", fontSize: "14px" }}>
+            Job Sheet #{currentJobsheet.id} • {currentJobsheet.customer_name || "Customer"} • {currentJobsheet.vehicle_model || "Vehicle"}
+          </p>
         </div>
-        <button onClick={() => setShowLaborModal(false)} style={{
-          background: "#f2f2f7",
-          border: "none",
-          borderRadius: "50%",
-          width: 38,
-          height: 38,
-          fontSize: 22,
-          color: "#666",
-          cursor: "pointer",
-          fontWeight: 700,
-          transition: "background 0.2s"
-        }}>×</button>
+        <button
+          onClick={() => setShowLaborModal(false)}
+          style={{
+            background: "rgba(255,255,255,0.2)",
+            border: "none",
+            color: "white",
+            width: "32px",
+            height: "32px",
+            borderRadius: "50%",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: "18px",
+            transition: "background-color 0.2s",
+            userSelect: "none",
+            position: "relative",
+            zIndex: 10,
+          }}
+          onMouseOver={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.3)")}
+          onMouseOut={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.2)")}
+        >
+          ×
+        </button>
       </div>
-      <div style={{ padding: "28px", background: "#f9faff", flex: 1, overflowY: "auto" }}>
-        {labors.length === 0 ? (
-          <div style={{ backgroundColor: "#f9faff", padding: 40, textAlign: "center", borderRadius: 12, border: "1px dashed #ccc", color: "#888" }}>
-            <div style={{ fontSize: 18, marginBottom: 10 }}>No labor/services registered</div>
-            <div style={{ fontSize: 15 }}>This job sheet has no labor or service tasks yet.</div>
-          </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-            {labors.map(labor => (
-              <div key={labor.id} style={{
-                background: "#fff",
-                border: "1px solid #e0e0e0",
-                borderRadius: 12,
-                padding: 20,
-                boxShadow: "0 1px 4px rgba(60,60,100,0.06)",
+
+      {/* Contenido principal - Vista dividida */}
+      <div style={{ display: "flex", height: "calc(92vh - 140px)" }}>
+        {/* Panel izquierdo - Lista de tareas */}
+        <div
+          style={{
+            width: "60%",
+            borderRight: "1px solid rgba(0,0,0,0.06)",
+            display: "flex",
+            flexDirection: "column",
+            overflowY: "auto",
+            maxHeight: "calc(92vh - 140px)",
+            padding: "20px",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "16px",
+            }}
+          >
+            <h3
+              style={{
+                margin: 0,
+                fontSize: "16px",
+                fontWeight: "600",
+                color: "#333",
+              }}
+            >
+              Labor Tasks List
+            </h3>
+            <div
+              style={{
+                backgroundColor: "#fff3e0",
+                padding: "6px 12px",
+                borderRadius: "6px",
+                color: "#FF9800",
+                fontSize: "14px",
+                fontWeight: "600",
                 display: "flex",
-                alignItems: "flex-start",
-                gap: 18,
-                position: "relative"
-              }}>
-                <div style={{
-                  width: 48,
-                  height: 48,
+                alignItems: "center",
+                gap: "6px",
+              }}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path d="M12 8V12L15 15" stroke="#FF9800" strokeWidth="2" strokeLinecap="round" />
+                <circle cx="12" cy="12" r="9" stroke="#FF9800" strokeWidth="2" />
+              </svg>
+              {labors.length} tasks
+            </div>
+          </div>
+
+          {labors.length === 0 ? (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "60px 20px",
+                color: "#8c8c8c",
+                textAlign: "center",
+                backgroundColor: "#fafafa",
+                borderRadius: "10px",
+                border: "1px dashed #ddd",
+                marginBottom: "20px",
+              }}
+            >
+              <div
+                style={{
+                  width: "70px",
+                  height: "70px",
+                  backgroundColor: "#fff3e0",
                   borderRadius: "50%",
-                  background: labor.is_completed === 1 ? "#e8f5e9" : "#f4f4f4",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  fontSize: 22,
-                  color: labor.is_completed === 1 ? "#00AB55" : "#aaa"
-                }}>
-                  {labor.is_completed === 1 ? (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#00AB55" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  ) : (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#aaa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                  )}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: 17, color: "#333", marginBottom: 4 }}>{labor.description}</div>
-                  <div style={{ fontSize: 14, color: labor.is_completed === 1 ? "#00AB55" : "#888", marginBottom: 6 }}>
+                  marginBottom: "16px",
+                }}
+              >
+                <FontAwesomeIcon icon={faTools} style={{ fontSize: '30px', color: '#FF9800' }} />
+              </div>
+              <p style={{ margin: "0 0 8px 0", fontSize: "16px", fontWeight: "500" }}>
+                No labor tasks added yet
+              </p>
+              <p style={{ margin: 0, fontSize: "14px", maxWidth: "260px" }}>
+                Use the form on the right to add labor or service tasks to this job sheet
+              </p>
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              {labors.map(labor => (
+                <div
+                  key={labor.id}
+                  style={{
+                    backgroundColor: "white",
+                    borderRadius: "12px",
+                    border: `1px solid ${labor.is_completed === 1 ? "#c8e6c9" : "#e0e0e0"}`,
+                    padding: "16px",
+                    boxShadow: "0 2px 4px rgba(0,0,0,0.05)",
+                    transition: "transform 0.2s, box-shadow 0.2s",
+                    position: "relative",
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.transform = "translateY(-2px)";
+                    e.currentTarget.style.boxShadow = "0 4px 8px rgba(0,0,0,0.1)";
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.transform = "translateY(0)";
+                    e.currentTarget.style.boxShadow = "0 2px 4px rgba(0,0,0,0.05)";
+                  }}
+                >
+                  {/* Status badge */}
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "12px",
+                      right: "12px",
+                      padding: "3px 8px",
+                      borderRadius: "12px",
+                      fontSize: "12px",
+                      fontWeight: "600",
+                      backgroundColor: labor.is_completed === 1 ? "#e8f5e9" : "#fff3e0",
+                      color: labor.is_completed === 1 ? "#2e7d32" : "#e65100",
+                      border: `1px solid ${labor.is_completed === 1 ? "#c8e6c9" : "#ffe0b2"}`,
+                    }}
+                  >
                     {labor.is_completed === 1 ? "Completed" : "Pending"}
                   </div>
-                  <div style={{ fontSize: 14, color: "#555", marginBottom: 8 }}>
-                    <strong>Price:</strong> ${parseFloat(labor.price || 0).toFixed(2)}
+                  
+                  {/* Header */}
+                  <div style={{ marginRight: "70px", marginBottom: "10px" }}>
+                    <div style={{ fontWeight: "600", fontSize: "16px", color: "#333" }}>
+                      {labor.description}
+                    </div>
+                    <div style={{ fontSize: "13px", color: "#757575", marginTop: "4px" }}>
+                      {labor.completed_at ? `Completed: ${new Date(labor.completed_at).toLocaleDateString()}` : "Not completed yet"}
+                    </div>
                   </div>
-                  <div style={{ fontSize: 13, color: labor.tracking_notes ? "#444" : "#aaa", fontStyle: labor.tracking_notes ? "normal" : "italic", background: "#f7f9fc", borderRadius: 8, padding: 10, marginTop: 4 }}>
-                    {labor.tracking_notes || 'No technical notes for this task.'}
+
+                  {/* Price & Technical Notes */}
+                  <div style={{ 
+                    display: "flex", 
+                    justifyContent: "space-between", 
+                    alignItems: "flex-start", 
+                    marginTop: "10px" 
+                  }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: "13px", color: "#757575", marginBottom: "4px" }}>
+                        Technical Notes
+                      </div>
+                      <div style={{ 
+                        fontSize: "14px", 
+                        color: "#444",
+                        backgroundColor: "#f5f5f5",
+                        borderRadius: "8px",
+                        padding: "8px 12px",
+                        maxHeight: "60px",
+                        overflowY: "auto"
+                      }}>
+                        {labor.tracking_notes || "No technical notes available"}
+                      </div>
+                    </div>
                   </div>
+                  
+                  <div style={{ marginTop: "16px", marginBottom: "8px" }}>
+  <button
+    onClick={(e) => {
+      // Show confirmation only when unbilling
+      if (labor.is_billed === 1) {
+        e.preventDefault();
+        setLaborToUnbill(labor);
+        setShowBillingConfirmModal(true);
+        return;
+      }
+      handleToggleLaborBilled(labor);
+    }}
+    title={labor.is_billed === 1 ? "Haz clic para quitar de la facturación" : "Haz clic para incluir en la facturación"}
+    style={{
+      width: "100%",
+      padding: "14px 16px",
+      borderRadius: "10px",
+      backgroundColor: labor.is_billed === 1 ? "#e3f2fd" : "#f5f5f5",
+      border: `1px solid ${labor.is_billed === 1 ? "#bbdefb" : "#e0e0e0"}`,
+      cursor: "pointer",
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      transition: "all 0.2s ease",
+      color: labor.is_billed === 1 ? "#1976d2" : "#9e9e9e",
+      fontWeight: "500",
+      fontSize: "15px"
+    }}
+  >
+    {/* Lado izquierdo - Etiqueta de facturación */}
+    <div style={{ display: "flex", alignItems: "center" }}>
+      <FontAwesomeIcon 
+        icon={faMoneyBillWave} 
+        style={{ 
+          fontSize: '18px',
+          marginRight: "12px"
+        }} 
+      />
+      <span>{labor.is_billed === 1 ? "Included in billing" : "Not billed"}</span>
+    </div>
+    
+    {/* Lado derecho - Precio o indicador */}
+    {labor.is_billed === 1 ? (
+      editingLaborId === labor.id ? (
+        <div 
+          style={{ 
+            position: "relative",
+            width: "120px",
+            height: "34px",
+            backgroundColor: "white",
+            borderRadius: "8px",
+            boxShadow: "0 1px 4px rgba(0,0,0,0.1)",
+            overflow: "hidden"
+          }}
+          onClick={(e) => e.stopPropagation()} 
+        >
+          <span style={{
+            position: "absolute",
+            left: "10px",
+            top: "50%",
+            transform: "translateY(-50%)",
+            color: "#1976d2",
+            fontSize: "15px",
+            zIndex: 2
+          }}>$</span>
+          <input
+            type="number"
+            value={editedLaborPrice}
+            onChange={(e) => setEditedLaborPrice(e.target.value)}
+            onBlur={() => {
+              handleSaveEditedLabor();
+              setEditingLaborId(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                handleSaveEditedLabor();
+                setEditingLaborId(null);
+              }
+            }}
+            placeholder="0.00"
+            step="0.01"
+            min="0"
+            style={{
+              width: "100%",
+              height: "100%",
+              padding: "0 8px 0 24px",
+              fontSize: "16px",
+              border: "none",
+              backgroundColor: "transparent",
+              outline: "none",
+              fontWeight: "600",
+              color: "#1976d2"
+            }}
+            autoFocus
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      ) : (
+        <div 
+          style={{ 
+            fontWeight: "600",
+            fontSize: "16px",
+            color: labor.is_completed === 1 ? "#2e7d32" : "#FF9800",
+            cursor: "pointer",
+            padding: "6px 12px",
+            backgroundColor: "rgba(255,255,255,0.5)",
+            borderRadius: "8px",
+            display: "flex",
+            alignItems: "center",
+            gap: "6px"
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            setEditingLaborId(labor.id);
+            setEditedLaborPrice(labor.price || "0");
+          }}
+        >
+          ${parseFloat(labor.price || 0).toFixed(2)}
+          <FontAwesomeIcon 
+            icon={faEdit} 
+            style={{ 
+              fontSize: '14px',
+              opacity: 0.6
+            }} 
+          />
+        </div>
+      )
+    ) : (
+      <div
+        style={{
+          backgroundColor: "#9e9e9e",
+          color: "white",
+          padding: "4px 10px",
+          borderRadius: "4px",
+          fontSize: "13px",
+          fontWeight: "500"
+        }}
+      >
+        Tap to add
+      </div>
+    )}
+  </button>
+</div>
+                  
+                  {/* Action buttons */}
+                  <div style={{ 
+                    display: "flex", 
+                    justifyContent: "flex-end", 
+                    gap: "8px", 
+                    marginTop: "12px", 
+                    borderTop: "1px solid #eee",
+                    paddingTop: "12px"
+                  }}>
+                    <button
+                      onClick={() => {
+                        setEditingTrackingLaborId(labor.id);
+                        setLaborTrackingNotes(labor.tracking_notes || "");
+                      }}
+                      style={{
+                        padding: "6px 12px",
+                        backgroundColor: "#e3f2fd",
+                        color: "#1976d2",
+                        border: "none",
+                        borderRadius: "8px",
+                        cursor: "pointer",
+                        fontSize: "13px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        fontWeight: "500"
+                      }}
+                    >
+                      <FontAwesomeIcon icon={faEdit} size="sm" />
+                      Notes
+                    </button>
+
+                    <button
+                      onClick={() => handleToggleLaborCompleted(labor)}
+                      style={{
+                        padding: "6px 12px",
+                        backgroundColor: labor.is_completed === 1 ? "#ffebee" : "#e8f5e9",
+                        color: labor.is_completed === 1 ? "#d32f2f" : "#2e7d32",
+                        border: "none",
+                        borderRadius: "8px",
+                        cursor: "pointer",
+                        fontSize: "13px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        fontWeight: "500"
+                      }}
+                    >
+                      <FontAwesomeIcon icon={labor.is_completed === 1 ? faTools : faCheck} size="sm" />
+                      {labor.is_completed === 1 ? "Mark Incomplete" : "Complete"}
+                    </button>
+
+                    <button
+                      onClick={() => handleDeleteLabor(labor.id)}
+                      style={{
+                        padding: "6px 12px",
+                        backgroundColor: "#ffebee",
+                        color: "#d32f2f",
+                        border: "none",
+                        borderRadius: "8px",
+                        cursor: "pointer",
+                        fontSize: "13px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        fontWeight: "500"
+                      }}
+                    >
+                      <FontAwesomeIcon icon={faTrash} size="sm" />
+                      Delete
+                    </button>
+                  </div>
+
+                  {/* Edit tracking notes form */}
+                  {editingTrackingLaborId === labor.id && (
+                    <div style={{
+                      marginTop: "12px",
+                      borderTop: "1px solid #eee",
+                      paddingTop: "12px"
+                    }}>
+                      <div style={{ fontSize: "14px", fontWeight: "500", marginBottom: "8px", color: "#333" }}>
+                        Edit Technical Notes
+                      </div>
+                      <textarea
+                        value={laborTrackingNotes}
+                        onChange={(e) => setLaborTrackingNotes(e.target.value)}
+                        style={{
+                          width: "100%",
+                          padding: "10px",
+                          borderRadius: "8px",
+                          border: "1px solid #ddd",
+                          minHeight: "80px",
+                          fontSize: "14px",
+                          resize: "vertical",
+                          boxSizing: "border-box"
+                        }}
+                        placeholder="Enter technical notes for this labor task..."
+                      />
+                      <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "8px" }}>
+                        <button
+                          onClick={() => setEditingTrackingLaborId(null)}
+                          style={{
+                            padding: "6px 12px",
+                            backgroundColor: "#f5f5f5",
+                            color: "#666",
+                            border: "none",
+                            borderRadius: "8px",
+                            cursor: "pointer",
+                            fontSize: "13px"
+                          }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={() => handleUpdateLaborTracking(labor.id, laborTrackingNotes)}
+                          style={{
+                            padding: "6px 12px",
+                            backgroundColor: "#1976d2",
+                            color: "white",
+                            border: "none",
+                            borderRadius: "8px",
+                            cursor: "pointer",
+                            fontSize: "13px"
+                          }}
+                        >
+                          Save Notes
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Panel derecho - Formulario para añadir */}
+        <div
+          style={{
+            width: "40%",
+            padding: "20px",
+            backgroundColor: "#fafbfc",
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          <h3
+            style={{
+              margin: "0 0 16px 0",
+              fontSize: "16px",
+              fontWeight: "600",
+              color: "#333",
+            }}
+          >
+            Add New Labor / Service
+          </h3>
+
+          <div
+            style={{
+              backgroundColor: "white",
+              borderRadius: "12px",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+              border: "1px solid #eee",
+              padding: "20px",
+              marginBottom: "20px",
+            }}
+          >
+            <div style={{ marginBottom: "16px" }}>
+              <label
+                style={{
+                  display: "block",
+                  marginBottom: "8px",
+                  fontSize: "14px",
+                  fontWeight: "500",
+                  color: "#333",
+                }}
+              >
+                Labor Description
+              </label>
+              <input
+                type="text"
+                value={laborDescription}
+                onChange={(e) => setLaborDescription(e.target.value)}
+                placeholder="e.g., Oil change, Brake system repair, etc."
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: "8px",
+                  border: "1px solid #ddd",
+                  fontSize: "14px",
+                  backgroundColor: "#fff",
+                  outline: "none",
+                  boxSizing: "border-box"
+                }}
+              />
+            </div>
+
+            {/* Solo mostrar el campo de precio si se va a facturar */}
+{laborIsBilled ? (
+  <div style={{ marginBottom: "16px" }}>
+    <label>Labor Price ($)</label>
+    <div style={{ position: "relative" }}>
+      <span>$</span>
+      <input
+        type="number"
+        value={laborPrice}
+        onChange={(e) => setLaborPrice(e.target.value)}
+        placeholder="0.00"
+        step="0.01"
+        min="0"
+      />
+    </div>
+  </div>
+) : null}
+
+            <div style={{ marginBottom: "16px" }}>
+              <label
+                style={{
+                  display: "block",
+                  marginBottom: "8px",
+                  fontSize: "14px",
+                  fontWeight: "500",
+                  color: "#333",
+                }}
+              >
+                Technical Notes
+              </label>
+              <textarea
+                value={laborTrackingNotes}
+                onChange={(e) => setLaborTrackingNotes(e.target.value)}
+                placeholder="Enter technical details or instructions for this labor task..."
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: "8px",
+                  border: "1px solid #ddd",
+                  fontSize: "14px",
+                  backgroundColor: "#fff",
+                  outline: "none",
+                  minHeight: "100px",
+                  resize: "vertical",
+                  boxSizing: "border-box"
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: "20px" }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  margin: "8px 0",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  id="labor-billed"
+                  checked={laborIsBilled}
+                  onChange={(e) => {
+                    const isChecked = e.target.checked;
+                    setLaborIsBilled(isChecked);
+                    // Si se desmarca, resetear el precio a vacío
+                    if (!isChecked) {
+                      setLaborPrice("");
+                    }
+                  }}
+                  style={{ 
+                    marginRight: "8px",
+                    width: "16px",
+                    height: "16px",
+                    cursor: "pointer"
+                  }}
+                />
+                <label
+                  htmlFor="labor-billed"
+                  style={{ fontSize: "14px", color: "#555", cursor: "pointer" }}
+                >
+                  Include in billing (add to invoice)
+                </label>
+              </div>
+            </div>
+
+            <button
+              onClick={handleAddLabor}
+              style={{
+                width: "100%",
+                padding: "12px",
+                backgroundColor: "#FF9800",
+                color: "white",
+                border: "none",
+                borderRadius: "8px",
+                cursor: "pointer",
+                fontWeight: "600",
+                fontSize: "14px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
+                boxShadow: "0 2px 6px rgba(255, 152, 0, 0.3)",
+                transition: "all 0.2s ease",
+              }}
+              onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#F57C00"}
+              onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#FF9800"}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <div
+                  style={{
+                    width: "20px",
+                    height: "20px",
+                    border: "2px solid rgba(255,255,255,0.3)",
+                    borderTop: "2px solid white",
+                    borderRadius: "50%",
+                    animation: "spin 1s linear infinite",
+                  }}
+                ></div>
+              ) : (
+                <>
+                  <FontAwesomeIcon icon={faPlus} />
+                  Add Labor Task
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Labor Statistics Panel */}
+          <div
+            style={{
+              backgroundColor: "#fff",
+              borderRadius: "12px",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+              border: "1px solid #eee",
+              padding: "16px",
+              marginBottom: "20px",
+            }}
+          >
+            <h4 style={{ margin: "0 0 12px 0", fontSize: "15px", color: "#333" }}>
+              Labor Summary
+            </h4>
+            
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+              <div style={{ 
+                padding: "12px", 
+                borderRadius: "10px",
+                backgroundColor: "#e8f5e9",
+                border: "1px solid #c8e6c9"
+              }}>
+                <div style={{ fontSize: "12px", color: "#555", marginBottom: "4px" }}>
+                  Completed Tasks
+                </div>
+                <div style={{ fontSize: "18px", fontWeight: "600", color: "#2e7d32" }}>
+                  {labors.filter(l => l.is_completed === 1).length}
                 </div>
               </div>
-            ))}
+              
+              <div style={{ 
+                padding: "12px", 
+                borderRadius: "10px",
+                backgroundColor: "#fff3e0",
+                border: "1px solid #ffe0b2"
+              }}>
+                <div style={{ fontSize: "12px", color: "#555", marginBottom: "4px" }}>
+                  Pending Tasks
+                </div>
+                <div style={{ fontSize: "18px", fontWeight: "600", color: "#e65100" }}>
+                  {labors.filter(l => l.is_completed !== 1).length}
+                </div>
+              </div>
+              
+              <div style={{ 
+                padding: "12px", 
+                borderRadius: "10px",
+                backgroundColor: "#f3e5f5",
+                border: "1px solid #e1bee7",
+                gridColumn: "1 / -1"
+              }}>
+                <div style={{ fontSize: "12px", color: "#555", marginBottom: "4px" }}>
+                  Total Labor Value
+                </div>
+                <div style={{ fontSize: "18px", fontWeight: "600", color: "#6a1b9a" }}>
+                  $
+                  {labors
+                    .reduce(
+                      (sum, labor) => sum + parseFloat(labor.price || 0),
+                      0
+                    )
+                    .toFixed(2)}
+                </div>
+              </div>
+            </div>
           </div>
-        )}
+
+          {/* Notification */}
+          {notification.show && (
+            <div
+              style={{
+                position: "absolute",
+                bottom: "24px",
+                right: "24px",
+                width: "300px",
+                padding: "16px",
+                borderRadius: "8px",
+                backgroundColor: notification.type === "success" ? "#e8f5e9" : "#ffebee",
+                border: `1px solid ${notification.type === "success" ? "#c8e6c9" : "#ffcdd2"}`,
+                color: notification.type === "success" ? "#2e7d32" : "#c62828",
+                display: "flex",
+                alignItems: "flex-start",
+                gap: "12px",
+                animation: "fadeIn 0.3s ease",
+                zIndex: 1000,
+                boxShadow: "0 4px 12px rgba(0,0,0,0.1)"
+              }}
+            >
+              <div style={{ 
+                width: "24px",
+                height: "24px",
+                borderRadius: "50%",
+                backgroundColor: notification.type === "success" ? "#c8e6c9" : "#ffcdd2",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0
+              }}>
+                <FontAwesomeIcon 
+                  icon={notification.type === "success" ? faCheck : faExclamationCircle} 
+                  style={{ fontSize: '12px', color: notification.type === "success" ? "#2e7d32" : "#c62828" }} 
+                />
+              </div>
+              <div>
+                <div style={{ fontWeight: "600", marginBottom: "4px" }}>
+                  {notification.type === "success" ? "Success" : "Error"}
+                </div>
+                <div>{notification.message}</div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div
+        style={{
+          padding: "16px 24px",
+          borderTop: "1px solid rgba(0,0,0,0.06)",
+          display: "flex",
+          justifyContent: "flex-end",
+          backgroundColor: "#fafbfc",
+        }}
+      >
+        <button
+          onClick={() => setShowLaborModal(false)}
+          style={{
+            padding: "10px 24px",
+            backgroundColor: "#5932EA",
+            color: "white",
+            border: "none",
+            borderRadius: "10px",
+            cursor: "pointer",
+            fontSize: "14px",
+            fontWeight: "600",
+            transition: "all 0.2s",
+            boxShadow: "0 2px 6px rgba(89, 50, 234, 0.2)",
+          }}
+          onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#4321C9"}
+          onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#5932EA"}
+        >
+          Close
+        </button>
       </div>
     </div>
   </div>
@@ -3932,6 +6061,91 @@ const JobsheetView = () => {
           }}
         >
           Delete
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+{showBillingConfirmModal && (
+  <div style={{
+    position: "fixed",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 2000
+  }}>
+    <div style={{
+      background: "#fff",
+      borderRadius: 12,
+      padding: 28,
+      width: 380,
+      boxShadow: "0 4px 24px rgba(0,0,0,0.18)",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center"
+    }}>
+      <div style={{
+        width: "60px",
+        height: "60px",
+        borderRadius: "50%",
+        backgroundColor: "#fff3e0",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        marginBottom: "16px"
+      }}>
+        <FontAwesomeIcon icon={faExclamationCircle} style={{ fontSize: '28px', color: '#FF9800' }} />
+      </div>
+      
+      <h2 style={{margin: 0, marginBottom: 16, fontSize: 18, color: '#333', textAlign: 'center'}}>Remove from Billing?</h2>
+      
+      <p style={{margin: 0, marginBottom: 24, color: '#555', textAlign: 'center', fontSize: '14px'}}>
+        This action will remove this service from billing and the saved price will be lost.
+      </p>
+      
+      <div style={{display: 'flex', gap: 16, width: '100%'}}>
+        <button
+          onClick={() => setShowBillingConfirmModal(false)}
+          style={{
+            flex: 1,
+            padding: '12px 10px',
+            backgroundColor: '#f5f5f5',
+            color: '#333',
+            border: 'none',
+            borderRadius: 8,
+            cursor: 'pointer',
+            fontWeight: 500,
+            fontSize: '14px'
+          }}
+        >
+          Cancel
+        </button>
+        <button
+          onClick={() => {
+            if (laborToUnbill) {
+              handleToggleLaborBilled(laborToUnbill);
+              setLaborToUnbill(null);
+            }
+            setShowBillingConfirmModal(false);
+          }}
+          style={{
+            flex: 1,
+            padding: '12px 10px',
+            backgroundColor: '#1976d2',
+            color: 'white',
+            border: 'none',
+            borderRadius: 8,
+            cursor: 'pointer',
+            fontWeight: 600,
+            fontSize: '14px'
+          }}
+        >
+          Confirm
         </button>
       </div>
     </div>

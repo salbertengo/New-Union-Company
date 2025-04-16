@@ -25,7 +25,6 @@ class JobsheetController {
         try {
           if (js.customer_id) {
             customer = await CustomerService.getCustomerById(js.customer_id);
-            console.log(`Customer for ID ${js.customer_id}:`, customer ? "Found" : "Not found");
           }
         } catch (error) {
           console.error(`Error fetching customer ${js.customer_id}:`, error);
@@ -34,7 +33,6 @@ class JobsheetController {
         try {
           if (js.vehicle_id) {
             vehicle = await VehicleService.getVehicleById(js.vehicle_id);
-            console.log(`Vehicle for ID ${js.vehicle_id}:`, vehicle ? "Found" : "Not found");
           }
         } catch (error) {
           console.error(`Error fetching vehicle ${js.vehicle_id}:`, error);
@@ -47,11 +45,7 @@ class JobsheetController {
           license_plate: vehicle ? vehicle.plate : 'Sin placa'
         };
         
-        console.log("Enriched jobsheet:", {
-          id: enriched.id,
-          customer_name: enriched.customer_name,
-          vehicle_model: enriched.vehicle_model
-        });
+
         
         return enriched;
       }));
