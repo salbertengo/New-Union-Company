@@ -719,7 +719,7 @@ const CustomersView = () => {
     }
   
     try {
-      let url = '${API_URL}/customers';
+      let url = `${API_URL}/customers`;
       if (search) {
         url += `?search=${encodeURIComponent(search)}`;
       }

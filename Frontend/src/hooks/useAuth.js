@@ -1,7 +1,7 @@
 import { useState, useEffect, createContext, useContext } from 'react';
-import axios from 'axios';
 
-const API_URL = 'http://localhost:3000';
+const API_URL = process.env.REACT_APP_API_URL;
+console.log("API_URL desde React:", API_URL);
 
 const AuthContext = createContext();
 
@@ -9,14 +9,6 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-
-  // Set up axios defaults
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    }
-  }, []);
 
   // Verify token on load
   useEffect(() => {
@@ -28,12 +20,18 @@ export const AuthProvider = ({ children }) => {
       }
 
       try {
-        const response = await axios.get(`${API_URL}/auth/verify`, {
-          headers: { Authorization: `Bearer ${token}` }
+        const response = await fetch(`${API_URL}/auth/verify`, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
         });
 
-        if (response.data.valid) {
-          setUser(response.data.user);
+        if (!response.ok) throw new Error("Invalid response");
+
+        const data = await response.json();
+
+        if (data.valid) {
+          setUser(data.user);
           setIsLoggedIn(true);
         } else {
           localStorage.removeItem('token');
@@ -49,59 +47,62 @@ export const AuthProvider = ({ children }) => {
     checkAuth();
   }, []);
 
-  // Login function
   const login = async (username, password) => {
     try {
-      // Clear any previous auth headers
-      delete axios.defaults.headers.common['Authorization'];
-
-      const response = await axios.post(`${API_URL}/auth/login`, {
-        username,
-        password
+      const response = await fetch(`${API_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
       });
 
-      // Check if token was returned
-      if (!response.data.token) {
+      if (!response.ok) {
+        console.error('Login failed with status:', response.status);
+        return false;
+      }
+
+      const data = await response.json();
+      const token = data.token;
+
+      if (!token) {
         console.error('No token received');
         return false;
       }
 
-      // Store token
-      const token = response.data.token;
       localStorage.setItem('token', token);
-      
-      // Set auth header for future requests
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 
-      // Get user data
-      const userResponse = await axios.get(`${API_URL}/auth/verify`, {
+      const userResponse = await fetch(`${API_URL}/auth/verify`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      if (userResponse.data.valid) {
-        setUser(userResponse.data.user);
+      if (!userResponse.ok) {
+        console.error('Token verification failed');
+        localStorage.removeItem('token');
+        return false;
+      }
+
+      const userData = await userResponse.json();
+
+      if (userData.valid) {
+        setUser(userData.user);
         setIsLoggedIn(true);
         return true;
+      } else {
+        localStorage.removeItem('token');
+        return false;
       }
-      
-      // If verification failed
-      localStorage.removeItem('token');
-      return false;
+
     } catch (error) {
-      console.error('Login error:', error.response?.data || error.message);
+      console.error('Login error:', error);
       return false;
     }
   };
 
-  // Logout function
   const logout = () => {
     localStorage.removeItem('token');
-    delete axios.defaults.headers.common['Authorization'];
     setUser(null);
     setIsLoggedIn(false);
   };
 
-  // Role-based permissions
   const isAdmin = () => user?.role === 'admin';
   const isMechanic = () => user?.role === 'mechanic';
 

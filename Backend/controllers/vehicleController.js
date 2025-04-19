@@ -32,12 +32,17 @@ class VehicleController {
 
   static async create(req, res) {
     try {
-      const vehicleId = await VehicleService.createVehicle(req.body);
+      // Crear una copia del body con un customer_id predeterminado si no 
+      const vehicleData = {
+        ...req.body,
+        customer_id: req.body.customer_id || 4 
+      };
+      
+      const vehicleId = await VehicleService.createVehicle(vehicleData);
       res.status(201).json({ id: vehicleId });
     } catch (err) {
       res.status(400).json({ error: err.message });
-    }
-  }
+    }}
 
   static async update(req, res) {
     try {

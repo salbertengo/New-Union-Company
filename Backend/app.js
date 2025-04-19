@@ -16,11 +16,8 @@ const app = express();
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, 'build')));
 
-app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:4000'],
-  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-  credentials: true,
-}));
+app.use(cors());
+
 
 app.use('/auth', authRoutes);
 app.use('/inventory', inventoryRouter);
@@ -34,5 +31,6 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'build', 'index.html'));
 });
 
-app.listen(3000, '0,0,0,0', () => {
+app.listen(3000, '0.0.0.0', () => {
+  console.log('Servidor corriendo en 0.0.0.0:3000');
 });

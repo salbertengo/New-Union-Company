@@ -199,7 +199,7 @@ const CreateJobsheetModal = ({
     setCreatingCustomer(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('${API_URL}/customers', {
+      const response = await fetch(`${API_URL}/customers`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -247,7 +247,7 @@ const CreateJobsheetModal = ({
       const vehicleData = {
         plate: newVehicleDetails.plate,
         model: newVehicleDetails.model,
-        customer_id: 1 // SIEMPRE crear primero con customer_id 1
+        customer_id: 4
       };
   
       const response = await fetch(`${API_URL}/vehicles`, {
@@ -267,7 +267,7 @@ const CreateJobsheetModal = ({
           id: responseData.id || Date.now(),
           plate: newVehicleDetails.plate,
           model: newVehicleDetails.model,
-          customer_id: 1
+          customer_id: 4
         };
         
         setSelectedVehicle(vehicle);
