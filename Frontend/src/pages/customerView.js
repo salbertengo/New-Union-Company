@@ -691,7 +691,7 @@ const CustomersView = () => {
   const [loading, setLoading] = useState(false);
   const searchTimeout = useRef(null);
   const vehicleGridRef = useRef(null);
-
+  const API_URL = process.env.REACT_APP_API_URL;
   // Definir defaultColDef por separado, como en InventoryView
   const defaultColDef = {
     resizable: true,
@@ -719,7 +719,7 @@ const CustomersView = () => {
     }
   
     try {
-      let url = 'http://localhost:3000/customers';
+      let url = '${API_URL}/customers';
       if (search) {
         url += `?search=${encodeURIComponent(search)}`;
       }
@@ -747,7 +747,7 @@ const CustomersView = () => {
   const fetchVehicles = async (customerId) => {
     const token = localStorage.getItem('token');
     try {
-      const response = await fetch(`http://localhost:3000/vehicles?customer_id=${customerId}`, {
+      const response = await fetch(`${API_URL}/vehicles?customer_id=${customerId}`, {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
@@ -821,7 +821,7 @@ const CustomersView = () => {
       let response;
   
       if (customerData.id) {
-        response = await fetch(`http://localhost:3000/customers/${customerData.id}`, {
+        response = await fetch(`${API_URL}/customers/${customerData.id}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -830,7 +830,7 @@ const CustomersView = () => {
           body: JSON.stringify(customerData)
         });
       } else {
-        response = await fetch('http://localhost:3000/customers', {
+        response = await fetch(`${API_URL}/customers`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -860,7 +860,7 @@ const CustomersView = () => {
 
     const token = localStorage.getItem('token');
     try {
-      const response = await fetch(`http://localhost:3000/customers/${editCustomer.id}`, {
+      const response = await fetch(`${API_URL}/customers/${editCustomer.id}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -890,7 +890,7 @@ const CustomersView = () => {
       let response;
 
       if (editVehicle.id) {
-        response = await fetch(`http://localhost:3000/vehicles/${editVehicle.id}`, {
+        response = await fetch(`${API_URL}/vehicles/${editVehicle.id}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -899,7 +899,7 @@ const CustomersView = () => {
           body: JSON.stringify(editVehicle)
         });
       } else {
-        response = await fetch('http://localhost:3000/vehicles', {
+        response = await fetch(`${API_URL}/vehicles`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -930,7 +930,7 @@ const CustomersView = () => {
 
     const token = localStorage.getItem('token');
     try {
-      const response = await fetch(`http://localhost:3000/vehicles/${editVehicle.id}`, {
+      const response = await fetch(`${API_URL}/vehicles/${editVehicle.id}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',

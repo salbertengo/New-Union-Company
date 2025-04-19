@@ -30,7 +30,7 @@ function UserManagement() {
     localStorage.removeItem('token');
     navigate('/login');
   };
-  
+  const API_URL = process.env.REACT_APP_API_URL;
   // Redirect if not admin
   useEffect(() => {
     if (!isAdmin()) {
@@ -44,7 +44,7 @@ function UserManagement() {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:3000/users', {
+      const response = await fetch(`${API_URL}/users`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -113,8 +113,8 @@ function UserManagement() {
     try {
       const token = localStorage.getItem('token');
       const url = currentUser 
-        ? `http://localhost:3000/users/${currentUser.id}` 
-        : 'http://localhost:3000/auth/register';
+        ? `${API_URL}/users/${currentUser.id}` 
+        : `${API_URL}/auth/register`;
       
       const method = currentUser ? 'PUT' : 'POST';
       const body = currentUser 
@@ -159,7 +159,7 @@ function UserManagement() {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:3000/users/${currentUser.id}`, {
+      const response = await fetch(`${API_URL}/users/${currentUser.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -188,7 +188,7 @@ function UserManagement() {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:3000/users/${currentUser.id}/password`, {
+      const response = await fetch(`${API_URL}/users/${currentUser.id}/password`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

@@ -11,12 +11,12 @@ ModuleRegistry.registerModules([ClientSideRowModelModule]);
 const Sumary = () => {
   const [inventory, setInventory] = useState([]);
   const [loading, setLoading] = useState(true);
-
+  const API_URL = process.env.REACT_APP_API_URL;
   useEffect(() => {
     const fetchInventory = async () => {
       try {
         const token = localStorage.getItem('token');
-        const response = await fetch('http://localhost:3000/inventory', {
+        const response = await fetch(`${API_URL}/inventory`, {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`

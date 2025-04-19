@@ -14,7 +14,7 @@ const CompatibilityCheck = () => {
   const [rowData, setRowData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [columnDefs, setColumnDefs] = useState([]);
-
+  const API_URL = process.env.REACT_APP_API_URL;
   // Ajusta las columnas según la búsqueda
   useEffect(() => {
     // Si solo spareName (repuesto)
@@ -61,7 +61,7 @@ const CompatibilityCheck = () => {
       if (model.trim()) params.append('motorcycleModel', model.trim());
 
       const response = await fetch(
-        `http://localhost:3000/compatibility?${params.toString()}`,
+        `${API_URL}/compatibility?${params.toString()}`,
         {
           headers: {
             'Content-Type': 'application/json',

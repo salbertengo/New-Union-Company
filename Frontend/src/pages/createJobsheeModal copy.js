@@ -17,7 +17,7 @@ const CreateJobsheetModal = ({
   const [selectedVehicle, setSelectedVehicle] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [notification, setNotification] = useState({ show: false, message: '', type: '' });
-  
+  const API_URL = process.env.REACT_APP_API_URL;
   // New vehicle details
   const [newVehicleDetails, setNewVehicleDetails] = useState({
     plate: '',
@@ -79,7 +79,7 @@ const CreateJobsheetModal = ({
           if (!token) return;
 
           const response = await fetch(
-            `http://localhost:3000/vehicles?search=${encodeURIComponent(value)}`,
+            `${API_URL}/vehicles?search=${encodeURIComponent(value)}`,
             {
               headers: {
                 "Content-Type": "application/json",
@@ -137,7 +137,7 @@ const CreateJobsheetModal = ({
         customer_id: isTemporaryVehicle || assignCustomerLater ? null : 1
       };
   
-      const response = await fetch("http://localhost:3000/vehicles", {
+      const response = await fetch(`${API_URL}/vehicles`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -213,7 +213,7 @@ const CreateJobsheetModal = ({
         service_notes: ""
       };
 
-      const response = await fetch("http://localhost:3000/jobsheets", {
+      const response = await fetch(`${API_URL}/jobsheets`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

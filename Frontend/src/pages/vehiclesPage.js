@@ -45,6 +45,7 @@ const VehiclesPage = () => {
   const [showCommonModels, setShowCommonModels] = useState(false);
   const [showJobsheetModal, setShowJobsheetModal] = useState(false);
   const [completeJobsheet, setCompleteJobsheet] = useState(null);
+  const API_URL = process.env.REACT_APP_API_URL;
   // Reference for AG Grid table
   const gridRef = useRef(null);
 
@@ -294,7 +295,7 @@ const VehiclesPage = () => {
       // First fetch all jobsheets once
       let allJobsheets = [];
       try {
-        const jobsheetsResponse = await fetch(`http://localhost:3000/jobsheets`, {
+        const jobsheetsResponse = await fetch(`${API_URL}/jobsheets`, {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
@@ -310,7 +311,7 @@ const VehiclesPage = () => {
       }
       
       // Then fetch and process vehicles
-      const response = await fetch('http://localhost:3000/vehicles', {
+      const response = await fetch(`${API_URL}/vehicles`, {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
@@ -333,7 +334,7 @@ const VehiclesPage = () => {
           // Process customer info as before
           if (vehicle.customer_id) {
             try {
-              const customerResponse = await fetch(`http://localhost:3000/customers/${vehicle.customer_id}`, {
+              const customerResponse = await fetch(`${API_URL}/customers/${vehicle.customer_id}`, {
                 headers: {
                   'Content-Type': 'application/json',
                   'Authorization': `Bearer ${token}`
@@ -402,7 +403,7 @@ const VehiclesPage = () => {
     }
 
     try {
-      const response = await fetch('http://localhost:3000/customers', {
+      const response = await fetch(`${API_URL}/customers`, {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
@@ -429,7 +430,7 @@ const VehiclesPage = () => {
     
     try {
       // First fetch all jobsheets (since the endpoint isn't filtering correctly)
-      const response = await fetch(`http://localhost:3000/jobsheets`, {
+      const response = await fetch(`${API_URL}/jobsheets`, {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`  
@@ -451,7 +452,7 @@ const VehiclesPage = () => {
           // Rest of your existing code for fetching labors
           const enhancedJobsheets = await Promise.all(vehicleJobsheets.map(async jobsheet => {
             try {
-              const laborResponse = await fetch(`http://localhost:3000/labor/jobsheet/${jobsheet.id}`, {
+              const laborResponse = await fetch(`${API_URL}/labor/jobsheet/${jobsheet.id}`, {
                 headers: {
                   'Content-Type': 'application/json',
                   'Authorization': `Bearer ${token}`
@@ -494,7 +495,7 @@ const VehiclesPage = () => {
     
     try {
       // First search for customers matching the name
-      const customersResponse = await fetch(`http://localhost:3000/customers?search=${encodeURIComponent(customerName)}`, {
+      const customersResponse = await fetch(`${API_URL}/customers?search=${encodeURIComponent(customerName)}`, {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
@@ -520,7 +521,7 @@ const VehiclesPage = () => {
       let allVehicles = [];
       
       for (const id of customerIds) {
-        const vehiclesResponse = await fetch(`http://localhost:3000/vehicles?customer_id=${id}`, {
+        const vehiclesResponse = await fetch(`${API_URL}/vehicles?customer_id=${id}`, {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
@@ -616,7 +617,7 @@ const VehiclesPage = () => {
       
       try {
         // Get jobsheets for this vehicle
-        const response = await fetch(`http://localhost:3000/jobsheets?vehicle_id=${vehicle.id}&_sort=date_created&_order=desc&_limit=1`, {
+        const response = await fetch(`${API_URL}/jobsheets?vehicle_id=${vehicle.id}&_sort=date_created&_order=desc&_limit=1`, {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
@@ -630,7 +631,7 @@ const VehiclesPage = () => {
             
             // Also fetch labor tasks for this jobsheet
             try {
-              const laborResponse = await fetch(`http://localhost:3000/labor/jobsheet/${jobsheetData.id}`, {
+              const laborResponse = await fetch(`${API_URL}/labor/jobsheet/${jobsheetData.id}`, {
                 headers: {
                   'Content-Type': 'application/json',
                   'Authorization': `Bearer ${token}`
@@ -693,7 +694,7 @@ const VehiclesPage = () => {
       let response;
       if (currentVehicle) {
         // Update existing vehicle
-        response = await fetch(`http://localhost:3000/vehicles/${currentVehicle.id}`, {
+        response = await fetch(`${API_URL}/vehicles/${currentVehicle.id}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -703,7 +704,7 @@ const VehiclesPage = () => {
         });
       } else {
         // Create new vehicle
-        response = await fetch('http://localhost:3000/vehicles', {
+        response = await fetch(`${API_URL}/vehicles`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

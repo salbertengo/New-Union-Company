@@ -18,7 +18,7 @@ const CreateJobsheetModal = ({
   const [selectedVehicle, setSelectedVehicle] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [notification, setNotification] = useState({ show: false, message: '', type: '' });
-  
+  const API_URL = process.env.REACT_APP_API_URL;
   // New vehicle details
   const [newVehicleDetails, setNewVehicleDetails] = useState({
     plate: '',
@@ -141,7 +141,7 @@ const CreateJobsheetModal = ({
     setIsLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`http://localhost:3000/vehicles?search=${encodeURIComponent(plate)}`, {
+      const response = await fetch(`${API_URL}/vehicles?search=${encodeURIComponent(plate)}`, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
@@ -199,7 +199,7 @@ const CreateJobsheetModal = ({
     setCreatingCustomer(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:3000/customers', {
+      const response = await fetch('${API_URL}/customers', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -210,7 +210,7 @@ const CreateJobsheetModal = ({
       if (response.ok) {
         const data = await response.json();
         // Asociar el vehículo al nuevo customer
-        await fetch(`http://localhost:3000/vehicles/${selectedVehicle.id}`, {
+        await fetch(`${API_URL}/vehicles/${selectedVehicle.id}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -250,7 +250,7 @@ const CreateJobsheetModal = ({
         customer_id: 1 // SIEMPRE crear primero con customer_id 1
       };
   
-      const response = await fetch("http://localhost:3000/vehicles", {
+      const response = await fetch(`${API_URL}/vehicles`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -314,7 +314,7 @@ const CreateJobsheetModal = ({
         service_notes: ""
       };
 
-      const response = await fetch("http://localhost:3000/jobsheets", {
+      const response = await fetch(`${API_URL}/jobsheets`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -327,7 +327,7 @@ const CreateJobsheetModal = ({
         const jobsheet = await response.json();
         // Crear labors para cada requerimiento
         for (const note of filteredNotes) {
-          await fetch("http://localhost:3000/labor", {
+          await fetch(`${API_URL}/labor`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",

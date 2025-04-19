@@ -31,7 +31,7 @@ const InventoryView = () => {
   const [loading, setLoading] = useState(false);
   const searchTimeout = useRef(null);
   const [gridReady, setGridReady] = useState(false);
-
+  const API_URL = process.env.REACT_APP_API_URL;
   const fetchInventoryData = useCallback(async (search = '', category = '') => {
     setLoading(true);
     const token = localStorage.getItem('token');
@@ -42,7 +42,7 @@ const InventoryView = () => {
     }
     
     try {
-      let url = 'http://localhost:3000/inventory';
+      let url = `${API_URL}/inventory`;
       const params = new URLSearchParams();
       
       if (search) {
@@ -157,7 +157,7 @@ const InventoryView = () => {
   const fetchCompatibilities = async (productId) => {
     const token = localStorage.getItem('token');
     try {
-      const response = await fetch(`http://localhost:3000/compatibility/${productId}`, {
+      const response = await fetch(`${API_URL}/compatibility/${productId}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -182,7 +182,7 @@ const InventoryView = () => {
     }
     const token = localStorage.getItem('token');
     try {
-      const response = await fetch(`http://localhost:3000/compatibility`, {
+      const response = await fetch(`${API_URL}/compatibility`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -207,7 +207,7 @@ const InventoryView = () => {
   const handleDeleteCompatibility = async (motorcycle_model) => {
     const token = localStorage.getItem('token');
     try {
-      const response = await fetch(`http://localhost:3000/compatibility`, {
+      const response = await fetch(`${API_URL}/compatibility`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -301,7 +301,7 @@ const InventoryView = () => {
     try {
       let response;
       if (editItem.id) {
-        response = await fetch(`http://localhost:3000/inventory/${editItem.id}`, {
+        response = await fetch(`${API_URL}/inventory/${editItem.id}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -310,7 +310,7 @@ const InventoryView = () => {
           body: JSON.stringify(editItem),
         });
       } else {
-        response = await fetch('http://localhost:3000/inventory', {
+        response = await fetch(`${API_URL}/inventory`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -338,7 +338,7 @@ const InventoryView = () => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:3000/inventory/${editItem.id}`, {
+      const response = await fetch(`${API_URL}/inventory/${editItem.id}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',

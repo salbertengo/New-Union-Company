@@ -82,8 +82,8 @@ const JobsheetView = () => {
   const [editingTrackingLaborId, setEditingTrackingLaborId] = useState(null);
   const [showBillingConfirmModal, setShowBillingConfirmModal] = useState(false);
   const [laborToUnbill, setLaborToUnbill] = useState(null);
-const [editingJobsheet, setEditingJobsheet] = useState(null);
-
+  const [editingJobsheet, setEditingJobsheet] = useState(null);
+  const API_URL = process.env.REACT_APP_API_URL;
   const [formData, setFormData] = useState({
     customer_id: "",
     vehicle_id: "",
@@ -471,7 +471,7 @@ const [editingJobsheet, setEditingJobsheet] = useState(null);
       }
 
       // Para solicitudes sin búsqueda, usamos el endpoint normal
-      let url = "http://localhost:3000/jobsheets";
+      let url = `${API_URL}/jobsheets`;
       if (status && status !== "all") {
         url += `?state=${encodeURIComponent(status)}`;
       }
@@ -508,7 +508,7 @@ const [editingJobsheet, setEditingJobsheet] = useState(null);
 
     try {
       // Cargar todos los jobsheets, opcionalmente filtrados por estado
-      let url = "http://localhost:3000/jobsheets";
+      let url = `${API_URL}/jobsheets`;
       if (status && status !== "all") {
         url += `?state=${encodeURIComponent(status)}`;
       }
@@ -606,7 +606,7 @@ const [editingJobsheet, setEditingJobsheet] = useState(null);
       setIsLoading(true);
 
       const response = await fetch(
-        `http://localhost:3000/jobsheets/${jobsheet.id}`,
+        `${API_URL}/jobsheets/${jobsheet.id}`,
         {
           method: "GET",
           headers: {
@@ -621,7 +621,7 @@ const [editingJobsheet, setEditingJobsheet] = useState(null);
 
         // 1. FIXED: Use the correct URL structure for payments
         const paymentsResponse = await fetch(
-          `http://localhost:3000/jobsheets/payments/jobsheet/${freshJobsheet.id}`,
+          `${API_URL}/jobsheets/payments/jobsheet/${freshJobsheet.id}`,
           {
             headers: {
               "Content-Type": "application/json",
@@ -632,7 +632,7 @@ const [editingJobsheet, setEditingJobsheet] = useState(null);
 
         // 2. NEW: Fetch items for this jobsheet
         const itemsResponse = await fetch(
-          `http://localhost:3000/jobsheets/${freshJobsheet.id}/items`,
+          `${API_URL}/jobsheets/${freshJobsheet.id}/items`,
           {
             headers: {
               "Content-Type": "application/json",
@@ -643,7 +643,7 @@ const [editingJobsheet, setEditingJobsheet] = useState(null);
 
         // 3. NEW: Fetch labors for this jobsheet
         const laborsResponse = await fetch(
-          `http://localhost:3000/labor/jobsheet/${freshJobsheet.id}`,
+          `${API_URL}/labor/jobsheet/${freshJobsheet.id}`,
           {
             headers: {
               "Content-Type": "application/json",
@@ -716,7 +716,7 @@ const [editingJobsheet, setEditingJobsheet] = useState(null);
       const token = localStorage.getItem("token");
       if (!token) return;
 
-      const response = await fetch("http://localhost:3000/jobsheets/payments", {
+      const response = await fetch(`${API_URL}/jobsheets/payments`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -792,7 +792,7 @@ const [editingJobsheet, setEditingJobsheet] = useState(null);
       setIsLoading(true);
 
       // Changed URL to match your backend route structure
-      const url = `http://localhost:3000/jobsheets/payments/jobsheet/${jobsheetId}`;
+      const url = `${API_URL}/jobsheets/payments/jobsheet/${jobsheetId}`;
       console.log("Fetching payments from:", url);
 
       const response = await fetch(url, {
@@ -829,7 +829,7 @@ const [editingJobsheet, setEditingJobsheet] = useState(null);
       }
 
       const response = await fetch(
-        `http://localhost:3000/jobsheets/payments/${paymentId}`,
+        `${API_URL}/jobsheets/payments/${paymentId}`,
         {
           method: "DELETE",
           headers: {
@@ -888,7 +888,7 @@ const [editingJobsheet, setEditingJobsheet] = useState(null);
       try {
         // Use the correct endpoint - this matches what your backend expects
         const response = await fetch(
-          `http://localhost:3000/customers?search=${encodeURIComponent(value)}`,
+          `${API_URL}/customers?search=${encodeURIComponent(value)}`,
           {
             headers: {
               "Content-Type": "application/json",
@@ -1009,7 +1009,7 @@ const [editingJobsheet, setEditingJobsheet] = useState(null);
       }
 
       const response = await fetch(
-        `http://localhost:3000/jobsheets/${jobsheet.id}/items`,
+        `${API_URL}/jobsheets/${jobsheet.id}/items`,
         {
           headers: {
             "Content-Type": "application/json",
@@ -1055,7 +1055,7 @@ const [editingJobsheet, setEditingJobsheet] = useState(null);
       }
 
       setIsLoading(true);
-      const response = await fetch(`http://localhost:3000/jobsheets/items`, {
+      const response = await fetch(`${API_URL}/jobsheets/items`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1134,7 +1134,7 @@ const [editingJobsheet, setEditingJobsheet] = useState(null);
       }
 
       const response = await fetch(
-        `http://localhost:3000/jobsheets/${jobsheetId}/items`,
+        `${API_URL}/jobsheets/${jobsheetId}/items`,
         {
           headers: {
             "Content-Type": "application/json",
@@ -1163,7 +1163,7 @@ const [editingJobsheet, setEditingJobsheet] = useState(null);
 
       // Endpoint correcto según tus rutas
       const response = await fetch(
-        `http://localhost:3000/jobsheets/items/${itemId}`,
+        `${API_URL}/jobsheets/items/${itemId}`,
         {
           method: "DELETE",
           headers: {
@@ -1227,7 +1227,7 @@ const [editingJobsheet, setEditingJobsheet] = useState(null);
         return;
       }
 
-      const getResponse = await fetch(`http://localhost:3000/jobsheets/${id}`, {
+      const getResponse = await fetch(`${API_URL}/jobsheets/${id}`, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
@@ -1250,7 +1250,7 @@ const [editingJobsheet, setEditingJobsheet] = useState(null);
         state: nextStatus,
       };
 
-      const response = await fetch(`http://localhost:3000/jobsheets/${id}`, {
+      const response = await fetch(`${API_URL}/jobsheets/${id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -1279,7 +1279,7 @@ const [editingJobsheet, setEditingJobsheet] = useState(null);
     }
 
     try {
-      const response = await fetch("http://localhost:3000/customers", {
+      const response = await fetch(`${API_URL}/customers`, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
@@ -1306,7 +1306,7 @@ const [editingJobsheet, setEditingJobsheet] = useState(null);
     }
 
     try {
-      let url = "http://localhost:3000/vehicles";
+      let url = `${API_URL}/vehicles`;
       if (customerId) {
         url += `?customer_id=${customerId}`;
       }
@@ -1372,7 +1372,7 @@ const [editingJobsheet, setEditingJobsheet] = useState(null);
     }
 
     try {
-      let url = "http://localhost:3000/jobsheets";
+      let url = `${API_URL}/jobsheets`;
       let method = "POST";
 
       if (currentJobsheet) {
@@ -1412,7 +1412,7 @@ const [editingJobsheet, setEditingJobsheet] = useState(null);
 
     try {
       const response = await fetch(
-        `http://localhost:3000/jobsheets/${currentJobsheet.id}`,
+        `${API_URL}/jobsheets/${currentJobsheet.id}`,
         {
           method: "DELETE",
           headers: {
@@ -1466,7 +1466,7 @@ const [editingJobsheet, setEditingJobsheet] = useState(null);
 
       try {
         const response = await fetch(
-          `http://localhost:3000/inventory?search=${encodeURIComponent(value)}`,
+          `${API_URL}/inventory?search=${encodeURIComponent(value)}`,
           {
             headers: {
               "Content-Type": "application/json",
@@ -1515,7 +1515,7 @@ const [editingJobsheet, setEditingJobsheet] = useState(null);
       setIsLoading(true);
 
       const response = await fetch(
-        `http://localhost:3000/labor/jobsheet/${jobsheetId}`,
+        `${API_URL}/labor/jobsheet/${jobsheetId}`,
         {
           headers: {
             "Content-Type": "application/json",
@@ -1569,7 +1569,7 @@ const [editingJobsheet, setEditingJobsheet] = useState(null);
       // Si no es facturable, establecer explícitamente el precio como 0
       const priceToSend = laborIsBilled ? (laborPrice ? parseFloat(laborPrice) : 0) : 0;
   
-      const response = await fetch(`http://localhost:3000/labor`, {
+      const response = await fetch(`${API_URL}/labor`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1650,7 +1650,7 @@ const [editingJobsheet, setEditingJobsheet] = useState(null);
         }
       }
   
-      const response = await fetch(`http://localhost:3000/labor/${id}`, {
+      const response = await fetch(`${API_URL}/labor/${id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -1698,7 +1698,7 @@ const [editingJobsheet, setEditingJobsheet] = useState(null);
       const token = localStorage.getItem("token");
       if (!token) return;
       setIsLoading(true);
-      const response = await fetch(`http://localhost:3000/labor/${laborId}`, {
+      const response = await fetch(`${API_URL}/labor/${laborId}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -1730,7 +1730,7 @@ const [editingJobsheet, setEditingJobsheet] = useState(null);
 
       setIsLoading(true);
 
-      const response = await fetch(`http://localhost:3000/labor/${id}`, {
+      const response = await fetch(`${API_URL}/labor/${id}`, {
         method: "DELETE",
         headers: {
           "Content-Type": "application/json",
@@ -1825,7 +1825,7 @@ const [editingJobsheet, setEditingJobsheet] = useState(null);
     if (!token) return;
     try {
       // Refresca jobsheet
-      const response = await fetch(`http://localhost:3000/jobsheets/${currentJobsheet.id}`, {
+      const response = await fetch(`${API_URL}/jobsheets/${currentJobsheet.id}`, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
@@ -1836,7 +1836,7 @@ const [editingJobsheet, setEditingJobsheet] = useState(null);
         setCurrentJobsheet(freshJobsheet);
       }
       // Refresca items
-      const itemsResponse = await fetch(`http://localhost:3000/jobsheets/${currentJobsheet.id}/items`, {
+      const itemsResponse = await fetch(`${API_URL}/jobsheets/${currentJobsheet.id}/items`, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
@@ -1847,7 +1847,7 @@ const [editingJobsheet, setEditingJobsheet] = useState(null);
         setJobsheetItems(items);
       }
       // Refresca labors
-      const laborsResponse = await fetch(`http://localhost:3000/labor/jobsheet/${currentJobsheet.id}`, {
+      const laborsResponse = await fetch(`${API_URL}/labor/jobsheet/${currentJobsheet.id}`, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
@@ -1858,7 +1858,7 @@ const [editingJobsheet, setEditingJobsheet] = useState(null);
         setLabors(labors);
       }
       // Refresca payments
-      const paymentsResponse = await fetch(`http://localhost:3000/jobsheets/payments/jobsheet/${currentJobsheet.id}`, {
+      const paymentsResponse = await fetch(`${API_URL}/jobsheets/payments/jobsheet/${currentJobsheet.id}`, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,

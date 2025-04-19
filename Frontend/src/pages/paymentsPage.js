@@ -48,7 +48,7 @@ const PaymentsPage = () => {
   });
 
   const paymentMethods = ["cash", "credit_card", "debit_card", "transfer", "check", "other"];
-
+  const API_URL = process.env.REACT_APP_API_URL;
   const columnDefs = useMemo(() => [
     {
       headerName: 'ID',
@@ -228,7 +228,7 @@ const PaymentsPage = () => {
         return;
       }
   
-      const response = await fetch("http://localhost:3000/jobsheets/payments", {
+      const response = await fetch(`${API_URL}/jobsheets/payments`, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
@@ -244,7 +244,7 @@ const PaymentsPage = () => {
           const enhancedPayments = await Promise.all(data.map(async (payment) => {
             try {
               // Get the jobsheet to find the customer
-              const jobsheetResponse = await fetch(`http://localhost:3000/jobsheets/${payment.jobsheet_id}`, {
+              const jobsheetResponse = await fetch(`${API_URL}/jobsheets/${payment.jobsheet_id}`, {
                 headers: {
                   "Content-Type": "application/json",
                   Authorization: `Bearer ${token}`,
@@ -288,7 +288,7 @@ const PaymentsPage = () => {
         return;
       }
   
-      const response = await fetch("http://localhost:3000/jobsheets", {
+      const response = await fetch(`${API_URL}/jobsheets`, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
@@ -336,7 +336,7 @@ const PaymentsPage = () => {
         return;
       }
 
-      const response = await fetch(`http://localhost:3000/jobsheets/payments/${currentPayment.id}`, {
+      const response = await fetch(`${API_URL}/jobsheets/payments/${currentPayment.id}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -391,8 +391,8 @@ const PaymentsPage = () => {
       }
   
       const url = formData.id
-        ? `http://localhost:3000/jobsheets/payments/${formData.id}`
-        : "http://localhost:3000/jobsheets/payments";
+        ? `${API_URL}/jobsheets/payments/${formData.id}`
+        : `${API_URL}/jobsheets/payments`;
         
       const method = formData.id ? "PUT" : "POST";
   
