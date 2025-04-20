@@ -89,8 +89,38 @@ class JobsheetModel {
   }
 
   static async update(id, jobsheetData) {
+    const connection = await pool.getConnection();
     try {
-      const [result] = await pool.query(`
+      await connection.beginTransaction();
+      
+      // Verificar si estamos cambiando a estado "cancelled"
+      if (jobsheetData.state === 'cancelled') {
+        // Obtener estado actual para verificar que no estuviera ya cancelado
+        const [currentState] = await connection.query(
+          'SELECT state FROM jobsheets WHERE id = ?',
+          [id]
+        );
+        
+        // Solo restaurar stock si no estaba ya cancelado
+        if (currentState[0]?.state !== 'cancelled') {
+          // Obtener todos los items del jobsheet
+          const [items] = await connection.query(
+            'SELECT id, product_id, quantity FROM jobsheet_items WHERE jobsheet_id = ?',
+            [id]
+          );
+          
+          // Restaurar el stock en el inventario para cada item
+          for (const item of items) {
+            await connection.query(
+              'UPDATE inventory SET stock = stock + ? WHERE id = ?',
+              [item.quantity, item.product_id]
+            );
+          }
+        }
+      }
+  
+      // Actualizar el jobsheet
+      const [result] = await connection.query(`
         UPDATE jobsheets
         SET state = ?,
             vehicle_id = ?,
@@ -104,10 +134,14 @@ class JobsheetModel {
         jobsheetData.user_id,
         id
       ]);
-
+      
+      await connection.commit();
       return result.affectedRows > 0;
     } catch (error) {
+      await connection.rollback();
       throw error;
+    } finally {
+      connection.release();
     }
   }
 

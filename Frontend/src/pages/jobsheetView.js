@@ -142,26 +142,26 @@ const JobsheetView = () => {
        field: "id",
        width: 0,
        suppressMenu: true,
-       headerClass: "custom-header",
+       headerClass: "custom-header-sumary",
      },
      {
        headerName: "Customer",
        field: "customer_name",
        width: 140,
        suppressMenu: true,
-       headerClass: "custom-header",
+       headerClass: "custom-header-sumary",
      },
      {
        headerName: "Model",
        field: "vehicle_model",
        suppressMenu: true,
-       headerClass: "custom-header",
+       headerClass: "custom-header-sumary",
      },
      {
       headerName: "Plate",
       field: "license_plate",
       suppressMenu: true,
-      headerClass: "custom-header",
+      headerClass: "custom-header-sumary",
       width: 120,
       cellRenderer: (params) => {
         if (!params.data) return null;
@@ -173,7 +173,7 @@ const JobsheetView = () => {
        headerName: "Created",
        field: "created_at",
        suppressMenu: true,
-       headerClass: "custom-header",
+       headerClass: "custom-header-sumary",
        cellRenderer: (params) => {
          if (!params.data.created_at) return "—";
          const date = new Date(params.data.created_at);
@@ -218,6 +218,54 @@ const JobsheetView = () => {
       },
     },
     {
+      headerName: "Total Amount",
+      field: "total_amount",
+      width: 160,
+      headerClass: "custom-header-sumary",
+      cellRenderer: (params) => {
+        if (!params.data) return '';
+        
+        // Usar el valor total_amount si existe y no es 0, de lo contrario mostrar 0
+        const totalValue = parseFloat(params.data.total_amount || 0);
+        
+        return (
+          <div 
+            onClick={() => handleOpenPaymentsModal(params.data)}
+            style={{
+              display: "flex", 
+              alignItems: "center", 
+              justifyContent: "center",
+              cursor: "pointer",
+              padding: "0 12px",
+              height: "42px", 
+              borderRadius: "8px",
+              backgroundColor: "#f0f9ff",
+              border: "1px solid #d0e8ff",
+              transition: "all 0.2s ease"
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.backgroundColor = "#e3f2fd";
+              e.currentTarget.style.transform = "translateY(-2px)";
+              e.currentTarget.style.boxShadow = "0 4px 8px rgba(0,0,0,0.1)";
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.backgroundColor = "#f0f9ff";
+              e.currentTarget.style.transform = "translateY(0)";
+              e.currentTarget.style.boxShadow = "none";
+            }}
+          >
+            <div style={{ fontWeight: "600", color: "#0277BD", fontSize: "14px" }}>
+              ${totalValue.toFixed(2)}
+            </div>
+            <FontAwesomeIcon 
+              icon={faMoneyBillWave} 
+              style={{ color: "#0277BD", marginLeft: "8px", fontSize: "12px" }} 
+            />
+          </div>
+        );
+      },
+    },
+    {
       headerName: "Items",
       field: "items",
       width: 160,
@@ -236,44 +284,9 @@ const JobsheetView = () => {
         );
       },
     },
-    {
-      headerName: "Payments",
-      field: "payments",
-      width: 160,
-      headerClass: "custom-header-sumary",
-      cellRenderer: (params) => {
-        if (!params.data) return '';
-          return (
-            <ActionButtonsContainer>
-              <ActionButton
-              icon={faMoneyBillWave}
-              onClick={() => handleOpenPaymentsModal(params.data)}
-              type="primary"
-              />
-              </ActionButtonsContainer>
-              );
-            },
-          },
+  
 
-    {
-      headerName: "Labor",
-      field: "labor",
-      width: 160,
-      headerClass: "custom-header-sumary",
-      cellRenderer: (params) => {
-        if (!params.data) return '';
-        return (
-          <ActionButtonsContainer>
-            <ActionButton
-              icon={faTools}
-              onClick={() => handleOpenLaborModal(params.data)}
-              tooltip="Manage Labor"
-              type="warning"
-            />
-          </ActionButtonsContainer>
-        );
-      },
-    },
+    
     {
       headerName: "Actions",
       field: "actions",
@@ -283,12 +296,6 @@ const JobsheetView = () => {
         if (!params.data) return '';
         return (
           <ActionButtonsContainer>
-            <ActionButton
-              icon={faEdit}
-              onClick={() => handleEdit(params.data)}
-              tooltip="Edit Job Sheet"
-              type="default"
-            />
             {params.data.state !== "cancelled" && (
               <ActionButton
                 icon={faTrash}
@@ -949,17 +956,37 @@ const JobsheetView = () => {
 
   const handleOpenNewModal = () => {
     setCurrentJobsheet(null);
-    setFormData({
-      customer_id: "",
-      vehicle_id: "",
-      description: "",
-      state: "pending",
-      date_created: new Date().toISOString().split("T")[0],
-    });
-    setSelectedCustomerName("");
-    setCustomerSearchTerm("");
+    setEditingJobsheet(null);
     setShowModal(true);
   };
+
+  const handleCloseCreateModal = (jobsheetId) => {
+    setShowModal(false);
+    
+    // Si se recibió un ID, abrir el modal de inventario con ese jobsheet
+    if (jobsheetId) {
+      // Obtener el jobsheet completo utilizando el ID
+      fetch(`${API_URL}/jobsheets/${jobsheetId}`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      })
+      .then(response => response.json())
+      .then(jobsheetData => {
+        setCurrentJobsheet(jobsheetData);
+        // Abrir el modal de inventario con este jobsheet
+        setShowItemsModal(true);
+        // Opcional: cargar los items para este jobsheet
+        fetchJobsheetItems(jobsheetId);
+      })
+      .catch(err => console.error("Error al cargar el jobsheet:", err));
+    }
+    
+    // Refrescar la lista de jobsheets
+    fetchJobsheets(searchTerm, statusFilter);
+  };
+
   const getPaymentStatus = (jobsheet) => {
     if (!jobsheet.total_amount) return "No Items";
     if (!jobsheet.amount_paid) return "Unpaid";
@@ -978,15 +1005,16 @@ const JobsheetView = () => {
         searchInputRef.current.focus();
       }
     }, 100);
-
+  
     try {
       const token = localStorage.getItem("token");
       if (!token) {
         console.error("No token found");
         return;
       }
-
-      const response = await fetch(
+  
+      // Primero cargamos los items regulares
+      const itemsResponse = await fetch(
         `${API_URL}/jobsheets/${jobsheet.id}/items`,
         {
           headers: {
@@ -995,111 +1023,58 @@ const JobsheetView = () => {
           },
         }
       );
-
-      if (response.ok) {
-        const items = await response.json();
-        console.log("Items obtenidos:", items);
-        setJobsheetItems(items);
+  
+      // También cargamos los labours
+      const laborsResponse = await fetch(
+        `${API_URL}/labor/jobsheet/${jobsheet.id}`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+  
+      let items = [];
+      let labors = [];
+  
+      if (itemsResponse.ok) {
+        items = await itemsResponse.json();
       } else {
         // Para depurar: obtener el texto del error
-        const errorText = await response.text();
+        const errorText = await itemsResponse.text();
         console.error(
           "Error fetching jobsheet items:",
-          response.status,
+          itemsResponse.status,
           errorText
         );
       }
+  
+      if (laborsResponse.ok) {
+        labors = await laborsResponse.json();
+        // Transformar los labours para que se muestren correctamente en la lista de items
+        const laborItems = labors
+          .filter(labor => labor.is_completed === 1) // Solo incluir labours completados
+          .map(labor => ({
+            id: labor.id,
+            name: labor.description || "Labour Service",
+            price: parseFloat(labor.price || 0),
+            quantity: 1,
+            isLabourItem: true
+          }));
+        
+        // Combinar items regulares con items de labour
+        items = [...items, ...laborItems];
+      }
+  
+      console.log("Items combinados:", items);
+      setJobsheetItems(items);
     } catch (error) {
       console.error("Error fetching jobsheet items:", error);
     }
   };
 
-  const handleAddItem = async () => {
-    if (!newItem.product_id || !currentJobsheet) {
-      setNotification({
-        show: true,
-        message: "You must select a product and a jobsheet first",
-        type: "error",
-      });
-      setTimeout(() => setNotification({ show: false }), 3000);
-      return;
-    }
-
-    try {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        console.error("No token found");
-        return;
-      }
-
-      setIsLoading(true);
-      const response = await fetch(`${API_URL}/jobsheets/items`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          jobsheet_id: currentJobsheet.id,
-          product_id: newItem.product_id,
-          quantity: newItem.quantity,
-          price: newItem.price,
-        }),
-      });
-
-      const responseData = await response.text();
-      let errorMessage = responseData;
-
-      try {
-        const jsonData = JSON.parse(responseData);
-        errorMessage =
-          jsonData.error || jsonData.message || "Error desconocido";
-      } catch (e) {
-        // Si no es JSON, usar el texto tal cual
-        console.log("Respuesta no es JSON:", responseData);
-      }
-
-      if (response.ok) {
-        setNotification({
-          show: true,
-          message: "Product added successfully",
-          type: "success",
-        });
-        setTimeout(() => setNotification({ show: false }), 3000);
-
-        // Limpiar formulario
-        setNewItem({ name: "", quantity: 1, price: 0, product_id: null });
-
-        // Recargar lista de items
-        fetchJobsheetItems(currentJobsheet.id);
-        await refreshCurrentJobsheetData();
-        
-      } else {
-        console.error("Error adding item:", response.status, errorMessage);
-
-        // Mostrar el mensaje específico, incluido el de "Insufficient stock"
-        setNotification({
-          show: true,
-          message: errorMessage || "Error al agregar el producto",
-          type: "error",
-        });
-
-        // Para errores, mantener la notificación más tiempo
-        setTimeout(() => setNotification({ show: false }), 5000);
-      }
-    } catch (error) {
-      console.error("Error adding item:", error);
-
-      setNotification({
-        show: true,
-        message: "Error de conexión: " + error.message,
-        type: "error",
-      });
-      setTimeout(() => setNotification({ show: false }), 5000);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+ 
 
 
   // Función auxiliar para cargar items
@@ -1190,8 +1165,17 @@ const JobsheetView = () => {
   };
   const handleStatusChange = async (id, currentStatus) => {
     // Define el ciclo de estados
-    const statusCycle = ["pending", "in progress", "completed"];
-
+    const statusCycle = ["pending", "in progress"];
+    if (currentStatus === "completed") {
+      setNotification({
+        show: true,
+        message: "Completed jobs cannot be reverted to another status",
+        type: "error",
+      });
+      setTimeout(() => setNotification({ show: false }), 3000);
+      return;
+    }
+  
     // Encuentra el índice del estado actual
     const currentIndex = statusCycle.indexOf(currentStatus);
 
@@ -1414,18 +1398,32 @@ const JobsheetView = () => {
     const value = e.target.value;
     setInventorySearchTerm(value);
     setShowInventoryResults(true);
-
+  
     if (inventorySearchTimeout.current) {
       clearTimeout(inventorySearchTimeout.current);
     }
-
+  
     inventorySearchTimeout.current = setTimeout(async () => {
       if (value.trim() === "") {
         setFilteredInventory([]);
         setIsLoading(false);
         return;
       }
-
+  
+      // Verificar si la búsqueda es por "Labour"
+      if (value.trim().toLowerCase() === "labour") {
+        setIsLoading(false);
+        // Crear un resultado especial para Labour
+        setFilteredInventory([{
+          id: "labour-special-item",
+          name: "Labour / Service",
+          description: "Add labour or service to this jobsheet",
+          sale: 0,
+          isLabourItem: true
+        }]);
+        return;
+      }
+  
       setIsLoading(true);
       const token = localStorage.getItem("token");
       if (!token) {
@@ -1433,7 +1431,7 @@ const JobsheetView = () => {
         setIsLoading(false);
         return;
       }
-
+  
       try {
         const response = await fetch(
           `${API_URL}/inventory?search=${encodeURIComponent(value)}`,
@@ -1444,7 +1442,7 @@ const JobsheetView = () => {
             },
           }
         );
-
+  
         if (response.ok) {
           const results = await response.json();
           console.log("Inventory search results:", results);
@@ -1550,8 +1548,8 @@ const JobsheetView = () => {
           description: laborDescription,
           price: priceToSend,
           is_completed: false,
-          is_billed: laborIsBilled,
-          tracking_notes: laborTrackingNotes,
+          is_billed: true,
+          tracking_notes: ""
         }),
       });
   
@@ -1693,47 +1691,68 @@ const JobsheetView = () => {
     }
   };
 
-  const handleDeleteLabor = async (id) => {
+  const handleDeleteLabor = async (laborId) => {
     try {
-      const token = localStorage.getItem("token");
-      if (!token) return;
-
       setIsLoading(true);
-
-      const response = await fetch(`${API_URL}/labor/${id}`, {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        console.error("No token found");
+        return;
+      }
+  
+      // Verificar si el ID comienza con "temp-labour-", lo que indica un ID temporal
+      if (laborId.toString().startsWith("temp-labour-")) {
+        // Este es un ID temporal, solo eliminar del estado local
+        setJobsheetItems(prevItems => prevItems.filter(item => item.id !== laborId));
+        setNotification({
+          show: true,
+          message: "Labour removed successfully",
+          type: "success",
+        });
+        setTimeout(() => setNotification({ show: false }), 3000);
+        return;
+      }
+  
+      // Si es un ID real, enviar solicitud al servidor
+      const response = await fetch(`${API_URL}/labor/${laborId}`, {
         method: "DELETE",
         headers: {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
       });
-
+  
       if (response.ok) {
-        fetchLabors(currentJobsheet.id);
-        fetchJobsheets(searchTerm, statusFilter);
-
+        // Eliminar el labour del arreglo local
+        setJobsheetItems(prevItems => prevItems.filter(item => item.id !== laborId));
+        
+        // Si también mantienes un estado separado para labors, actualizarlo
+        if (setLabors) {
+          setLabors(prevLabors => prevLabors.filter(labor => labor.id !== laborId));
+        }
+        
+        // No es necesario hacer refreshCurrentJobsheetData aquí, ya que puede eliminar nuestros cambios visuales
+        
         setNotification({
           show: true,
-          message: "Labor deleted successfully",
+          message: "Labour removed successfully",
           type: "success",
         });
         setTimeout(() => setNotification({ show: false }), 3000);
       } else {
-        const errorData = await response.text();
-        console.error("Error deleting labor:", errorData);
-
+        const errorData = await response.json();
+        console.error("Error deleting labour:", errorData);
         setNotification({
           show: true,
-          message: "Error deleting labor",
+          message: "Error removing labour: " + (errorData.message || "Unknown error"),
           type: "error",
         });
         setTimeout(() => setNotification({ show: false }), 3000);
       }
     } catch (error) {
-      console.error("Error deleting labor:", error);
+      console.error("Error deleting labour:", error);
       setNotification({
         show: true,
-        message: "Error: " + error.message,
+        message: "Error removing labour: " + error.message,
         type: "error",
       });
       setTimeout(() => setNotification({ show: false }), 3000);
@@ -1752,17 +1771,218 @@ const JobsheetView = () => {
     fetchLabors(jobsheet.id);
   };
   const handleSelectInventoryItem = (item) => {
-    setNewItem({
-      ...newItem,
-      name: item.name || item.description || "Unnamed Product",
-      price: parseFloat(item.sale) || 0,
-      product_id: item.id,
-      quantity: 1,
-    });
+    if (item.isLabourItem) {
+      // Mostrar un formulario para labor en lugar del formulario de producto
+      setNewItem({
+        name: "Labour / Service",
+        price: "",
+        product_id: "labour-special-item", // ID especial para identificar que es un labour
+        quantity: 1,
+        isLabourItem: true,
+        description: "" // Campo para la descripción del labour
+      });
+    } else {
+      // Manejo normal de items de inventario
+      setNewItem({
+        ...newItem,
+        name: item.name || item.description || "Unnamed Product",
+        price: parseFloat(item.sale) || 0,
+        product_id: item.id,
+        quantity: 1,
+        isLabourItem: false
+      });
+    }
     setInventorySearchTerm("");
     setShowInventoryResults(false);
   };
+  
+  // Modificar la función handleAddItem para gestionar la adición de labours
+  const handleAddItem = async () => {
+    // Si es un item de tipo Labour, usar una lógica diferente
+    if (newItem.isLabourItem) {
+      if ( !newItem.price || parseFloat(newItem.price) <= 0) {
+        setNotification({
+          show: true,
+          message: "Please enter a valid price for the labour",
+          type: "error",
+        });
+        setTimeout(() => setNotification({ show: false }), 3000);
+        return;
+      }
+    
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) {
+          console.error("No token found");
+          return;
+        }
+    
+        setIsLoading(true);
+        
+        // Llamar al endpoint de labor
+        const response = await fetch(`${API_URL}/labor`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            jobsheet_id: currentJobsheet.id,
+            description: newItem.description,
+            price: parseFloat(newItem.price),
+            is_completed: true,
+            is_billed: true,
+            tracking_notes: ""
+          }),
+        });
+    
+        if (response.ok) {
+          const laborData = await response.json();
+          
+          // Agregar el nuevo labor al estado de labors
+          const newLabor = {
+            id: laborData.id,
+            description: newItem.description || "Labour Service",
+            price: parseFloat(newItem.price),
+            is_completed: true,
+            is_billed: true,
+            tracking_notes: ""
+          };
+          setLabors(prevLabors => [...prevLabors, newLabor]);
+          
+          // Agregar el labour al arreglo de jobsheetItems para mostrarlo en la lista
+          const newLabourItem = {
+            id: laborData.id || `temp-labour-${Date.now()}`,
+            name: newItem.description || "Labour Service",
+            price: parseFloat(newItem.price),
+            quantity: 1,
+            isLabourItem: true // Marcar como labour para mostrarlo diferente
+          };
+          
+          // Actualizar la lista de items con el nuevo labour
+          setJobsheetItems(prevItems => [...prevItems, newLabourItem]);
+          
+          // Limpiar formulario
+          setNewItem({ 
+            name: "", 
+            quantity: 1, 
+            price: 0, 
+            product_id: null, 
+            isLabourItem: false,
+            description: "" 
+          });
+        
+          // ELIMINAR ESTA LÍNEA QUE CAUSA EL PROBLEMA:
+          // await refreshCurrentJobsheetData();
+          
+          // Mostrar notificación después de todo
+          setNotification({
+            show: true,
+            message: "Labour added successfully",
+            type: "success",
+          });
+          setTimeout(() => setNotification({ show: false }), 3000);
+        
 
+        } else {
+          const errorText = await response.text();
+          console.error("Error adding labour:", response.status, errorText);
+          
+
+        }
+      } catch (error) {
+        console.error("Error adding labour:", error);
+        setNotification({
+          show: true,
+          message: "Error: " + error.message,
+          type: "error",
+        });
+        setTimeout(() => setNotification({ show: false }), 3000);
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      // Lógica original para añadir items de inventario
+      if (!newItem.product_id || !currentJobsheet) {
+        setNotification({
+          show: true,
+          message: "You must select a product and a jobsheet first",
+          type: "error",
+        });
+        setTimeout(() => setNotification({ show: false }), 3000);
+        return;
+      }
+  
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) {
+          console.error("No token found");
+          return;
+        }
+  
+        setIsLoading(true);
+        const response = await fetch(`${API_URL}/jobsheets/items`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            jobsheet_id: currentJobsheet.id,
+            product_id: newItem.product_id,
+            quantity: newItem.quantity,
+            price: newItem.price,
+          }),
+        });
+  
+        const responseData = await response.text();
+        let errorMessage = responseData;
+  
+        try {
+          const jsonData = JSON.parse(responseData);
+          errorMessage = jsonData.error || jsonData.message || "Error desconocido";
+        } catch (e) {
+          // Si no es JSON, usar el texto tal cual
+          console.log("Respuesta no es JSON:", responseData);
+        }
+  
+        if (response.ok) {
+          setNotification({
+            show: true,
+            message: "Product added successfully",
+            type: "success",
+          });
+          setTimeout(() => setNotification({ show: false }), 3000);
+  
+          // Limpiar formulario
+          setNewItem({ name: "", quantity: 1, price: 0, product_id: null });
+  
+          // Recargar lista de items
+          fetchJobsheetItems(currentJobsheet.id);
+          await refreshCurrentJobsheetData();
+        } else {
+          console.error("Error adding item:", response.status, errorMessage);
+  
+          setNotification({
+            show: true,
+            message: errorMessage || "Error al agregar el producto",
+            type: "error",
+          });
+          setTimeout(() => setNotification({ show: false }), 5000);
+        }
+      } catch (error) {
+        console.error("Error adding item:", error);
+        setNotification({
+          show: true,
+          message: "Error de conexión: " + error.message,
+          type: "error",
+        });
+        setTimeout(() => setNotification({ show: false }), 5000);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  };
   const handleToggleLaborCompleted = async (labor) => {
     const updates = {
       is_completed: labor.is_completed === 1 ? 0 : 1,
@@ -1987,12 +2207,12 @@ const JobsheetView = () => {
         {/* Create/Edit Modal */}
         {showModal && (
           <CreateJobsheetModal
-  isOpen={showModal}
-  onClose={() => setShowModal(false)}
-  refreshJobsheets={fetchJobsheets}
-  editingJobsheet={editingJobsheet}
-/>
-)}
+            isOpen={showModal}
+            onClose={handleCloseCreateModal}
+            refreshJobsheets={fetchJobsheets}
+            editingJobsheet={editingJobsheet}
+          />
+        )}
         
 
 
@@ -2054,8 +2274,8 @@ const JobsheetView = () => {
                       fontSize: "14px",
                     }}
                   >
-                    Job Sheet #{currentJobsheet.id} •{" "}
-                    {currentJobsheet.customer_name || "Customer"}
+                        Job Sheet #{currentJobsheet.id} • {currentJobsheet.license_plate || ''} • {currentJobsheet.customer_name || "Customer"}
+
                   </p>
                 </div>
                 <button
@@ -2251,145 +2471,154 @@ const JobsheetView = () => {
                       </div>
                     ) : (
                       <div style={{ padding: "4px" }}>
-                        {jobsheetItems.map((item) => (
-                          <div
-                            key={item.id}
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              marginBottom: "12px",
-                              padding: "12px",
-                              borderRadius: "8px",
-                              backgroundColor: "white",
-                              boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-                              border: "1px solid rgba(0,0,0,0.05)",
-                              transition: "transform 0.2s, box-shadow 0.2s",
-                              position: "relative",
-                            }}
-                            onMouseOver={(e) => {
-                              e.currentTarget.style.transform =
-                                "translateY(-1px)";
-                              e.currentTarget.style.boxShadow =
-                                "0 4px 6px rgba(0,0,0,0.08)";
-                            }}
-                            onMouseOut={(e) => {
-                              e.currentTarget.style.transform = "translateY(0)";
-                              e.currentTarget.style.boxShadow =
-                                "0 1px 3px rgba(0,0,0,0.08)";
-                            }}
-                          >
-                            <div
-                              style={{
-                                width: "42px",
-                                height: "42px",
-                                backgroundColor: "#f0f0ff",
-                                borderRadius: "6px",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                flexShrink: 0,
-                                color: "#5932EA",
-                                fontSize: "18px",
-                                fontWeight: "600",
-                              }}
-                            >
-                              {item.name.charAt(0).toUpperCase()}
-                            </div>
+{jobsheetItems.map((item) => (
+  <div
+    key={item.id}
+    style={{
+      display: "flex",
+      alignItems: "center",
+      marginBottom: "12px",
+      padding: "12px",
+      borderRadius: "8px",
+      backgroundColor: item.isLabourItem ? "#FFF8E1" : "white",
+      boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+      border: `1px solid ${item.isLabourItem ? "#FFE082" : "rgba(0,0,0,0.05)"}`,
+      transition: "transform 0.2s, box-shadow 0.2s",
+      position: "relative",
+    }}
+    onMouseOver={(e) => {
+      e.currentTarget.style.transform = "translateY(-1px)";
+      e.currentTarget.style.boxShadow = "0 4px 6px rgba(0,0,0,0.08)";
+    }}
+    onMouseOut={(e) => {
+      e.currentTarget.style.transform = "translateY(0)";
+      e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.08)";
+    }}
+  >
+    <div
+      style={{
+        width: "42px",
+        height: "42px",
+        backgroundColor: item.isLabourItem ? "#FFF3E0" : "#f0f0ff",
+        borderRadius: "6px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+        color: item.isLabourItem ? "#FF9800" : "#5932EA",
+        fontSize: "18px",
+        fontWeight: "600",
+      }}
+    >
+      {item.isLabourItem ? <FontAwesomeIcon icon={faTools} /> : item.name.charAt(0).toUpperCase()}
+    </div>
 
-                            <div
-                              style={{
-                                marginLeft: "14px",
-                                flexGrow: 1,
-                                width: "calc(100% - 180px)",
-                              }}
-                            >
-                              <div
-                                style={{
-                                  fontSize: "15px",
-                                  fontWeight: "600",
-                                  color: "#333",
-                                  whiteSpace: "nowrap",
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                }}
-                              >
-                                {item.name}
-                              </div>
-                              <div
-                                style={{
-                                  fontSize: "14px",
-                                  color: "#888",
-                                  marginTop: "2px",
-                                }}
-                              >
-                                ${parseFloat(item.price).toFixed(2)} per unit
-                              </div>
-                            </div>
+    <div
+      style={{
+        marginLeft: "14px",
+        flexGrow: 1,
+        width: "calc(100% - 180px)",
+      }}
+    >
+      <div
+        style={{
+          fontSize: "15px",
+          fontWeight: "600",
+          color: "#333",
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          display: "flex",
+          alignItems: "center",
+          gap: "6px",
+        }}
+      >
+        {item.name}
+        {item.isLabourItem && (
+          <span style={{
+            fontSize: "11px",
+            backgroundColor: "#FF9800",
+            color: "white",
+            padding: "2px 6px",
+            borderRadius: "4px",
+            fontWeight: "500"
+          }}>
+            Labour
+          </span>
+        )}
+      </div>
+      <div
+        style={{
+          fontSize: "14px",
+          color: "#888",
+          marginTop: "2px",
+        }}
+      >
+        ${parseFloat(item.price).toFixed(2)} {item.isLabourItem ? "flat rate" : "per unit"}
+      </div>
+    </div>
 
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                marginLeft: "8px",
-                                flexShrink: 0,
-                              }}
-                            >
-                              <div
-                                style={{
-                                  width: "28px",
-                                  height: "28px",
-                                  display: "flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  backgroundColor: "#f9fafc",
-                                  borderRadius: "4px",
-                                  fontSize: "14px",
-                                }}
-                              >
-                                {item.quantity}
-                              </div>
-                              <div
-                                style={{
-                                  margin: "0 12px",
-                                  fontSize: "15px",
-                                  fontWeight: "600",
-                                  color: "#5932EA",
-                                }}
-                              >
-                                $
-                                {(
-                                  parseFloat(item.price) * item.quantity
-                                ).toFixed(2)}
-                              </div>
-                              <button
-                                onClick={() => handleDeleteItem(item.id)}
-                                style={{
-                                  backgroundColor: "#fff0f0",
-                                  color: "#ff4d4f",
-                                  border: "none",
-                                  borderRadius: "6px",
-                                  width: "28px",
-                                  height: "28px",
-                                  display: "flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  cursor: "pointer",
-                                  transition: "all 0.2s",
-                                }}
-                                onMouseOver={(e) => {
-                                  e.currentTarget.style.backgroundColor =
-                                    "#ffd6d6";
-                                }}
-                                onMouseOut={(e) => {
-                                  e.currentTarget.style.backgroundColor =
-                                    "#fff0f0";
-                                }}
-                              >
-                                <FontAwesomeIcon icon={faTrash} size="sm" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        marginLeft: "8px",
+        flexShrink: 0,
+      }}
+    >
+      {!item.isLabourItem && (
+        <div
+          style={{
+            width: "28px",
+            height: "28px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: "#f9fafc",
+            borderRadius: "4px",
+            fontSize: "14px",
+          }}
+        >
+          {item.quantity}
+        </div>
+      )}
+      <div
+        style={{
+          margin: "0 12px",
+          fontSize: "15px",
+          fontWeight: "600",
+          color: item.isLabourItem ? "#FF9800" : "#5932EA",
+        }}
+      >
+        ${(parseFloat(item.price) * (item.isLabourItem ? 1 : item.quantity)).toFixed(2)}
+      </div>
+      <button
+        onClick={() => item.isLabourItem ? handleDeleteLabor(item.id) : handleDeleteItem(item.id)}
+        style={{
+          backgroundColor: "#fff0f0",
+          color: "#ff4d4f",
+          border: "none",
+          borderRadius: "6px",
+          width: "28px",
+          height: "28px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: "pointer",
+          transition: "all 0.2s",
+        }}
+        onMouseOver={(e) => {
+          e.currentTarget.style.backgroundColor = "#ffd6d6";
+        }}
+        onMouseOut={(e) => {
+          e.currentTarget.style.backgroundColor = "#fff0f0";
+        }}
+      >
+        <FontAwesomeIcon icon={faTrash} size="sm" />
+      </button>
+    </div>
+  </div>
+))}
 
                         {/* Total area */}
                         <div
@@ -2754,266 +2983,321 @@ const JobsheetView = () => {
 
                   {/* Selected item preview */}
                   {newItem.product_id ? (
-                    <div
-                      style={{
-                        padding: "16px",
-                        backgroundColor: "white",
-                        borderRadius: "8px",
-                        border: "1px solid #e0e4ff",
-                        boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-                        animation: "fadeIn 0.3s ease",
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          marginBottom: "16px",
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: "42px",
-                            height: "42px",
-                            backgroundColor: "#f0f0ff",
-                            borderRadius: "6px",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            flexShrink: 0,
-                            color: "#5932EA",
-                            fontSize: "18px",
-                            fontWeight: "600",
-                          }}
-                        >
-                          {newItem.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div style={{ marginLeft: "14px", flex: 1 }}>
-                          <div style={{ fontWeight: "600", fontSize: "16px" }}>
-                            {newItem.name}
-                          </div>
-                          <div
-                            style={{
-                              fontSize: "14px",
-                              color: "#5932EA",
-                              marginTop: "4px",
-                            }}
-                          >
-                            ${parseFloat(newItem.price).toFixed(2)} per unit
-                          </div>
-                        </div>
-                      </div>
+  <div
+    style={{
+      padding: "16px",
+      backgroundColor: "white",
+      borderRadius: "8px",
+      border: "1px solid #e0e4ff",
+      boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+      animation: "fadeIn 0.3s ease",
+    }}
+  >
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        marginBottom: "16px",
+      }}
+    >
+      <div
+        style={{
+          width: "42px",
+          height: "42px",
+          backgroundColor: newItem.isLabourItem ? "#fff3e0" : "#f0f0ff",
+          borderRadius: "6px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+          color: newItem.isLabourItem ? "#FF9800" : "#5932EA",
+          fontSize: "18px",
+          fontWeight: "600",
+        }}
+      >
+        {newItem.isLabourItem ? <FontAwesomeIcon icon={faTools} /> : newItem.name.charAt(0).toUpperCase()}
+      </div>
+      <div style={{ marginLeft: "14px", flex: 1 }}>
+        <div style={{ fontWeight: "600", fontSize: "16px" }}>
+          {newItem.name}
+        </div>
+        {!newItem.isLabourItem && (
+          <div
+            style={{
+              fontSize: "14px",
+              color: "#5932EA",
+              marginTop: "4px",
+            }}
+          >
+            ${parseFloat(newItem.price).toFixed(2)} per unit
+          </div>
+        )}
+      </div>
+    </div>
 
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          backgroundColor: "#f8f9ff",
-                          padding: "12px 16px",
-                          borderRadius: "6px",
-                        }}
-                      >
-                        <div>
-                          <label
-                            style={{
-                              display: "block",
-                              fontSize: "14px",
-                              color: "#666",
-                              marginBottom: "6px",
-                            }}
-                          >
-                            Quantity
-                          </label>
-                          <div
-                            style={{ display: "flex", alignItems: "center" }}
-                          >
-                            <button
-                              onClick={() =>
-                                setNewItem({
-                                  ...newItem,
-                                  quantity: Math.max(1, newItem.quantity - 1),
-                                })
-                              }
-                              style={{
-                                width: "30px",
-                                height: "30px",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                backgroundColor: "#f0f0f0",
-                                border: "1px solid #ddd",
-                                borderRadius: "4px 0 0 4px",
-                                cursor: "pointer",
-                                fontSize: "16px",
-                              }}
-                            >
-                              −
-                            </button>
+    {newItem.isLabourItem ? (
+      // Formulario especial para labour
+      <div>
+          
 
-                            <input
-                              type="number"
-                              value={newItem.quantity}
-                              min="1"
-                              onChange={(e) =>
-                                setNewItem({
-                                  ...newItem,
-                                  quantity: parseInt(e.target.value) || 1,
-                                })
-                              }
-                              style={{
-                                width: "50px",
-                                textAlign: "center",
-                                padding: "5px 0",
-                                border: "1px solid #ddd",
-                                borderLeft: "none",
-                                borderRight: "none",
-                                outline: "none",
-                                fontSize: "14px",
-                                fontWeight: "500",
-                              }}
-                            />
+        <div style={{ marginBottom: "16px" }}>
+          <label
+            style={{
+              display: "block",
+              marginBottom: "8px",
+              fontSize: "14px",
+              fontWeight: "500",
+              color: "#333",
+            }}
+          >
+            Labour Price ($)
+          </label>
+          <div style={{ position: "relative" }}>
+            <input
+              type="number"
+              value={newItem.price}
+              onChange={(e) => setNewItem({...newItem, price: e.target.value})}
+              placeholder="0.00"
+              step="0.01"
+              style={{
+                width: "100%",
+                padding: "10px 12px 10px 30px", // Espacio para el símbolo $
+                borderRadius: "8px",
+                border: "1px solid #ddd",
+                fontSize: "14px",
+                backgroundColor: "#fff",
+                outline: "none",
+                boxSizing: "border-box"
+              }}
+            />
+            <span style={{
+              position: "absolute",
+              left: "12px",
+              top: "50%",
+              transform: "translateY(-50%)",
+              color: "#777",
+              fontSize: "14px"
+            }}>$</span>
+          </div>
+        </div>
 
-                            <button
-                              onClick={() =>
-                                setNewItem({
-                                  ...newItem,
-                                  quantity: newItem.quantity + 1,
-                                })
-                              }
-                              style={{
-                                width: "30px",
-                                height: "30px",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                backgroundColor: "#f0f0f0",
-                                border: "1px solid #ddd",
-                                borderRadius: "0 4px 4px 0",
-                                cursor: "pointer",
-                                fontSize: "16px",
-                              }}
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
+      
+      </div>
+    ) : (
+      // Formulario normal para productos
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          backgroundColor: "#f8f9ff",
+          padding: "12px 16px",
+          borderRadius: "6px",
+        }}
+      >
+        <div>
+          <label
+            style={{
+              display: "block",
+              fontSize: "14px",
+              color: "#666",
+              marginBottom: "6px",
+            }}
+          >
+            Quantity
+          </label>
+          <div
+            style={{ display: "flex", alignItems: "center" }}
+          >
+            <button
+              onClick={() =>
+                setNewItem({
+                  ...newItem,
+                  quantity: Math.max(1, newItem.quantity - 1),
+                })
+              }
+              style={{
+                width: "30px",
+                height: "30px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: "#f0f0f0",
+                border: "1px solid #ddd",
+                borderRadius: "4px 0 0 4px",
+                cursor: "pointer",
+                fontSize: "16px",
+              }}
+            >
+              −
+            </button>
 
-                        <div>
-                          <div
-                            style={{
-                              fontSize: "14px",
-                              color: "#666",
-                              marginBottom: "6px",
-                              textAlign: "right",
-                            }}
-                          >
-                            Total
-                          </div>
-                          <div
-                            style={{
-                              fontWeight: "600",
-                              color: "#5932EA",
-                              fontSize: "16px",
-                            }}
-                          >
-                            $
-                            {(
-                              parseFloat(newItem.price) * newItem.quantity
-                            ).toFixed(2)}
-                          </div>
-                        </div>
-                      </div>
+            <input
+              type="number"
+              value={newItem.quantity}
+              min="1"
+              onChange={(e) =>
+                setNewItem({
+                  ...newItem,
+                  quantity: parseInt(e.target.value) || 1,
+                })
+              }
+              style={{
+                width: "50px",
+                textAlign: "center",
+                padding: "5px 0",
+                border: "1px solid #ddd",
+                borderLeft: "none",
+                borderRight: "none",
+                outline: "none",
+                fontSize: "14px",
+                fontWeight: "500",
+              }}
+            />
 
-                      <button
-                        onClick={handleAddItem}
-                        style={{
-                          marginTop: "16px",
-                          width: "100%",
-                          padding: "12px",
-                          backgroundColor: "#5932EA",
-                          color: "white",
-                          border: "none",
-                          borderRadius: "6px",
-                          cursor: "pointer",
-                          fontWeight: "500",
-                          fontSize: "14px",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          gap: "8px",
-                          transition: "background-color 0.2s",
-                        }}
-                        onMouseOver={(e) =>
-                          (e.currentTarget.style.backgroundColor = "#4321C9")
-                        }
-                        onMouseOut={(e) =>
-                          (e.currentTarget.style.backgroundColor = "#5932EA")
-                        }
-                        disabled={isLoading}
-                      >
-                        {isLoading ? (
-                          <div
-                            style={{
-                              width: "18px",
-                              height: "18px",
-                              border: "2px solid rgba(255,255,255,0.3)",
-                              borderLeft: "2px solid white",
-                              borderRadius: "50%",
-                              animation: "spin 1s linear infinite",
-                            }}
-                          ></div>
-                        ) : (
-                          <>
-                            <svg
-                              width="18"
-                              height="18"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              xmlns="http://www.w3.org/2000/svg"
-                            >
-                              <path
-                                d="M12 5V19"
-                                stroke="white"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                              />
-                              <path
-                                d="M5 12H19"
-                                stroke="white"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                              />
-                            </svg>
-                            Add to Job Sheet
-                          </>
-                        )}
-                      </button>
+            <button
+              onClick={() =>
+                setNewItem({
+                  ...newItem,
+                  quantity: newItem.quantity + 1,
+                })
+              }
+              style={{
+                width: "30px",
+                height: "30px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: "#f0f0f0",
+                border: "1px solid #ddd",
+                borderRadius: "0 4px 4px 0",
+                cursor: "pointer",
+                fontSize: "16px",
+              }}
+            >
+              +
+            </button>
+          </div>
+        </div>
 
-                      <button
-                        onClick={() =>
-                          setNewItem({
-                            name: "",
-                            quantity: 1,
-                            price: 0,
-                            product_id: null,
-                          })
-                        }
-                        style={{
-                          marginTop: "8px",
-                          width: "100%",
-                          padding: "8px",
-                          backgroundColor: "transparent",
-                          color: "#666",
-                          border: "none",
-                          cursor: "pointer",
-                          fontSize: "14px",
-                        }}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
+        <div>
+          <div
+            style={{
+              fontSize: "14px",
+              color: "#666",
+              marginBottom: "6px",
+              textAlign: "right",
+            }}
+          >
+            Total
+          </div>
+          <div
+            style={{
+              fontWeight: "600",
+              color: "#5932EA",
+              fontSize: "16px",
+            }}
+          >
+            $
+            {(
+              parseFloat(newItem.price) * newItem.quantity
+            ).toFixed(2)}
+          </div>
+        </div>
+      </div>
+    )}
+
+    <button
+      onClick={handleAddItem}
+      style={{
+        marginTop: "16px",
+        width: "100%",
+        padding: "12px",
+        backgroundColor: newItem.isLabourItem ? "#FF9800" : "#5932EA",
+        color: "white",
+        border: "none",
+        borderRadius: "6px",
+        cursor: "pointer",
+        fontWeight: "500",
+        fontSize: "14px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: "8px",
+        transition: "background-color 0.2s",
+      }}
+      onMouseOver={(e) =>
+        (e.currentTarget.style.backgroundColor = newItem.isLabourItem ? "#F57C00" : "#4321C9")
+      }
+      onMouseOut={(e) =>
+        (e.currentTarget.style.backgroundColor = newItem.isLabourItem ? "#FF9800" : "#5932EA")
+      }
+      disabled={isLoading}
+    >
+      {isLoading ? (
+        <div
+          style={{
+            width: "18px",
+            height: "18px",
+            border: "2px solid rgba(255,255,255,0.3)",
+            borderLeft: "2px solid white",
+            borderRadius: "50%",
+            animation: "spin 1s linear infinite",
+          }}
+        ></div>
+      ) : (
+        <>
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M12 5V19"
+              stroke="white"
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+            <path
+              d="M5 12H19"
+              stroke="white"
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+          </svg>
+          {newItem.isLabourItem ? "Add Labour Service" : "Add to Job Sheet"}
+        </>
+      )}
+    </button>
+
+    <button
+      onClick={() =>
+        setNewItem({
+          name: "",
+          quantity: 1,
+          price: 0,
+          product_id: null,
+          isLabourItem: false,
+          description: ""
+        })
+      }
+      style={{
+        marginTop: "8px",
+        width: "100%",
+        padding: "8px",
+        backgroundColor: "transparent",
+        color: "#666",
+        border: "none",
+        cursor: "pointer",
+        fontSize: "14px",
+      }}
+    >
+      Cancel
+    </button>
+  </div>
+) : (
                     <div
                       style={{
                         flex: 1,
@@ -3482,391 +3766,278 @@ const JobsheetView = () => {
                       </div>
                     </div>
 
-                    {/* Sección de productos/repuestos */}
-                    <div style={{ marginBottom: "25px" }}>
-                      <h3
-                        style={{
-                          fontSize: "16px",
-                          fontWeight: "600",
-                          color: "#333",
-                          display: "flex",
-                          alignItems: "center",
-                          marginBottom: "15px",
-                        }}
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="18"
-                          height="18"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          style={{ marginRight: "8px" }}
-                        >
-                          <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
-                          <line x1="3" y1="6" x2="21" y2="6"></line>
-                          <path d="M16 10a4 4 0 0 1-8 0"></path>
-                        </svg>
-                        Parts and Products
-                      </h3>
+                    {/* Sección de productos/repuestos y labores combinados */}
+<div style={{ marginBottom: "25px" }}>
+  <h3
+    style={{
+      fontSize: "16px",
+      fontWeight: "600",
+      color: "#333",
+      display: "flex",
+      alignItems: "center",
+      marginBottom: "15px",
+    }}
+  >
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{ marginRight: "8px" }}
+    >
+      <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <path d="M16 10a4 4 0 0 1-8 0"></path>
+    </svg>
+    Items and Services
+  </h3>
 
-                      <div
-                        style={{
-                          backgroundColor: "#fff",
-                          borderRadius: "8px",
-                          border: "1px solid #eee",
-                          overflow: "hidden",
-                        }}
-                      >
-                        {jobsheetItems.length === 0 ? (
-                          <div
-                            style={{
-                              padding: "20px",
-                              textAlign: "center",
-                              color: "#777",
-                              backgroundColor: "#fafafa",
-                            }}
-                          >
-                            No parts or products registered
-                          </div>
-                        ) : (
-                          <table
-                            style={{
-                              width: "100%",
-                              borderCollapse: "collapse",
-                            }}
-                          >
-                            <thead>
-                              <tr style={{ backgroundColor: "#f9f9f9" }}>
-                                <th
-                                  style={{
-                                    padding: "10px 12px",
-                                    textAlign: "left",
-                                    fontSize: "13px",
-                                    color: "#555",
-                                    fontWeight: "600",
-                                    borderBottom: "1px solid #eee",
-                                  }}
-                                >
-                                  Product
-                                </th>
-                                <th
-                                  style={{
-                                    padding: "10px 12px",
-                                    textAlign: "center",
-                                    fontSize: "13px",
-                                    color: "#555",
-                                    fontWeight: "600",
-                                    borderBottom: "1px solid #eee",
-                                    width: "80px",
-                                  }}
-                                >
-                                  Qty.
-                                </th>
-                                <th
-                                  style={{
-                                    padding: "10px 12px",
-                                    textAlign: "right",
-                                    fontSize: "13px",
-                                    color: "#555",
-                                    fontWeight: "600",
-                                    borderBottom: "1px solid #eee",
-                                    width: "100px",
-                                  }}
-                                >
-                                  Price
-                                </th>
-                                <th
-                                  style={{
-                                    padding: "10px 12px",
-                                    textAlign: "right",
-                                    fontSize: "13px",
-                                    color: "#555",
-                                    fontWeight: "600",
-                                    borderBottom: "1px solid #eee",
-                                    width: "100px",
-                                  }}
-                                >
-                                  Subtotal
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {jobsheetItems.map((item) => (
-                                <tr
-                                  key={item.id}
-                                  style={{
-                                    transition: "background-color 0.2s",
-                                  }}
-                                  onMouseOver={(e) =>
-                                    (e.currentTarget.style.backgroundColor =
-                                      "#f9fafc")
-                                  }
-                                  onMouseOut={(e) =>
-                                    (e.currentTarget.style.backgroundColor =
-                                      "transparent")
-                                  }
-                                >
-                                  <td
-                                    style={{
-                                      padding: "12px",
-                                      borderBottom: "1px solid #eee",
-                                      fontSize: "14px",
-                                    }}
-                                  >
-                                    {item.name}
-                                  </td>
-                                  <td
-                                    style={{
-                                      padding: "12px",
-                                      borderBottom: "1px solid #eee",
-                                      textAlign: "center",
-                                      fontSize: "14px",
-                                    }}
-                                  >
-                                    {item.quantity}
-                                  </td>
-                                  <td
-                                    style={{
-                                      padding: "12px",
-                                      borderBottom: "1px solid #eee",
-                                      textAlign: "right",
-                                      fontSize: "14px",
-                                    }}
-                                  >
-                                    ${parseFloat(item.price).toFixed(2)}
-                                  </td>
-                                  <td
-                                    style={{
-                                      padding: "12px",
-                                      borderBottom: "1px solid #eee",
-                                      textAlign: "right",
-                                      fontWeight: "500",
-                                      fontSize: "14px",
-                                    }}
-                                  >
-                                    $
-                                    {(
-                                      parseFloat(item.price) * item.quantity
-                                    ).toFixed(2)}
-                                  </td>
-                                </tr>
-                              ))}
-                              <tr style={{ backgroundColor: "#f9fafc" }}>
-                                <td
-                                  colSpan="3"
-                                  style={{
-                                    padding: "12px",
-                                    textAlign: "right",
-                                    fontWeight: "600",
-                                    fontSize: "14px",
-                                  }}
-                                >
-                                  Products Total:
-                                </td>
-                                <td
-                                  style={{
-                                    padding: "12px",
-                                    textAlign: "right",
-                                    fontWeight: "600",
-                                    fontSize: "14px",
-                                    color: "#0277BD",
-                                  }}
-                                >
-                                  $
-                                  {jobsheetItems
-                                    .reduce(
-                                      (sum, item) =>
-                                        sum +
-                                        parseFloat(item.price) * item.quantity,
-                                      0
-                                    )
-                                    .toFixed(2)}
-                                </td>
-                              </tr>
-                            </tbody>
-                          </table>
-                        )}
-                      </div>
-                    </div>
+  <div
+    style={{
+      backgroundColor: "#fff",
+      borderRadius: "8px",
+      border: "1px solid #eee",
+      overflow: "hidden",
+    }}
+  >
+    {jobsheetItems.length === 0 && labors.filter((labor) => labor.is_completed === 1).length === 0 ? (
+      <div
+        style={{
+          padding: "20px",
+          textAlign: "center",
+          color: "#777",
+          backgroundColor: "#fafafa",
+        }}
+      >
+        No items or services registered
+      </div>
+    ) : (
+      <table
+        style={{
+          width: "100%",
+          borderCollapse: "collapse",
+        }}
+      >
+        <thead>
+          <tr style={{ backgroundColor: "#f9f9f9" }}>
+            <th
+              style={{
+                padding: "10px 12px",
+                textAlign: "left",
+                fontSize: "13px",
+                color: "#555",
+                fontWeight: "600",
+                borderBottom: "1px solid #eee",
+              }}
+            >
+              Item / Service
+            </th>
+            <th
+              style={{
+                padding: "10px 12px",
+                textAlign: "center",
+                fontSize: "13px",
+                color: "#555",
+                fontWeight: "600",
+                borderBottom: "1px solid #eee",
+                width: "80px",
+              }}
+            >
+              Qty.
+            </th>
+            <th
+              style={{
+                padding: "10px 12px",
+                textAlign: "right",
+                fontSize: "13px",
+                color: "#555",
+                fontWeight: "600",
+                borderBottom: "1px solid #eee",
+                width: "100px",
+              }}
+            >
+              Price
+            </th>
+            <th
+              style={{
+                padding: "10px 12px",
+                textAlign: "right",
+                fontSize: "13px",
+                color: "#555",
+                fontWeight: "600",
+                borderBottom: "1px solid #eee",
+                width: "100px",
+              }}
+            >
+              Subtotal
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {/* Primero mostramos los items normales */}
+          {jobsheetItems.map((item) => (
+            <tr
+              key={`item-${item.id}`}
+              style={{
+                transition: "background-color 0.2s",
+              }}
+              onMouseOver={(e) =>
+                (e.currentTarget.style.backgroundColor = "#f9fafc")
+              }
+              onMouseOut={(e) =>
+                (e.currentTarget.style.backgroundColor = "transparent")
+              }
+            >
+              <td
+                style={{
+                  padding: "12px",
+                  borderBottom: "1px solid #eee",
+                  fontSize: "14px",
+                }}
+              >
+                {item.name}
+              </td>
+              <td
+                style={{
+                  padding: "12px",
+                  borderBottom: "1px solid #eee",
+                  textAlign: "center",
+                  fontSize: "14px",
+                }}
+              >
+                {item.quantity}
+              </td>
+              <td
+                style={{
+                  padding: "12px",
+                  borderBottom: "1px solid #eee",
+                  textAlign: "right",
+                  fontSize: "14px",
+                }}
+              >
+                ${parseFloat(item.price).toFixed(2)}
+              </td>
+              <td
+                style={{
+                  padding: "12px",
+                  borderBottom: "1px solid #eee",
+                  textAlign: "right",
+                  fontWeight: "500",
+                  fontSize: "14px",
+                }}
+              >
+                ${(parseFloat(item.price) * item.quantity).toFixed(2)}
+              </td>
+            </tr>
+          ))}
 
-                    {/* Sección de mano de obra */}
-                    <div style={{ marginBottom: "25px" }}>
-                      <h3
-                        style={{
-                          fontSize: "16px",
-                          fontWeight: "600",
-                          color: "#333",
-                          display: "flex",
-                          alignItems: "center",
-                          marginBottom: "15px",
-                        }}
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="18"
-                          height="18"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1-7.94-7.94l-3.76 3.76z"></path>
-                        </svg>
-                        Labor and Services
-                      </h3>
+          {/* Luego mostramos los labores completados */}
+          {labors
+            .filter((labor) => labor.is_completed === 1 && labor.is_billed === 1)
+            .map((labor) => (
+              <tr
+                key={`labor-${labor.id}`}
+                style={{
+                  transition: "background-color 0.2s",
+                  backgroundColor: "#fffaf2",
+                }}
+                onMouseOver={(e) =>
+                  (e.currentTarget.style.backgroundColor = "#fff8e1")
+                }
+                onMouseOut={(e) =>
+                  (e.currentTarget.style.backgroundColor = "#fffaf2")
+                }
+              >
+                <td
+                  style={{
+                    padding: "12px",
+                    borderBottom: "1px solid #eee",
+                    fontSize: "14px",
+                    display: "flex",
+                    alignItems: "center",
+                  }}
+                >
+                  <span style={{
+                    display: "inline-block",
+                    backgroundColor: "#FF9800",
+                    color: "white",
+                    padding: "2px 6px",
+                    borderRadius: "4px",
+                    fontSize: "11px",
+                    marginRight: "8px",
+                  }}>
+                    Labor
+                  </span>
+                  {labor.description}
+                </td>
+                <td
+                  style={{
+                    padding: "12px",
+                    borderBottom: "1px solid #eee",
+                    textAlign: "center",
+                    fontSize: "14px",
+                  }}
+                >
+                  1
+                </td>
+                <td
+                  style={{
+                    padding: "12px",
+                    borderBottom: "1px solid #eee",
+                    textAlign: "right",
+                    fontSize: "14px",
+                  }}
+                >
+                  ${parseFloat(labor.price || 0).toFixed(2)}
+                </td>
+                <td
+                  style={{
+                    padding: "12px",
+                    borderBottom: "1px solid #eee",
+                    textAlign: "right",
+                    fontWeight: "500",
+                    fontSize: "14px",
+                  }}
+                >
+                  ${parseFloat(labor.price || 0).toFixed(2)}
+                </td>
+              </tr>
+            ))}
 
-                      <div
-                        style={{
-                          backgroundColor: "#fff",
-                          borderRadius: "8px",
-                          border: "1px solid #eee",
-                          overflow: "hidden",
-                        }}
-                      >
-                        {labors.filter((labor) => labor.is_completed === 1)
-                          .length === 0 ? (
-                          <div
-                            style={{
-                              padding: "20px",
-                              textAlign: "center",
-                              color: "#777",
-                              backgroundColor: "#fafafa",
-                            }}
-                          >
-                            No completed labor services
-                          </div>
-                        ) : (
-                          <table
-                            style={{
-                              width: "100%",
-                              borderCollapse: "collapse",
-                            }}
-                          >
-                            <thead>
-                              <tr style={{ backgroundColor: "#f9f9f9" }}>
-                                <th
-                                  style={{
-                                    padding: "10px 12px",
-                                    textAlign: "left",
-                                    fontSize: "13px",
-                                    color: "#555",
-                                    fontWeight: "600",
-                                    borderBottom: "1px solid #eee",
-                                  }}
-                                >
-                                  Service
-                                </th>
-                                <th
-                                  style={{
-                                    padding: "10px 12px",
-                                    textAlign: "right",
-                                    fontSize: "13px",
-                                    color: "#555",
-                                    fontWeight: "600",
-                                    borderBottom: "1px solid #eee",
-                                    width: "120px",
-                                  }}
-                                >
-                                  Cost
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {labors
-                                .filter((labor) => labor.is_completed === 1)
-                                .map((labor) => (
-                                  <tr
-                                    key={labor.id}
-                                    style={{
-                                      transition: "background-color 0.2s",
-                                    }}
-                                    onMouseOver={(e) =>
-                                      (e.currentTarget.style.backgroundColor =
-                                        "#f9fafc")
-                                    }
-                                    onMouseOut={(e) =>
-                                      (e.currentTarget.style.backgroundColor =
-                                        "transparent")
-                                    }
-                                  >
-                                    <td
-                                      style={{
-                                        padding: "12px",
-                                        borderBottom: "1px solid #eee",
-                                        fontSize: "14px",
-                                      }}
-                                    >
-                                      {labor.description}
-                                      {labor.completed_at && (
-                                        <div
-                                          style={{
-                                            fontSize: "12px",
-                                            color: "#777",
-                                            marginTop: "3px",
-                                          }}
-                                        >
-                                          Completed:{" "}
-                                          {new Date(
-                                            labor.completed_at
-                                          ).toLocaleDateString()}
-                                        </div>
-                                      )}
-                                    </td>
-                                    <td
-                                      style={{
-                                        padding: "12px",
-                                        borderBottom: "1px solid #eee",
-                                        textAlign: "right",
-                                        fontWeight: "500",
-                                        fontSize: "14px",
-                                      }}
-                                    >
-                                      ${parseFloat(labor.price || 0).toFixed(2)}
-                                    </td>
-                                  </tr>
-                                ))}
-                              <tr style={{ backgroundColor: "#f9fafc" }}>
-                                <td
-                                  style={{
-                                    padding: "12px",
-                                    textAlign: "right",
-                                    fontWeight: "600",
-                                    fontSize: "14px",
-                                  }}
-                                >
-                                  Labor Total:
-                                </td>
-                                <td
-                                  style={{
-                                    padding: "12px",
-                                    textAlign: "right",
-                                    fontWeight: "600",
-                                    fontSize: "14px",
-                                    color: "#0277BD",
-                                  }}
-                                >
-                                  $
-                                  {labors
-                                    .filter((labor) => labor.is_completed === 1)
-                                    .reduce(
-                                      (sum, labor) =>
-                                        sum + parseFloat(labor.price || 0),
-                                      0
-                                    )
-                                    .toFixed(2)}
-                                </td>
-                              </tr>
-                            </tbody>
-                          </table>
-                        )}
-                      </div>
-                    </div>
+          <tr style={{ backgroundColor: "#f9fafc" }}>
+            <td
+              colSpan="3"
+              style={{
+                padding: "12px",
+                textAlign: "right",
+                fontWeight: "600",
+                fontSize: "14px",
+              }}
+            >
+              Total:
+            </td>
+            <td
+              style={{
+                padding: "12px",
+                textAlign: "right",
+                fontWeight: "600",
+                fontSize: "14px",
+                color: "#0277BD",
+              }}
+            >
+              ${subtotal.toFixed(2)}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    )}
+  </div>
+</div>
 
                     {/* Sección de cálculo de impuestos */}
                     <div style={{ marginBottom: "25px" }}>

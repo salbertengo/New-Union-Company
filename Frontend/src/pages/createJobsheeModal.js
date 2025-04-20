@@ -434,103 +434,61 @@ const CreateJobsheetModal = ({
     }
   };
 
-  // Cambia la lógica: los labors se crean solo después de crear el jobsheet, usando el jobsheet_id real
-  // 1. Guarda los requerimientos en serviceNotes (como antes)
-  // 2. Al crear el jobsheet, después del POST, crea los labors con el jobsheet_id devuelto
 
-  const handleCreateJobsheet = async () => {
-    if (!selectedVehicle) {
-      showNotification("Please select or create a motorcycle first", "error");
-      return;
-    }
-    const filteredNotes = serviceNotes.filter(n => n.text.trim());
 
-    setIsLoading(true);
-    try {
-      const token = localStorage.getItem("token");
-      if (!token) return;
+const handleCreateJobsheet = async () => {
+  if (!selectedVehicle) {
+    showNotification("Please select or create a motorcycle first", "error");
+    return;
+  }
 
-      const jobsheetData = {
-        vehicle_id: selectedVehicle.id,
-        customer_id: selectedVehicle.customer_id || null,
-        state: "pending",
-        description: filteredNotes.map(n => n.text).join('\n'),
-        service_notes: ""
-      };
+  setIsLoading(true);
+  try {
+    const token = localStorage.getItem("token");
+    if (!token) return;
 
-      const response = await fetch(`${API_URL}/jobsheets`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(jobsheetData),
-      });
+    const jobsheetData = {
+      vehicle_id: selectedVehicle.id,
+      customer_id: selectedVehicle.customer_id || null,
+      state: "pending",
+      description: "", // Ya que eliminamos las notas de servicio
+      service_notes: ""
+    };
 
-      if (response.ok) {
-        const jobsheet = await response.json();
-        // Crear labors para cada requerimiento
-        for (const note of filteredNotes) {
-          await fetch(`${API_URL}/labor`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              jobsheet_id: jobsheet.id,
-              description: note.text,
-              price: 0,
-              is_completed: false,
-              vehicle_id: selectedVehicle.id
-            })
-          });
-        }
-        showNotification("Jobsheet created successfully", "success");
-        setTimeout(() => {
-          if (refreshJobsheets) refreshJobsheets();
-          onClose();
-        }, 1500);
-      } else {
-        showNotification("Error creating jobsheet", "error");
-      }
-    } catch (error) {
-      showNotification("Error creating jobsheet", "error");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // addServiceNote y addServiceNoteFromButton solo agregan a serviceNotes, no llaman a createLabor
-  const addServiceNote = () => {
-    if (newNote.trim()) {
-      setServiceNotes(prev => [...prev, { id: Date.now(), text: newNote.trim() }]);
-      setNewNote('');
-    }
-  };
-
-  function addServiceNoteFromButton(text) {
-    setServiceNotes(prev => {
-      if (prev.some(n => n.text === text)) return prev;
-      return [...prev, { id: Date.now() + Math.random(), text }];
+    const response = await fetch(`${API_URL}/jobsheets`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(jobsheetData),
     });
-  }
 
-  // Delete a note
-  const deleteServiceNote = (id) => {
-    setServiceNotes(prev => prev.filter(n => n.id !== id));
-  };
-
-  // Handle oil change click
-  function handleOilChangeClick() {
-    setShowOilTypeSelector(true);
+    if (response.ok) {
+      const jobsheet = await response.json();
+      showNotification("Jobsheet created successfully", "success");
+      
+      // Pasar el ID del jobsheet al componente padre
+      setTimeout(() => {
+        if (refreshJobsheets) refreshJobsheets();
+        
+        // Cerrar este modal y pasar el ID del jobsheet para abrir el de inventario
+        if (onClose) onClose(jobsheet.id);
+      }, 1500);
+    } else {
+      showNotification("Error creating jobsheet", "error");
+    }
+  } catch (error) {
+    showNotification("Error creating jobsheet", "error");
+  } finally {
+    setIsLoading(false);
   }
+};
 
-  // Select oil type
-  function selectOilType(type) {
-    addServiceNoteFromButton(`Oil change (${type})`);
-    setShowOilTypeSelector(false);
-  }
+  
+
+
+
 
   // Nuevo: Pre-cargar datos si editingJobsheet cambia
   useEffect(() => {
@@ -543,11 +501,7 @@ const CreateJobsheetModal = ({
         customer_id: editingJobsheet.customer_id,
         customer_name: editingJobsheet.customer_name
       });
-      setServiceNotes(
-        editingJobsheet.description
-          ? editingJobsheet.description.split('\n').map((text, i) => ({ id: Date.now() + i, text }))
-          : []
-      );
+    
     }
   }, [editingJobsheet]);
 
@@ -605,7 +559,6 @@ const CreateJobsheetModal = ({
                 {step === 'new-vehicle' && "Create new motorcycle"}
                 {step === 'post-vehicle-options' && "Motorcycle created"}
                 {step === 'confirm' && "Confirm motorcycle details"}
-                {step === 'service-notes' && "Add service details"}
                 {step === 'new-customer' && "Create new customer"}
               </p>
             </div>
@@ -629,7 +582,7 @@ const CreateJobsheetModal = ({
             </button>
           </div>
 
-          {/* STEP NAVIGATION BAR */}
+          {/* STEP NAVIGATION BAR - ELIMINAR STEP DE SERVICE */}
           <div style={{ 
             display: "flex", 
             marginTop: "15px",
@@ -679,29 +632,6 @@ const CreateJobsheetModal = ({
                 fontWeight: "500",
                 whiteSpace: "nowrap"
               }}>Confirm</div>
-            </div>
-            <div 
-              onClick={() => selectedVehicle && setStep('service-notes')}
-              style={{ 
-                flex: 1, 
-                height: "6px", 
-                backgroundColor: step === 'service-notes' ? "white" : "rgba(255,255,255,0.3)",
-                borderRadius: "3px",
-                cursor: selectedVehicle ? "pointer" : "default",
-                opacity: selectedVehicle ? 1 : 0.6,
-                position: "relative"
-              }}
-            >
-              <div style={{
-                position: "absolute",
-                top: "10px", 
-                left: "50%",
-                transform: "translateX(-50%)",
-                color: "rgba(255,255,255,0.8)",
-                fontSize: "11px",
-                fontWeight: "500",
-                whiteSpace: "nowrap"
-              }}>Service</div>
             </div>
           </div>
         </div>
@@ -1294,277 +1224,35 @@ const CreateJobsheetModal = ({
                   >
                     Back
                   </button>
-                  <button
-                    onClick={() => setStep('service-notes')}
-                    style={{
-                      padding: "12px 20px",
-                      backgroundColor: "#5932EA",
-                      color: "white",
-                      border: "none",
-                      borderRadius: "8px",
-                      fontSize: "14px",
-                      fontWeight: "500",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                      transition: "background-color 0.2s"
-                    }}
-                    onMouseOver={e => e.currentTarget.style.backgroundColor = "#4321C9"}
-                    onMouseOut={e => e.currentTarget.style.backgroundColor = "#5932EA"}
-                  >
-                    Continue
-                    <FontAwesomeIcon icon={faListCheck} />
-                  </button>
+                 <button
+  onClick={handleCreateJobsheet} // Cambiar de setStep('service-notes') a handleCreateJobsheet
+  style={{
+    padding: "12px 20px",
+    backgroundColor: "#5932EA",
+    color: "white",
+    border: "none",
+    borderRadius: "8px",
+    fontSize: "14px",
+    fontWeight: "500",
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    transition: "background-color 0.2s"
+  }}
+  onMouseOver={e => e.currentTarget.style.backgroundColor = "#4321C9"}
+  onMouseOut={e => e.currentTarget.style.backgroundColor = "#5932EA"}
+>
+  Create Job Sheet
+  <FontAwesomeIcon icon={faCheck} />
+</button>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Step 6: Service Notes (Enhanced) */}
-          {step === 'service-notes' && (
-            <div style={{ animation: "fadeIn 0.3s" }}>
-              <h3 style={{ margin: "0 0 20px 0", fontSize: "18px", fontWeight: "600" }}>
-                Service Notes / Problems
-              </h3>
+    
 
-              {/* Quick Service Categories & Subcategories */}
-              {!selectedCategory ? (
-                <div style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(3, 1fr)",
-                  gap: "12px",
-                  marginBottom: "18px"
-                }}>
-                  {serviceCategories.map(cat => (
-                    <button
-                      key={cat.name}
-                      type="button"
-                      className="quick-btn"
-                      style={{ ...quickBtnStyle, fontSize: 16, fontWeight: 600, padding: '18px 8px' }}
-                      onClick={() => setSelectedCategory(cat)}
-                    >
-                      {cat.name}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <>
-                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
-                    <button
-                      style={{ ...quickBtnStyle, background: '#eee', color: '#333', marginRight: 10, padding: '8px 14px' }}
-                      onClick={() => setSelectedCategory(null)}
-                    >
-                      ← Back
-                    </button>
-                    <span style={{ fontWeight: 600, fontSize: 16 }}>{selectedCategory.name}</span>
-                  </div>
-                  <div style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(2, 1fr)",
-                    gap: "10px",
-                    marginBottom: "18px"
-                  }}>
-                    {selectedCategory.items.map(item => (
-                      <button
-                        key={item}
-                        type="button"
-                        className={`quick-btn${serviceNotes.some(n => n.text === item) ? ' selected' : ''}`}
-                        style={quickBtnStyle}
-                        onClick={() => {
-                          if(item === 'Oil change') handleOilChangeClick();
-                          else addServiceNoteFromButton(item);
-                        }}
-                      >
-                        {item}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-
-              {/* Oil type selector modal */}
-              {showOilTypeSelector && (
-                <div style={{
-                  position: 'fixed', left: 0, top: 0, right: 0, bottom: 0,
-                  background: 'rgba(0,0,0,0.2)', zIndex: 2000,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center'
-                }}>
-                  <div style={{ background: 'white', borderRadius: 12, padding: 24, minWidth: 260, boxShadow: '0 2px 12px rgba(0,0,0,0.12)' }}>
-                    <h4 style={{ margin: 0, marginBottom: 12 }}>Select oil type</h4>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      <button style={quickBtnStyle} onClick={() => selectOilType('Mineral')}>Mineral</button>
-                      <button style={quickBtnStyle} onClick={() => selectOilType('Semi-synthetic')}>Semi-synthetic</button>
-                      <button style={quickBtnStyle} onClick={() => selectOilType('Synthetic')}>Synthetic</button>
-                    </div>
-                    <button style={{ ...quickBtnStyle, marginTop: 18, background: '#eee', color: '#333' }} onClick={() => setShowOilTypeSelector(false)}>Cancel</button>
-                  </div>
-                </div>
-              )}
-
-              <div style={{ marginBottom: "15px" }}>
-                <label style={{ 
-                  display: "block", 
-                  marginBottom: "5px", 
-                  fontSize: "14px", 
-                  fontWeight: "500" 
-                }}>
-                  Add a note or problem:
-                </label>
-                <div style={{ display: "flex", gap: "10px" }}>
-                  <input
-                    type="text"
-                    value={newNote}
-                    onChange={(e) => setNewNote(e.target.value)}
-                    onKeyDown={(e) => { if(e.key === 'Enter') addServiceNote(); }}
-                    style={{
-                      flex: 1,
-                      padding: "12px",
-                      borderRadius: "8px",
-                      border: "1px solid #e0e0e0",
-                      fontSize: "14px"
-                    }}
-                    placeholder="Describe the issue..."
-                  />
-                  <button
-                    onClick={addServiceNote}
-                    disabled={!newNote.trim()}
-                    style={{
-                      padding: "12px 15px",
-                      backgroundColor: newNote.trim() ? "#5932EA" : "#ccc",
-                      color: "white",
-                      border: "none",
-                      borderRadius: "8px",
-                      fontSize: "14px",
-                      fontWeight: "500",
-                      cursor: newNote.trim() ? "pointer" : "default"
-                    }}
-                  >
-                    <FontAwesomeIcon icon={faPlus} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Service notes as chips, always visible */}
-              {serviceNotes.length > 0 && (
-                <div style={{
-                  marginBottom: "15px",
-                  backgroundColor: "#f9fafc",
-                  border: "1px solid #e0e0e0",
-                  borderRadius: "12px",
-                  padding: "15px",
-                  display: 'flex',
-                  flexWrap: 'wrap',
-                  gap: '8px',
-                  minHeight: 48
-                }}>
-                  {serviceNotes.map((note, idx) => (
-                    <div key={note.id} className={`note-chip${idx === serviceNotes.length-1 ? ' selected' : ''}`}>
-                      <FontAwesomeIcon icon={faListCheck} style={{fontSize:14}} />
-                      <span>{note.text}</span>
-                      <button
-                        onClick={() => deleteServiceNote(note.id)}
-                        style={{
-                          backgroundColor: "transparent",
-                          border: "none",
-                          color: "#d9534f",
-                          cursor: "pointer",
-                          fontSize: 16,
-                          marginLeft: 2
-                        }}
-                        title="Remove"
-                      >
-                        <FontAwesomeIcon icon={faTimes} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Visual summary before creating Job Sheet */}
-              {step === 'service-notes' && selectedVehicle && (
-                <div style={{
-                  background: '#f0f0ff',
-                  border: '1px solid #e0e0e0',
-                  borderRadius: 12,
-                  padding: 16,
-                  marginBottom: 18,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 18
-                }}>
-                  <FontAwesomeIcon icon={faMotorcycle} style={{fontSize:32, color:'#5932EA'}} />
-                  <div>
-                    <div style={{fontWeight:600, fontSize:17}}>{selectedVehicle.plate?.toUpperCase() || 'No Plate'}</div>
-                    <div style={{fontSize:15, color:'#444'}}>{selectedVehicle.model}</div>
-                  </div>
-                  <div style={{marginLeft:'auto', textAlign:'right'}}>
-                    <div style={{fontSize:14, color:'#888'}}>Notes:</div>
-                    <div style={{fontWeight:500, fontSize:15}}>{serviceNotes.length} added</div>
-                  </div>
-                </div>
-              )}
-
-              {/* Buttons to go back or create */}
-              <div style={{
-                display: "flex",
-                justifyContent: "space-between",
-                marginTop: "20px"
-              }}>
-                <button
-                  onClick={() => setStep('confirm')}
-                  style={{
-                    padding: "12px 15px",
-                    backgroundColor: "transparent",
-                    border: "1px solid #e0e0e0",
-                    borderRadius: "8px",
-                    fontSize: "14px",
-                    fontWeight: "500",
-                    color: "#666",
-                    transition: "background-color 0.2s"
-                  }}
-                  onMouseOver={e => e.currentTarget.style.backgroundColor = "#f5f5f5"}
-                  onMouseOut={e => e.currentTarget.style.backgroundColor = "transparent"}
-                >
-                  Back
-                </button>
-                <button
-                  onClick={handleCreateJobsheet}
-                  style={{
-                    padding: "12px 15px",
-                    backgroundColor: "#28a745", 
-                    color: "white",
-                    border: "none",
-                    borderRadius: "8px",
-                    fontSize: "14px",
-                    fontWeight: "600",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "10px",
-                    transition: "all 0.2s",
-                  }}
-                  onMouseOver={e => e.currentTarget.style.backgroundColor = "#218838"}
-                  onMouseOut={e => e.currentTarget.style.backgroundColor = "#28a745"}
-                  disabled={isLoading}
-                >
-                  {isLoading ? (
-                    <div style={{
-                      width: "18px",
-                      height: "18px",
-                      border: "2px solid rgba(255,255,255,0.3)",
-                      borderLeftColor: "white",
-                      borderRadius: "50%",
-                      animation: "spin 0.8s linear infinite"
-                    }}></div>
-                  ) : (
-                    <>
-                      <FontAwesomeIcon icon={faCheck} />
-                      Create Job Sheet
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          )}
+             
 
           {/* Step 7: Create New Customer */}
           {step === 'new-customer' && (
@@ -1662,12 +1350,11 @@ const CreateJobsheetModal = ({
             alignItems: "center",
             flex: 1
           }}>
-            {step === 'plate-search' && 'Step 1: Find motorcycle'}
-            {step === 'new-vehicle' && 'Step 2: Create new motorcycle'}
-            {step === 'post-vehicle-options' && 'Step 3: Motorcycle created'}
-            {step === 'confirm' && 'Step 4: Confirm motorcycle'}
-            {step === 'service-notes' && 'Step 5: Service details'}
-            {step === 'new-customer' && 'Step 6: Create new customer'}
+         {step === 'plate-search' && 'Step 1: Find motorcycle'}
+    {step === 'new-vehicle' && 'Step 2: Create new motorcycle'}
+    {step === 'post-vehicle-options' && 'Step 3: Motorcycle created'}
+    {step === 'confirm' && 'Step 4: Confirm motorcycle and create job sheet'}
+    {step === 'new-customer' && 'Step 5: Create new customer'}
           </div>
         </div>
 

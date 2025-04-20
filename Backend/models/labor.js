@@ -16,11 +16,18 @@ class LaborModel {
 
   async add(data) {
     try {
-      const { jobsheet_id, description, price = 0, is_completed = 0, tracking_notes = null } = data;
+      const { 
+        jobsheet_id, 
+        description, 
+        price = 0, 
+        is_completed = 1, 
+        is_billed = 1,  // Añadir este parámetro con valor predeterminado 1
+        tracking_notes = null 
+      } = data;
       
       const [result] = await pool.execute(
-        'INSERT INTO labor (jobsheet_id, description, price, is_completed, tracking_notes) VALUES (?, ?, ?, ?, ?)',
-        [jobsheet_id, description, price, is_completed, tracking_notes]
+        'INSERT INTO labor (jobsheet_id, description, price, is_completed, is_billed, tracking_notes) VALUES (?, ?, ?, ?, ?, ?)',
+        [jobsheet_id, description, price, is_completed, is_billed, tracking_notes]
       );
       
       if (is_completed) {
@@ -33,6 +40,7 @@ class LaborModel {
         description,
         price,
         is_completed,
+        is_billed,  // Añadir al objeto de retorno
         tracking_notes,
         created_at: new Date()
       };
