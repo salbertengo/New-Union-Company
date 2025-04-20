@@ -108,56 +108,8 @@ const VehiclesPage = () => {
       width: 120,
       cellRenderer: params => {
         if (!params.data) return '';
-        
-        // Format: two letters, four numbers, one letter (AB1234C)
-        let plate = params.value || "";
-        
-        return (
-          <div style={{ display: "flex", justifyContent: "center" }}>
-            <div
-              style={{
-                width: "54px",
-                height: "32px",
-                backgroundColor: "black",
-                border: "1px solid #444",
-                borderRadius: "3px",
-                display: "grid",
-                gridTemplateRows: "40% 60%",
-                overflow: "hidden",
-              }}
-            >
-              <div
-                style={{
-                  color: "white",
-                  fontFamily: "monospace",
-                  fontWeight: "bold",
-                  fontSize: "13px",
-                  textAlign: "center",
-                  borderBottom: "1px solid #444",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                {plate.substring(0, 2)}
-              </div>
-              <div
-                style={{
-                  color: "white",
-                  fontFamily: "monospace",
-                  fontWeight: "bold",
-                  fontSize: "13px",
-                  textAlign: "center",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                {plate.substring(2)}
-              </div>
-            </div>
-          </div>
-        );
+        // Simply return the plate text in uppercase
+        return <div>{(params.value || "").toUpperCase()}</div>;
       },
       headerClass: "custom-header-sumary",
     },

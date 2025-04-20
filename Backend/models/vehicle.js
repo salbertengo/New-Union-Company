@@ -30,31 +30,52 @@ class VehicleModel {
   }
 
   static async create(data) {
-    const { plate, model } = data;
+    const { plate, model, customer_id } = data;
+    
+    // Validate vehicle data
+    if (!plate || !model) {
+      throw new Error('Plate and model are required');
+    }
+    
+    // Check if customer_id exists
+    if (!customer_id) {
+      throw new Error('Customer ID is required');
+    }
+    
+    // Check for existing plate
     const [existing] = await pool.query('SELECT id FROM vehicles WHERE plate = ?', [plate]);
     if (existing.length > 0) {
       throw new Error(`Vehicle with plate ${plate} already exists`);
     }
-
+  
+    // Add customer_id to the INSERT query
     const [result] = await pool.query(
-      'INSERT INTO vehicles (plate, model) VALUES (?, ?)',
-      [plate, model]
+      'INSERT INTO vehicles (plate, model, customer_id) VALUES (?, ?, ?)',
+      [plate, model, customer_id]
     );
+    
     return result.insertId;
   }
-
   static async update(id, data) {
-    const { plate, model } = data;
-    // Verificar que la placa no exista en otro vehículo
+    const { plate, model, customer_id } = data;
+    
+    // Validate
+    if (!plate || !model) {
+      throw new Error('Plate and model are required');
+    }
+    
+    // Check for existing plate
     const [existing] = await pool.query('SELECT id FROM vehicles WHERE plate = ? AND id != ?', [plate, id]);
     if (existing.length > 0) {
       throw new Error(`Vehicle with plate ${plate} already exists`);
     }
-
+  
+    // Add customer_id to the UPDATE query
     const [result] = await pool.query(
-      'UPDATE vehicles SET plate = ?, model = ? WHERE id = ?',
-      [plate, model, id]
+      'UPDATE vehicles SET plate = ?, model = ?, customer_id = ? WHERE id = ?',
+      [plate, model, customer_id, id]
     );
+    
     return result.affectedRows;
   }
 

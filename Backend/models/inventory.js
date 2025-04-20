@@ -22,6 +22,17 @@ class InventoryModel {
 
   static async create(data) {
     const { name, stock, cost, sale, category, sku, min, brand } = data;
+  
+    // Verificar si el SKU ya existe
+    const [existingSku] = await pool.query('SELECT id FROM inventory WHERE sku = ?', [sku]);
+    if (existingSku.length > 0) {
+      // Si ya existe un producto con ese SKU, lanzamos un error con un código específico
+      const error = new Error('SKU already exists');
+      error.code = 'DUPLICATE_SKU';
+      throw error;
+    }
+    
+    // Si el SKU no existe, procedemos con la inserción
     const [result] = await pool.query(
       'INSERT INTO inventory (name, stock, cost, sale, category, sku, min, brand) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [name, stock, cost, sale, category, sku, min, brand]

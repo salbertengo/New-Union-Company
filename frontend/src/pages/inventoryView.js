@@ -7,8 +7,7 @@ import 'ag-grid-community/styles/ag-theme-alpine.css';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faEdit, faCog, faSearch } from '@fortawesome/free-solid-svg-icons';
 import '@fortawesome/fontawesome-svg-core/styles.css';
-import FocusTrap from 'focus-trap-react';
-import { 
+import { FocusTrap } from 'focus-trap-react';import { 
   ActionButton, 
   ActionButtonsContainer 
 } from '../components/common/ActionButtons';
@@ -21,6 +20,7 @@ const InventoryView = () => {
   const [categoryTerm, setCategoryTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
+  const [quickMode, setQuickMode] = useState(false);
   const gridRef = useRef(null);
   const [isHovered, setIsHovered] = useState(false);
   const [showCompatibilityModal, setShowCompatibilityModal] = useState(false);
@@ -118,19 +118,13 @@ const InventoryView = () => {
 
   const handleOpenEditModal = (data) => {
     setTimeout(() => {
-      // Clona los datos para evitar referencias directas
       const clonedData = JSON.parse(JSON.stringify(data));
-      
-      // Puede que la grid aún esté procesando eventos, así que añadimos un retraso
-      // pero NO usamos suspendEvents() porque no existe ese método
       setEditItem(clonedData);
       setShowModal(true);
-    }, 50); // Un pequeño retraso es suficiente
+    }, 50);
   };
   const handleOpenCompatibilityModal = async (product) => {
-    // Usa setTimeout para desacoplar la operación del flujo de renderizado de React
     setTimeout(async () => {
-      // Clona los datos para evitar referencias directos
       const clonedProduct = JSON.parse(JSON.stringify(product));
       setSelectedProduct(clonedProduct);
       await fetchCompatibilities(clonedProduct.id);
@@ -230,8 +224,26 @@ const InventoryView = () => {
 
   const columnDefs = useMemo(() => [
     { headerName: 'SKU', field: 'sku', width: 250, headerClass: 'custom-header-inventory', suppressMenu: true },
-    { headerName: 'Name', field: 'name', width: 300, headerClass: 'custom-header-inventory', suppressMenu: true },
-    { headerName: 'Category', field: 'category', width: 120, headerClass: 'custom-header-inventory', suppressMenu: true },
+    { 
+      headerName: 'Name', 
+      field: 'name', 
+      width: 400,
+      // Añadimos estos parámetros
+      autoHeight: true,
+      wrapText: true,
+      cellClass: 'cell-name',
+      headerClass: 'custom-header-inventory', 
+      suppressMenu: true,
+      // Mantenemos el renderizador para el tooltip, pero simplificamos el estilo interno
+      cellRenderer: params => {
+        const cellValue = params.value || '';
+        return (
+          <div title={cellValue}>
+            {cellValue}
+          </div>
+        );
+      },
+    },   { headerName: 'Category', field: 'category', width: 80, headerClass: 'custom-header-inventory', suppressMenu: true },
     { headerName: 'Brand', field: 'brand', width: 120, headerClass: 'custom-header-inventory', suppressMenu: true },
     { headerName: 'Stock', field: 'stock', width: 80, headerClass: 'custom-header-inventory', suppressMenu: true },
     { headerName: 'Min', field: 'min', width: 80, headerClass: 'custom-header-inventory', suppressMenu: true },
@@ -269,8 +281,6 @@ const InventoryView = () => {
     }
   ], []);
 
-  const handleRowClicked = () => {
-  };
 
   const handleAddProduct = () => {
     setTimeout(() => {
@@ -289,6 +299,61 @@ const InventoryView = () => {
     }, 50);
   };
 
+  const handleSaveAndAddAnother = async () => {
+    if (!editItem) return;
+    const { sku, name, cost, sale } = editItem;
+    if (!sku || !name || !cost || !sale) {
+      alert("Please complete all required fields (SKU, Name, Cost and Sale).");
+      return;
+    }
+    
+    const token = localStorage.getItem('token');
+    try {
+      const response = await fetch(`${API_URL}/inventory`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(editItem),
+      });
+  
+      if (response.ok) {
+        // Actualizar la lista pero mantener el modal abierto
+        fetchInventoryData(searchTerm, categoryTerm);
+        
+        // Limpiar el formulario para un nuevo producto
+        setEditItem({
+          sku: '',
+          name: '',
+          category: uniqueCategories[0] || '',
+          brand: uniqueBrands[0] || '',
+          stock: 0,
+          min: 0,
+          cost: 0,
+          sale: 0
+        });
+        
+        // Mensaje de éxito
+        alert("Product created successfully. You can now add another one.");
+      } else {
+        // Manejar los errores específicos
+        const errorData = await response.json();
+        if (errorData.error === 'duplicate_sku' || 
+            (errorData.message && errorData.message.includes('SKU already exists'))) {
+          alert("This SKU already exists. Please enter a unique SKU.");
+        } else {
+          console.error('Error saving product:', response.status);
+          alert("Error creating product. Please try again.");
+        }
+      }
+    } catch (error) {
+      console.error('Error in handleSaveAndAddAnother:', error);
+      alert("Error connecting to server. Please check your connection.");
+    }
+  };
+  
+  // Función para verificar si el SKU ya existe
   const handleSave = async () => {
     if (!editItem) return;
     const { sku, name, cost, sale } = editItem;
@@ -324,10 +389,18 @@ const InventoryView = () => {
         fetchInventoryData(searchTerm, categoryTerm);
         setShowModal(false);
       } else {
-        console.error('Error saving item:', response.status);
+        // Manejar el error según el tipo
+        const errorData = await response.json();
+        if (errorData.error === 'duplicate_sku') {
+          alert("This SKU already exists. Please enter a unique SKU.");
+        } else {
+          console.error('Error saving item:', response.status);
+          alert("Error saving product. Please try again.");
+        }
       }
     } catch (error) {
       console.error('Error in handleSave:', error);
+      alert("Error connecting to server. Please check your connection.");
     }
   };
 
@@ -478,8 +551,8 @@ const InventoryView = () => {
             paginationPageSize={12}
             headerHeight={30}
             rowHeight={50}
-            suppressSizeToFit={true}
-            suppressHorizontalScroll={true}
+            suppressSizeToFit={false}
+            suppressHorizontalScroll={false}
             onGridReady={onGridReady}
           />
         </div>
@@ -509,7 +582,7 @@ const InventoryView = () => {
         )}
       </div>
 
-      {/* Modal for product */}
+      {/* Product Modal */}
       {showModal && editItem && (
         <div
           role="dialog"
@@ -534,49 +607,78 @@ const InventoryView = () => {
             if (e.target === e.currentTarget) setShowModal(false);
           }}
         >
+          <div
+            style={{
+              backgroundColor: "white",
+              borderRadius: "16px",
+              width: "95%",
+              maxWidth: "800px",
+              maxHeight: "90vh",
+              boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
+              display: "flex",
+              flexDirection: "column",
+              overflow: "visible",
+              animation: "modalFadeIn 0.3s ease",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* NUEVO DISEÑO DE HEADER - Completamente rediseñado con altura fija */}
             <div
               style={{
-                backgroundColor: "white",
-                borderRadius: "16px",
-                width: "95%",
-                maxWidth: "800px",
-                maxHeight: "90vh",
-                boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
-                display: "flex",
-                flexDirection: "column",
-                overflow: "hidden",
-                animation: "modalFadeIn 0.3s ease",
+                background: "linear-gradient(135deg, #5932EA 0%, #4321C9 100%)",
+                color: "white",
+                position: "relative",
+                overflow: "visible",
+                width: "100%",
+                height: "150px", // Altura fija estricta
+                boxSizing: "border-box",
               }}
-              onClick={(e) => e.stopPropagation()}
             >
-              {/* Header */}
-              <div
-                style={{
-                  background: "linear-gradient(135deg, #5932EA 0%, #4321C9 100%)",
-                  padding: "24px 30px",
-                  color: "white",
-                  position: "relative",
-                  overflow: "hidden",
-                }}
-              >
-                <div
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    right: 0,
-                    width: "200px",
-                    height: "100%",
-                    background: "linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.1) 100%)",
-                    transform: "skewX(-20deg) translateX(30%)",
-                  }}
-                  aria-hidden="true"
-                ></div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                  <div>
-                    <h2 id="product-modal-title" style={{ margin: 0, fontSize: "22px", fontWeight: "600" }}>
+              {/* Decoración de fondo */}
+              <div style={{
+                position: "absolute",
+                top: 0,
+                right: 0,
+                width: "200px",
+                height: "100%",
+                background: "linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.1) 100%)",
+                transform: "skewX(-20deg) translateX(30%)",
+                pointerEvents: "none"
+              }}></div>
+              
+              {/* Contenido del header en grid para mejor control */}
+              <div style={{
+                display: "grid",
+                gridTemplateRows: "auto auto",
+                height: "100%",
+                padding: "24px 30px",
+                boxSizing: "border-box",
+              }}>
+                {/* Fila 1: Título y botón de cierre */}
+                <div style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "flex-start"
+                }}>
+                  <div style={{ maxWidth: "calc(100% - 40px)" }}>
+                    <h2 id="product-modal-title" style={{ 
+                      margin: 0, 
+                      fontSize: "22px", 
+                      fontWeight: "600", 
+                      whiteSpace: "nowrap",
+                      overflow: "visible",
+                      textOverflow: "ellipsis",
+                    }}>
                       {editItem.id ? 'Edit Product' : 'Add New Product'}
                     </h2>
-                    <p id="product-modal-description" style={{ margin: "4px 0 0 0", opacity: "0.8", fontSize: "14px" }}>
+                    <p id="product-modal-description" style={{ 
+                      margin: "4px 0 0 0", 
+                      opacity: "0.8", 
+                      fontSize: "14px",
+                      whiteSpace: "nowrap",
+                      overflow: "visible", 
+                      textOverflow: "ellipsis",
+                    }}>
                       {editItem.id ? `Editing ${editItem.name || 'Product'}` : "Enter product details below"}
                     </p>
                   </div>
@@ -589,6 +691,7 @@ const InventoryView = () => {
                       color: "white",
                       width: "32px",
                       height: "32px",
+                      minWidth: "32px",
                       borderRadius: "50%",
                       cursor: "pointer",
                       display: "flex",
@@ -608,237 +711,142 @@ const InventoryView = () => {
                     ×
                   </button>
                 </div>
+                
+                {/* Fila 2: Selector de Quick Mode con diseño moderno y limpio */}
+                <div style={{
+                  alignSelf: "end",
+                  marginTop: "auto"
+                }}>
+                  {/* Diseño simplificado con switch visual en lugar de texto largo */}
+                  <div style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "16px",
+                  }}>
+                    <button
+                      onClick={() => setQuickMode(!quickMode)}
+                      style={{
+                        backgroundColor: "transparent",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "6px",
+                        fontSize: "14px",
+                        cursor: "pointer",
+                        padding: "6px 8px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        transition: "background-color 0.2s",
+                      }}
+                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.1)"}
+                      onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                    >
+                      {/* Switch visual */}
+                      <div style={{
+                        width: "36px",
+                        height: "20px",
+                        backgroundColor: quickMode ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.1)",
+                        borderRadius: "10px",
+                        position: "relative",
+                        transition: "background-color 0.2s"
+                      }}>
+                        <div style={{
+                          position: "absolute",
+                          left: quickMode ? "18px" : "2px",
+                          top: "2px",
+                          width: "16px",
+                          height: "16px",
+                          backgroundColor: "white",
+                          borderRadius: "50%",
+                          transition: "left 0.2s"
+                        }}></div>
+                      </div>
+                      <span style={{ fontWeight: "500" }}>Quick Mode</span>
+                    </button>
+                    
+                    {/* Texto descriptivo corto y no truncado */}
+                    <span style={{
+                      fontSize: "13px",
+                      opacity: "0.8",
+                    }}>
+                      {quickMode ? "Essential fields only" : "Show all fields"}
+                    </span>
+                  </div>
+                </div>
               </div>
+            </div>
 
-              {/* Content area */}
-              <div style={{ flex: 1, overflowY: "auto", padding: "24px 30px" }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-                  {/* Product Identification */}
-                  <div style={{ padding: "20px", backgroundColor: "#f9fafc", borderRadius: "12px", border: "1px solid #e0e0e0" }}>
-                    <h3 style={{ margin: "0 0 16px 0", fontSize: "16px", fontWeight: "600", color: "#333" }}>
-                      Product Identification
-                    </h3>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-                      <div>
-                        <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
-                          SKU *
-                        </label>
-                        <input
-                          type="text"
-                          value={editItem.sku}
-                          onChange={(e) => setEditItem({ ...editItem, sku: e.target.value })}
-                          style={{
-                            width: "90%",
-                            padding: "12px",
-                            borderRadius: "8px",
-                            border: "1px solid #e0e0e0",
-                            backgroundColor: "#fff",
-                            fontSize: "14px",
-                            transition: "border-color 0.2s",
-                            outline: "none"
-                          }}
-                          onFocus={(e) => e.target.style.borderColor = "#5932EA"}
-                          onBlur={(e) => e.target.style.borderColor = "#e0e0e0"}
-                          placeholder="Enter unique product SKU"
-                        />
-                      </div>
-                      <div>
-                        <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
-                          Name *
-                        </label>
-                        <input
-                          type="text"
-                          value={editItem.name}
-                          onChange={(e) => setEditItem({ ...editItem, name: e.target.value })}
-                          style={{
-                            width: "90%",
-                            padding: "12px",
-                            borderRadius: "8px",
-                            border: "1px solid #e0e0e0",
-                            backgroundColor: "#fff",
-                            fontSize: "14px",
-                            transition: "border-color 0.2s",
-                            outline: "none"
-                          }}
-                          onFocus={(e) => e.target.style.borderColor = "#5932EA"}
-                          onBlur={(e) => e.target.style.borderColor = "#e0e0e0"}
-                          placeholder="Enter product name"
-                        />
-                      </div>
+            {/* Content area */}
+            <div style={{ flex: 1, overflowY: "auto", padding: "24px 30px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+                {/* Product Identification - Always visible */}
+                <div style={{ padding: "20px", backgroundColor: "#f9fafc", borderRadius: "12px", border: "1px solid #e0e0e0" }}>
+                  <h3 style={{ margin: "0 0 16px 0", fontSize: "16px", fontWeight: "600", color: "#333" }}>
+                    Product Identification
+                  </h3>
+                  <div style={{ 
+                    display: "grid", 
+                    gridTemplateColumns: "1fr 1fr", 
+                    gap: "16px", 
+                    width: "100%", 
+                    boxSizing: "border-box" 
+                  }}>
+                    <div>
+                      <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
+                        SKU *
+                      </label>
+                      <input
+                        type="text"
+                        value={editItem.sku}
+                        onChange={(e) => setEditItem({ ...editItem, sku: e.target.value })}
+                        style={{
+                          width: "100%",
+                          padding: "12px",
+                          borderRadius: "8px",
+                          border: "1px solid #e0e0e0",
+                          backgroundColor: "#fff",
+                          fontSize: "14px",
+                          transition: "border-color 0.2s",
+                          outline: "none",
+                          boxSizing: "border-box"
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
+                        Name *
+                      </label>
+                      <input
+                        type="text"
+                        value={editItem.name}
+                        onChange={(e) => setEditItem({ ...editItem, name: e.target.value })}
+                        style={{
+                          width: "100%",
+                          padding: "12px",
+                          borderRadius: "8px",
+                          border: "1px solid #e0e0e0",
+                          backgroundColor: "#fff",
+                          fontSize: "14px",
+                          transition: "border-color 0.2s",
+                          outline: "none",
+                          boxSizing: "border-box"
+                        }}
+                      />
                     </div>
                   </div>
+                </div>
 
-                  {/* Classification */}
-                  <div style={{ padding: "20px", backgroundColor: "#f9fafc", borderRadius: "12px", border: "1px solid #e0e0e0" }}>
-                    <h3 style={{ margin: "0 0 16px 0", fontSize: "16px", fontWeight: "600", color: "#333" }}>
-                      Classification
-                    </h3>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-                      <div>
-                        <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
-                          Category
-                        </label>
-                        <div style={{ position: "relative" }}>
-                          <input
-                            list="category-suggestions"
-                            value={editItem.category}
-                            onChange={(e) => setEditItem({ ...editItem, category: e.target.value })}
-                            style={{
-                              width: "90%",
-                              padding: "12px",
-                              borderRadius: "8px",
-                              border: "1px solid #e0e0e0",
-                              backgroundColor: "#fff",
-                              fontSize: "14px",
-                              transition: "border-color 0.2s",
-                              outline: "none"
-                            }}
-                            onFocus={(e) => e.target.style.borderColor = "#5932EA"}
-                            onBlur={(e) => e.target.style.borderColor = "#e0e0e0"}
-                            placeholder="Enter or select category"
-                          />
-                          <datalist id="category-suggestions">
-                            {uniqueCategories.map(cat => (
-                              <option key={cat} value={cat} />
-                            ))}
-                          </datalist>
-                        </div>
-                      </div>
-                      <div>
-                        <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
-                          Brand
-                        </label>
-                        <div style={{ position: "relative" }}>
-                          <input
-                            list="brand-suggestions"
-                            value={editItem.brand}
-                            onChange={(e) => setEditItem({ ...editItem, brand: e.target.value })}
-                            style={{
-                              width: "90%",
-                              padding: "12px",
-                              borderRadius: "8px",
-                              border: "1px solid #e0e0e0",
-                              backgroundColor: "#fff",
-                              fontSize: "14px",
-                              transition: "border-color 0.2s",
-                              outline: "none"
-                            }}
-                            onFocus={(e) => e.target.style.borderColor = "#5932EA"}
-                            onBlur={(e) => e.target.style.borderColor = "#e0e0e0"}
-                            placeholder="Enter or select brand"
-                          />
-                          <datalist id="brand-suggestions">
-                            {uniqueBrands.map(b => (
-                              <option key={b} value={b} />
-                            ))}
-                          </datalist>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Inventory Information */}
-                  <div style={{ padding: "20px", backgroundColor: "#f9fafc", borderRadius: "12px", border: "1px solid #e0e0e0" }}>
-                    <h3 style={{ margin: "0 0 16px 0", fontSize: "16px", fontWeight: "600", color: "#333" }}>
-                      Inventory Information
-                    </h3>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-                      <div>
-                        <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
-                          Current Stock
-                        </label>
-                        <input
-                          type="number"
-                          value={editItem.stock}
-                          onChange={(e) => setEditItem({ ...editItem, stock: Number(e.target.value) })}
-                          style={{
-                            width: "90%",
-                            padding: "12px",
-                            borderRadius: "8px",
-                            border: "1px solid #e0e0e0",
-                            backgroundColor: "#fff",
-                            fontSize: "14px",
-                            transition: "border-color 0.2s",
-                            outline: "none"
-                          }}
-                          onFocus={(e) => e.target.style.borderColor = "#5932EA"}
-                          onBlur={(e) => e.target.style.borderColor = "#e0e0e0"}
-                          placeholder="0"
-                        />
-                      </div>
-                      <div>
-                        <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
-                          Minimum Stock Alert
-                        </label>
-                        <input
-                          type="number"
-                          value={editItem.min}
-                          onChange={(e) => setEditItem({ ...editItem, min: Number(e.target.value) })}
-                          style={{
-                            width: "90%",
-                            padding: "12px",
-                            borderRadius: "8px",
-                            border: "1px solid #e0e0e0",
-                            backgroundColor: "#fff",
-                            fontSize: "14px",
-                            transition: "border-color 0.2s",
-                            outline: "none"
-                          }}
-                          onFocus={(e) => e.target.style.borderColor = "#5932EA"}
-                          onBlur={(e) => e.target.style.borderColor = "#e0e0e0"}
-                          placeholder="0"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Pricing Information */}
-                  <div style={{ padding: "20px", backgroundColor: "#f9fafc", borderRadius: "12px", border: "1px solid #e0e0e0" }}>
-                    <h3 style={{ margin: "0 0 16px 0", fontSize: "16px", fontWeight: "600", color: "#333" }}>
-                      Pricing Information
-                    </h3>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-                      <div>
-                        <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
-                          Cost Price *
-                        </label>
-                        <div style={{ position: "relative" }}>
-                        <span style={{ 
-    position: "absolute", 
-    left: "12px", 
-    top: "50%", 
-    transform: "translateY(-50%)",
-    color: "#666",
-    fontSize: "14px",
-    pointerEvents: "none"
-  }}>$</span>
-<input
-    type="number"
-    value={editItem.cost}
-                            onChange={(e) => setEditItem({ ...editItem, cost: Number(e.target.value) })}
-    style={{
-      width: "90%",
-      padding: "12px 12px 12px 24px", 
-      borderRadius: "8px",
-      border: "1px solid #e0e0e0",
-      backgroundColor: "#fff",
-      fontSize: "14px",
-      transition: "border-color 0.2s",
-      outline: "none"
-    }}
-    onFocus={(e) => e.target.style.borderColor = "#5932EA"}
-    onBlur={(e) => e.target.style.borderColor = "#e0e0e0"}
-    placeholder="0.00"
-    step="1"
-    min="0"
-  />
-</div>
-                      </div>
-                      <div>
-                        <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
-                          Sale Price *
-                        </label>
-                        <div style={{ position: "relative" }}>
+                {/* Pricing Information - Always visible */}
+                <div style={{ padding: "20px", backgroundColor: "#f9fafc", borderRadius: "12px", border: "1px solid #e0e0e0" }}>
+                  <h3 style={{ margin: "0 0 16px 0", fontSize: "16px", fontWeight: "600", color: "#333" }}>
+                    Pricing Information
+                  </h3>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
+                    <div>
+                      <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
+                        Cost Price *
+                      </label>
+                      <div style={{ position: "relative" }}>
   <span style={{ 
     position: "absolute", 
     left: "12px", 
@@ -848,126 +856,321 @@ const InventoryView = () => {
     fontSize: "14px",
     pointerEvents: "none"
   }}>$</span>
-<input
-    type="number"
-    value={editItem.sale}
-    onChange={(e) => setEditItem({ ...editItem, sale: Number(e.target.value) })}
+  <input
+    type="text"
+    value={editItem.cost === 0 ? '' : editItem.cost}
+    onChange={(e) => {
+      const val = e.target.value;
+      if (val === '' || /^\d*\.?\d*$/.test(val)) {
+        setEditItem({ ...editItem, cost: val === '' ? 0 : Number(val) });
+      }
+    }}
     style={{
-      width: "90%",
-      padding: "12px 12px 12px 24px", 
+      width: "100%",
+      padding: "12px 12px 12px 30px", /* Aumentado el padding izquierdo para el símbolo $ */
       borderRadius: "8px",
       border: "1px solid #e0e0e0",
       backgroundColor: "#fff",
       fontSize: "14px",
       transition: "border-color 0.2s",
-      outline: "none"
+      outline: "none",
+      boxSizing: "border-box"
     }}
     onFocus={(e) => e.target.style.borderColor = "#5932EA"}
     onBlur={(e) => e.target.style.borderColor = "#e0e0e0"}
     placeholder="0.00"
-    step="1"
-    min="0"
   />
 </div>
-                        {editItem.cost > 0 && editItem.sale > 0 && (
-                          <div style={{ 
-                            marginTop: "6px", 
-                            fontSize: "13px", 
-                            color: 
-                            editItem.sale > editItem.cost 
-                              ? "#2E7D32" 
-                              : editItem.sale < editItem.cost 
-                                ? "#C62828" 
-                                : "#666"
-                          }}>
-                            {editItem.sale > editItem.cost 
-                              ? `Margin: ${((editItem.sale - editItem.cost) / editItem.cost * 100).toFixed(1)}%` 
-                              : editItem.sale < editItem.cost 
-                                ? "Warning: Sale price is lower than cost" 
-                                : "No margin - selling at cost"}
-                          </div>
-                        )}
-                      </div>
+                    </div>
+                    <div>
+                      <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
+                        Sale Price *
+                      </label>
+                      <div style={{ position: "relative" }}>
+  <span style={{ 
+    position: "absolute", 
+    left: "12px", 
+    top: "50%", 
+    transform: "translateY(-50%)",
+    color: "#666",
+    fontSize: "14px",
+    pointerEvents: "none"
+  }}>$</span>
+  <input
+    type="text"
+    value={editItem.sale === 0 ? '' : editItem.sale}
+    onChange={(e) => {
+      const val = e.target.value;
+      if (val === '' || /^\d*\.?\d*$/.test(val)) {
+        setEditItem({ ...editItem, sale: val === '' ? 0 : Number(val) });
+      }
+    }}
+    style={{
+      width: "100%",
+      padding: "12px 12px 12px 30px", /* Ajustado el padding para mantener consistencia */
+      borderRadius: "8px",
+      border: "1px solid #e0e0e0",
+      backgroundColor: "#fff",
+      fontSize: "14px",
+      transition: "border-color 0.2s",
+      outline: "none",
+      boxSizing: "border-box" /* Asegurarse que tiene box-sizing */
+    }}
+    onFocus={(e) => e.target.style.borderColor = "#5932EA"}
+    onBlur={(e) => e.target.style.borderColor = "#e0e0e0"}
+    placeholder="0.00"
+  />
+</div>
+                      {editItem.cost > 0 && editItem.sale > 0 && (
+                        <div style={{ 
+                          marginTop: "6px", 
+                          fontSize: "13px", 
+                          color: 
+                          editItem.sale > editItem.cost 
+                            ? "#2E7D32" 
+                            : editItem.sale < editItem.cost 
+                              ? "#C62828" 
+                              : "#666"
+                        }}>
+                          {editItem.sale > editItem.cost 
+                            ? `Margin: ${((editItem.sale - editItem.cost) / editItem.cost * 100).toFixed(1)}%` 
+                            : editItem.sale < editItem.cost 
+                              ? "Warning: Sale price is lower than cost" 
+                              : "No margin - selling at cost"}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Footer */}
-              <div
-                style={{
-                  borderTop: "1px solid #e0e0e0",
-                  padding: "16px 24px",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  backgroundColor: "#f9fafc",
-                }}
-              >
-                {editItem.id && (
-                  <button
-                    onClick={handleDelete}
-                    style={{
-                      padding: "12px 20px",
-                      backgroundColor: "transparent",
-                      color: "#D32F2F",
-                      border: "1px solid #FFCDD2",
-                      borderRadius: "8px",
-                      cursor: "pointer",
-                      fontSize: "14px",
-                      fontWeight: "500",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                      transition: "all 0.2s",
-                    }}
-                    onMouseOver={(e) => {
-                      e.currentTarget.style.backgroundColor = "#FFF5F5";
-                    }}
-                    onMouseOut={(e) => {
-                      e.currentTarget.style.backgroundColor = "transparent";
-                    }}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M2 4H3.33333H14" stroke="#D32F2F" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M5.33331 4.00016V2.66683C5.33331 2.31321 5.4738 1.97407 5.72385 1.72402C5.9739 1.47397 6.31304 1.33349 6.66665 1.33349H9.33331C9.68693 1.33349 10.0261 1.47397 10.2761 1.72402C10.5262 1.97407 10.6666 2.31321 10.6666 2.66683V4.00016M12.6666 4.00016V13.3335C12.6666 13.6871 12.5262 14.0263 12.2761 14.2763C12.0261 14.5264 11.6869 14.6668 11.3333 14.6668H4.66665C4.31304 14.6668 3.9739 14.5264 3.72385 14.2763C3.4738 14.0263 3.33331 13.6871 3.33331 13.3335V4.00016H12.6666Z" stroke="#D32F2F" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M6.66669 7.33349V11.3335" stroke="#D32F2F" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M9.33331 7.33349V11.3335" stroke="#D32F2F" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                    Delete Product
-                  </button>
+                {/* Additional sections - Only visible if not in quick mode */}
+
+                  {!quickMode && (
+  <>
+    {/* Classification */}
+    <div style={{ 
+      display: "grid", 
+      gridTemplateColumns: "1fr 1fr", 
+      gap: "16px",
+      marginBottom: "20px"
+    }}>
+      {/* Categoría */}
+      <div>
+        <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
+          Category
+        </label>
+        <input
+          type="text"
+          list="category-options"
+          value={editItem.category}
+          onChange={(e) => setEditItem({ ...editItem, category: e.target.value })}
+          style={{
+            width: "100%",
+            padding: "12px",
+            borderRadius: "8px",
+            border: "1px solid #e0e0e0",
+            backgroundColor: "#fff",
+            fontSize: "14px",
+            transition: "border-color 0.2s",
+            outline: "none",
+            boxSizing: "border-box"
+          }}
+          onFocus={(e) => e.target.style.borderColor = "#5932EA"}
+          onBlur={(e) => e.target.style.borderColor = "#e0e0e0"}
+        />
+        <datalist id="category-options">
+          {uniqueCategories.map(cat => (
+            <option key={cat} value={cat} />
+          ))}
+        </datalist>
+      </div>
+
+      {/* Marca */}
+      <div>
+        <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
+          Brand
+        </label>
+        <input
+          type="text"
+          list="brand-options"
+          value={editItem.brand}
+          onChange={(e) => setEditItem({ ...editItem, brand: e.target.value })}
+          style={{
+            width: "100%",
+            padding: "12px",
+            borderRadius: "8px",
+            border: "1px solid #e0e0e0",
+            backgroundColor: "#fff",
+            fontSize: "14px",
+            transition: "border-color 0.2s",
+            outline: "none",
+            boxSizing: "border-box"
+          }}
+          onFocus={(e) => e.target.style.borderColor = "#5932EA"}
+          onBlur={(e) => e.target.style.borderColor = "#e0e0e0"}
+        />
+        <datalist id="brand-options">
+          {uniqueBrands.map(brand => (
+            <option key={brand} value={brand} />
+          ))}
+        </datalist>
+      </div>
+    </div>
+
+                    {/* Inventory Information */}
+                    <div style={{ padding: "20px", backgroundColor: "#f9fafc", borderRadius: "12px", border: "1px solid #e0e0e0" }}>
+  <h3 style={{ margin: "0 0 16px 0", fontSize: "16px", fontWeight: "600", color: "#333" }}>
+    Inventory Information
+  </h3>
+  <div style={{ 
+    display: "grid", 
+    gridTemplateColumns: "1fr 1fr", 
+    gap: "16px", /* Reducido el gap para evitar choques */
+    width: "100%", 
+    boxSizing: "border-box" 
+  }}>
+    <div>
+      <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
+        Current Stock
+      </label>
+      <input
+        type="text"
+        value={editItem.stock === 0 ? '' : editItem.stock}
+        onChange={(e) => {
+          const val = e.target.value;
+          if (val === '' || /^\d+$/.test(val)) {
+            setEditItem({ ...editItem, stock: val === '' ? 0 : Number(val) });
+          }
+        }}
+        style={{
+          width: "100%",
+          padding: "12px",
+          borderRadius: "8px",
+          border: "1px solid #e0e0e0",
+          backgroundColor: "#fff",
+          fontSize: "14px",
+          transition: "border-color 0.2s",
+          outline: "none",
+          boxSizing: "border-box" /* Asegurarse que tiene box-sizing */
+        }}
+        onFocus={(e) => e.target.style.borderColor = "#5932EA"}
+        onBlur={(e) => e.target.style.borderColor = "#e0e0e0"}
+        placeholder="0"
+      />
+    </div>
+    <div>
+      <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
+        Minimum Stock Alert
+      </label>
+      <input
+        type="text"
+        value={editItem.min === 0 ? '' : editItem.min}
+        onChange={(e) => {
+          const val = e.target.value;
+          if (val === '' || /^\d+$/.test(val)) {
+            setEditItem({ ...editItem, min: val === '' ? 0 : Number(val) });
+          }
+        }}
+        style={{
+          width: "100%",
+          padding: "12px",
+          borderRadius: "8px",
+          border: "1px solid #e0e0e0",
+          backgroundColor: "#fff",
+          fontSize: "14px",
+          transition: "border-color 0.2s",
+          outline: "none",
+          boxSizing: "border-box" /* Asegurarse que tiene box-sizing */
+        }}
+        onFocus={(e) => e.target.style.borderColor = "#5932EA"}
+        onBlur={(e) => e.target.style.borderColor = "#e0e0e0"}
+        placeholder="0"
+      />
+    </div>
+  </div>
+</div>
+                  </>
                 )}
+              </div>
+            </div>
+
+            {/* Footer with improved actions */}
+            <div
+              style={{
+                borderTop: "1px solid #e0e0e0",
+                padding: "16px 24px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                backgroundColor: "#f9fafc",
+              }}
+            >
+              {editItem.id && (
+                <button
+                  onClick={handleDelete}
+                  style={{
+                    padding: "12px 20px",
+                    backgroundColor: "transparent",
+                    color: "#D32F2F",
+                    border: "1px solid #FFCDD2",
+                    borderRadius: "8px",
+                    cursor: "pointer",
+                    fontSize: "14px",
+                    fontWeight: "500",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    transition: "all 0.2s",
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.backgroundColor = "#FFF5F5";
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.backgroundColor = "transparent";
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M2 4H3.33333H14" stroke="#D32F2F" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M5.33331 4.00016V2.66683C5.33331 2.31321 5.4738 1.97407 5.72385 1.72402C5.9739 1.47397 6.31304 1.33349 6.66665 1.33349H9.33331C9.68693 1.33349 10.0261 1.47397 10.2761 1.72402C10.5262 1.97407 10.6666 2.31321 10.6666 2.66683V4.00016M12.6666 4.00016V13.3335C12.6666 13.6871 12.5262 14.0263 12.2761 14.2763C12.0261 14.5264 11.6869 14.6668 11.3333 14.6668H4.66665C4.31304 14.6668 3.9739 14.5264 3.72385 14.2763C3.4738 14.0263 3.33331 13.6871 3.33331 13.3335V4.00016H12.6666Z" stroke="#D32F2F" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M6.66669 7.33349V11.3335" stroke="#D32F2F" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M9.33331 7.33349V11.3335" stroke="#D32F2F" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  Delete Product
+                </button>
+              )}
+              
+              <div style={{ display: "flex", gap: "12px", marginLeft: "auto" }}>
+                <button
+                  onClick={() => setShowModal(false)}
+                  style={{
+                    padding: "12px 20px",
+                    backgroundColor: "transparent",
+                    color: "#666",
+                    border: "1px solid #d0d0d0",
+                    borderRadius: "8px",
+                    cursor: "pointer",
+                    fontSize: "14px",
+                    fontWeight: "500",
+                    transition: "all 0.2s",
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.backgroundColor = "#f5f5f5";
+                    e.currentTarget.style.color = "#555";
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.backgroundColor = "transparent";
+                    e.currentTarget.style.color = "#666";
+                  }}
+                >
+                  Cancel
+                </button>
                 
-                <div style={{ display: "flex", gap: "12px", marginLeft: "auto" }}>
+                {!editItem.id && (
                   <button
-                    onClick={() => setShowModal(false)}
-                    style={{
-                      padding: "12px 20px",
-                      backgroundColor: "transparent",
-                      color: "#666",
-                      border: "1px solid #d0d0d0",
-                      borderRadius: "8px",
-                      cursor: "pointer",
-                      fontSize: "14px",
-                      fontWeight: "500",
-                      transition: "all 0.2s",
-                    }}
-                    onMouseOver={(e) => {
-                      e.currentTarget.style.backgroundColor = "#f5f5f5";
-                      e.currentTarget.style.color = "#555";
-                    }}
-                    onMouseOut={(e) => {
-                      e.currentTarget.style.backgroundColor = "transparent";
-                      e.currentTarget.style.color = "#666";
-                    }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleSave}
+                    onClick={handleSaveAndAddAnother}
                     style={{
                       padding: "12px 24px",
-                      backgroundColor: "#5932EA",
+                      backgroundColor: "#4E9F3D",
                       color: "white",
                       border: "none",
                       borderRadius: "8px",
@@ -978,29 +1181,54 @@ const InventoryView = () => {
                       alignItems: "center",
                       justifyContent: "center",
                       gap: "8px",
-                      minWidth: "120px",
+                      minWidth: "170px",
                       transition: "all 0.2s",
                     }}
-                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#4321C9"}
-                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#5932EA"}
+                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#3D8030"}
+                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#4E9F3D"}
                   >
-                    {editItem.id ? "Update Product" : "Create Product"}
+                    Save & Add Another
                   </button>
-                </div>
+                )}
+                
+                <button
+                  onClick={handleSave}
+                  style={{
+                    padding: "12px 24px",
+                    backgroundColor: "#5932EA",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "8px",
+                    cursor: "pointer",
+                    fontSize: "14px",
+                    fontWeight: "600",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "8px",
+                    minWidth: "120px",
+                    transition: "all 0.2s",
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#4321C9"}
+                  onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#5932EA"}
+                >
+                  {editItem.id ? "Update Product" : "Create Product"}
+                </button>
               </div>
-
-              {/* CSS animations */}
-              <style jsx="true">{`
-                @keyframes fadeIn {
-                  from { opacity: 0; }
-                  to { opacity: 1; }
-                }
-                @keyframes modalFadeIn {
-                  from { opacity: 0; transform: scale(0.95); }
-                  to { opacity: 1; transform: scale(1); }
-                }
-              `}</style>
             </div>
+
+            {/* CSS animations */}
+            <style jsx="true">{`
+              @keyframes fadeIn {
+                from { opacity: 0; }
+                to { opacity: 1; }
+              }
+              @keyframes modalFadeIn {
+                from { opacity: 0; transform: scale(0.95); }
+                to { opacity: 1; transform: scale(1); }
+              }
+            `}</style>
+          </div>
         </div>
       )}
 
@@ -1025,7 +1253,9 @@ const InventoryView = () => {
             if (e.target === e.currentTarget) setShowCompatibilityModal(false);
           }}
         >
-          <FocusTrap>
+
+          
+            {/* Necesitamos una función que retorne un solo elemento para asegurar que FocusTrap tiene un único hijo */}
             <div
               style={{
                 backgroundColor: "white",
@@ -1353,7 +1583,6 @@ const InventoryView = () => {
                 }
               `}</style>
             </div>
-          </FocusTrap>
         </div>
       )}
     </div>

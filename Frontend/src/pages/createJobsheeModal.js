@@ -159,7 +159,107 @@ const CreateJobsheetModal = ({
       setIsLoading(false);
     }
   };
-
+  const [customerSearchTerm, setCustomerSearchTerm] = useState('');
+  const [customerResults, setCustomerResults] = useState([]);
+  const [showCustomerSearch, setShowCustomerSearch] = useState(false);
+  
+  // Agrega esta función para buscar clientes existentes:
+  const searchCustomers = async (query) => {
+    if (!query || query.length < 2) {
+      setCustomerResults([]);
+      return;
+    }
+    
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${API_URL}/customers?search=${encodeURIComponent(query)}`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setCustomerResults(data);
+      }
+    } catch (error) {
+      console.error("Error searching customers:", error);
+    }
+  };
+  
+  // Función para seleccionar un cliente existente:
+  const handleSelectCustomer = async (customer) => {
+    // Si estamos editando un jobsheet, actualizamos directamente
+    if (editingJobsheet) {
+      try {
+        setIsLoading(true);
+        const token = localStorage.getItem("token");
+        
+        // Actualizar el vehículo con el nuevo cliente
+        await fetch(`${API_URL}/vehicles/${selectedVehicle.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ 
+            ...selectedVehicle, 
+            customer_id: customer.id,
+            plate: selectedVehicle.plate,
+            model: selectedVehicle.model
+          })
+        });
+        
+        // Actualizar el jobsheet con el nuevo cliente
+        await fetch(`${API_URL}/jobsheets/${editingJobsheet.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            vehicle_id: selectedVehicle.id,
+            customer_id: customer.id,
+            state: editingJobsheet.state || "pending"
+          })
+        });
+        
+        // Actualizar el estado local
+        setSelectedVehicle({ 
+          ...selectedVehicle, 
+          customer_id: customer.id, 
+          customer_name: customer.name 
+        });
+        
+        showNotification('Customer asociated succesful', 'success');
+        // Después de actualizar, volvemos al paso confirm
+        setStep('confirm');
+        // Limpiar resultados de búsqueda
+        setCustomerResults([]);
+        setCustomerSearchTerm('');
+        setShowCustomerSearch(false);
+        
+        if (refreshJobsheets) {
+          refreshJobsheets();
+        }
+      } catch (error) {
+        console.error("Error updating customer:", error);
+        showNotification('Error al actualizar el cliente', 'error');
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      // Para jobsheets nuevos, solo actualiza el estado local
+      setSelectedVehicle({ 
+        ...selectedVehicle, 
+        customer_id: customer.id, 
+        customer_name: customer.name 
+      });
+      setStep('confirm');
+      setCustomerResults([]);
+      setCustomerSearchTerm('');
+    }
+  };
   // Show notification helper
   const showNotification = (message, type = "info") => {
     setNotification({ show: true, message, type });
@@ -209,18 +309,62 @@ const CreateJobsheetModal = ({
       });
       if (response.ok) {
         const data = await response.json();
-        // Asociar el vehículo al nuevo customer
+        
+        // Asociar el vehículo al nuevo cliente
         await fetch(`${API_URL}/vehicles/${selectedVehicle.id}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ ...selectedVehicle, customer_id: data.id })
+          body: JSON.stringify({ 
+            ...selectedVehicle, 
+            customer_id: data.id,
+            plate: selectedVehicle.plate,
+            model: selectedVehicle.model
+          })
         });
-        setSelectedVehicle({ ...selectedVehicle, customer_id: data.id, customer_name: newCustomer.name });
-        showNotification('Customer created and associated', 'success');
-        setStep('confirm');
+        
+        // Si estamos editando un jobsheet, actualiza el jobsheet y finaliza
+        if (editingJobsheet) {
+          await fetch(`${API_URL}/jobsheets/${editingJobsheet.id}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              vehicle_id: selectedVehicle.id,
+              customer_id: data.id,
+              state: editingJobsheet.state || "pending"
+            })
+          });
+          
+          setSelectedVehicle({ 
+            ...selectedVehicle, 
+            customer_id: data.id, 
+            customer_name: newCustomer.name 
+          });
+          
+          showNotification('Customer created and jobsheet created', 'success');
+          
+          // Actualiza la lista de jobsheets y cierra el modal después de un breve tiempo
+          if (refreshJobsheets) {
+            setTimeout(() => {
+              refreshJobsheets();
+              onClose();
+            }, 1500);
+          }
+        } else {
+          // Para jobsheets nuevos, comportamiento normal
+          setSelectedVehicle({ 
+            ...selectedVehicle, 
+            customer_id: data.id, 
+            customer_name: newCustomer.name 
+          });
+          showNotification('Customer created and associated', 'success');
+          setStep('confirm');
+        }
       } else {
         const err = await response.json();
         showNotification(err.error || 'Error creating customer', 'error');
@@ -404,7 +548,6 @@ const CreateJobsheetModal = ({
           ? editingJobsheet.description.split('\n').map((text, i) => ({ id: Date.now() + i, text }))
           : []
       );
-      // Si tienes más campos, precárgalos aquí
     }
   }, [editingJobsheet]);
 
@@ -892,13 +1035,119 @@ const CreateJobsheetModal = ({
           {step === 'post-vehicle-options' && selectedVehicle && (
             <div style={{ animation: "fadeIn 0.3s" }}>
               <h3 style={{ margin: "0 0 20px 0", fontSize: "18px" }}>
-                Motorcycle created
+                {editingJobsheet ? "Change customer assignation" : "Bike created"}
               </h3>
-              <div style={{ marginBottom: 20 }}>
+              <div style={{ 
+                marginBottom: 20, 
+                padding: "15px", 
+                backgroundColor: "#f9fafc", 
+                borderRadius: "12px", 
+                border: "1px solid #e0e0e0" 
+              }}>
                 <div style={{ fontWeight: 600, fontSize: 16 }}>
                   {selectedVehicle.plate?.toUpperCase()} - {selectedVehicle.model}
                 </div>
+                
+                {selectedVehicle.customer_id && selectedVehicle.customer_name && (
+                  <div style={{ 
+                    marginTop: "8px", 
+                    color: "#555",
+                    fontSize: "14px"
+                  }}>
+                    <span style={{ fontWeight: "500" }}>Current customer:</span> {selectedVehicle.customer_name}
+                  </div>
+                )}
               </div>
+
+              {/* Sección para seleccionar cliente existente */}
+              <div style={{ marginBottom: 24 }}>
+                <h4 style={{ fontSize: 16, marginBottom: 12 }}>Search customer</h4>
+                <div style={{ position: "relative" }}>
+                  <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+                    <input
+                      type="text"
+                      value={customerSearchTerm}
+                      onChange={(e) => {
+                        setCustomerSearchTerm(e.target.value);
+                        searchCustomers(e.target.value);
+                        setShowCustomerSearch(true);
+                      }}
+                      placeholder="Search client by name."
+                      style={{
+                        flex: 1,
+                        padding: "12px",
+                        borderRadius: "8px",
+                        border: "1px solid #e0e0e0",
+                        fontSize: "14px"
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        setCustomerSearchTerm("");
+                        setCustomerResults([]);
+                        setShowCustomerSearch(false);
+                      }}
+                      style={{
+                        padding: "8px 12px",
+                        backgroundColor: "#f5f5f5",
+                        border: "1px solid #e0e0e0",
+                        borderRadius: "8px",
+                        fontSize: "13px",
+                        cursor: "pointer"
+                      }}
+                    >
+                      Clean
+                    </button>
+                  </div>
+                  
+                  {showCustomerSearch && customerResults.length > 0 && (
+                    <div style={{
+                      position: "absolute",
+                      top: "100%",
+                      left: 0,
+                      right: 0,
+                      backgroundColor: "#fff",
+                      borderRadius: "8px",
+                      border: "1px solid #e0e0e0",
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                      zIndex: 10,
+                      maxHeight: "200px",
+                      overflowY: "auto"
+                    }}>
+                      {customerResults.map(customer => (
+                        <div
+                          key={customer.id}
+                          onClick={() => handleSelectCustomer(customer)}
+                          style={{
+                            padding: "12px 15px",
+                            borderBottom: "1px solid #f0f0f0",
+                            cursor: "pointer",
+                            transition: "background-color 0.2s"
+                          }}
+                          onMouseOver={e => e.currentTarget.style.backgroundColor = "#f9fafc"}
+                          onMouseOut={e => e.currentTarget.style.backgroundColor = "transparent"}
+                        >
+                          <div style={{ fontWeight: "600", fontSize: "15px" }}>
+                            {customer.name}
+                          </div>
+                          <div style={{
+                            display: "flex",
+                            gap: 15,
+                            marginTop: "4px",
+                            fontSize: "13px",
+                            color: "#666"
+                          }}>
+                            {customer.phone}
+                            {customer.email}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Botones para crear nuevo cliente o continuar */}
               <div style={{ display: 'flex', gap: 16 }}>
                 <button
                   style={{
@@ -914,7 +1163,7 @@ const CreateJobsheetModal = ({
                   }}
                   onClick={() => setStep('new-customer')}
                 >
-                  Associate to New Customer
+                  Create new Customer
                 </button>
                 <button
                   style={{
@@ -928,7 +1177,7 @@ const CreateJobsheetModal = ({
                   }}
                   onClick={() => setStep('confirm')}
                 >
-                  Continue Without Customer
+                  {editingJobsheet ? "Cancel" : "Continue without customer"}
                 </button>
               </div>
             </div>
@@ -996,24 +1245,30 @@ const CreateJobsheetModal = ({
                 </div>
                 
                 <button
-                  onClick={() => {
-                    setStep('plate-search');
-                    setSelectedVehicle(null);
-                  }}
-                  style={{
-                    backgroundColor: "transparent",
-                    border: "1px solid #e0e0e0",
-                    borderRadius: "8px",
-                    padding: "8px 12px",
-                    fontSize: "13px",
-                    color: "#555",
-                    transition: "background-color 0.2s"
-                  }}
-                  onMouseOver={e => e.currentTarget.style.backgroundColor = "#f5f5f5"}
-                  onMouseOut={e => e.currentTarget.style.backgroundColor = "transparent"}
-                >
-                  Change
-                </button>
+  onClick={() => {
+    // Si estamos editando un jobsheet existente, vamos directamente a las opciones de cliente
+    if (editingJobsheet) {
+      setStep('post-vehicle-options');
+    } else {
+      // Si es un jobsheet nuevo, comportamiento normal
+      setStep('plate-search');
+      setSelectedVehicle(null);
+    }
+  }}
+  style={{
+    backgroundColor: "transparent",
+    border: "1px solid #e0e0e0",
+    borderRadius: "8px",
+    padding: "8px 12px",
+    fontSize: "13px",
+    color: "#555",
+    transition: "background-color 0.2s"
+  }}
+  onMouseOver={e => e.currentTarget.style.backgroundColor = "#f5f5f5"}
+  onMouseOut={e => e.currentTarget.style.backgroundColor = "transparent"}
+>
+  {editingJobsheet ? "Change Customer" : "Change"}
+</button>
               </div>
               
               <div style={{ marginBottom: "15px" }}>

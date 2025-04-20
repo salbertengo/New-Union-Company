@@ -37,6 +37,7 @@ const JobsheetView = () => {
   const [isHovered, setIsHovered] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
   const gridRef = useRef(null);
   const searchTimeout = useRef(null);
   const [selectedCustomerSearchTerm, setCustomerSearchTerm] = useState("");
@@ -139,13 +140,14 @@ const JobsheetView = () => {
      {
        headerName: "ID",
        field: "id",
-       width: 80,
+       width: 0,
        suppressMenu: true,
        headerClass: "custom-header",
      },
      {
        headerName: "Customer",
        field: "customer_name",
+       width: 140,
        suppressMenu: true,
        headerClass: "custom-header",
      },
@@ -156,86 +158,17 @@ const JobsheetView = () => {
        headerClass: "custom-header",
      },
      {
-       headerName: "Plate",
-       field: "license_plate",
-       suppressMenu: true,
-       headerClass: "custom-header",
-       width: 120,
-       cellRenderer: (params) => {
-         if (!params.data) return null;
- 
-         // Formato para placas: dos letras, cuatro números, una letra
-         let plate = params.value || "AB1234C";
- 
-         // Asegurarse de que tenga formato argentino
-         if (!/^[A-Z]{2}\d{4}[A-Z]$/.test(plate)) {
-           // Intentar formatear la placa existente
-           const parts = plate.replace(/[^A-Z0-9]/gi, "").toUpperCase();
-           if (parts.length >= 7) {
-             const letters = parts.replace(/[^A-Z]/g, "");
-             const numbers = parts.replace(/[^0-9]/g, "");
- 
-             if (letters.length >= 3 && numbers.length >= 4) {
-               plate = `${letters.substring(0, 2)}${numbers.substring(
-                 0,
-                 4
-               )}${letters.substring(2, 3)}`;
-             }
-           }
-         }
- 
-         // Dividir la placa: dos letras arriba, los números y la letra restante abajo
-         const topPart = plate.substring(0, 2);
-         const bottomPart = plate.substring(2);
- 
-         return (
-           <div style={{ display: "flex", justifyContent: "center" }}>
-             <div
-               style={{
-                 width: "54px",
-                 height: "32px",
-                 backgroundColor: "black",
-                 border: "1px solid #444",
-                 borderRadius: "3px",
-                 display: "grid",
-                 gridTemplateRows: "40% 60%",
-                 overflow: "hidden",
-               }}
-             >
-               <div
-                 style={{
-                   color: "white",
-                   fontFamily: "monospace",
-                   fontWeight: "bold",
-                   fontSize: "14px",
-                   textAlign: "center",
-                   borderBottom: "1px solid #444",
-                   display: "flex",
-                   alignItems: "center",
-                   justifyContent: "center",
-                 }}
-               >
-                 {topPart}
-               </div>
-               <div
-                 style={{
-                   color: "white",
-                   fontFamily: "monospace",
-                   fontWeight: "bold",
-                   fontSize: "14px",
-                   textAlign: "center",
-                   display: "flex",
-                   alignItems: "center",
-                   justifyContent: "center",
-                 }}
-               >
-                 {bottomPart}
-               </div>
-             </div>
-           </div>
-         );
-       },
-     },
+      headerName: "Plate",
+      field: "license_plate",
+      suppressMenu: true,
+      headerClass: "custom-header",
+      width: 120,
+      cellRenderer: (params) => {
+        if (!params.data) return null;
+        // Simplemente devolver el texto de la placa sin formato especial
+        return <div>{params.value || ""}</div>;
+      },
+    },
      {
        headerName: "Created",
        field: "created_at",
@@ -356,12 +289,14 @@ const JobsheetView = () => {
               tooltip="Edit Job Sheet"
               type="default"
             />
-            <ActionButton
-              icon={faTrash}
-              onClick={() => handleDelete(params.data)}
-              tooltip="Delete Job Sheet"
-              type="danger"
-            />
+            {params.data.state !== "cancelled" && (
+              <ActionButton
+                icon={faTrash}
+                onClick={() => handleCancel(params.data)}
+                tooltip="Cancel Job Sheet"
+                type="danger"
+              />
+            )}
           </ActionButtonsContainer>
         );
       },
@@ -733,6 +668,9 @@ const JobsheetView = () => {
       const paymentResponse = await response.json();
 
       if (response.ok) {
+         const updatedTotalPaid = [...jobsheetPayments, {
+        amount: parseFloat(paymentAmount)
+      }].reduce((sum, payment) => sum + parseFloat(payment.amount || 0), 0);
         // Update the payments list
         setJobsheetPayments([
           ...jobsheetPayments,
@@ -743,7 +681,14 @@ const JobsheetView = () => {
             payment_date: new Date().toISOString().split("T")[0],
           },
         ]);
-
+        if (updatedTotalPaid >= subtotal && currentJobsheet.state !== "completed") {
+          await updateJobsheetStatus(currentJobsheet.id, "completed");
+          setNotification({
+            show: true,
+            message: "Payment complete. Jobsheet status updated to Completed.",
+            type: "success",
+          });
+        }
         // Reset payment form
         setPaymentAmount("");
 
@@ -780,7 +725,40 @@ const JobsheetView = () => {
       setIsLoading(false);
     }
   };
-
+  const updateJobsheetStatus = async (id, newStatus) => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+  
+      const getResponse = await fetch(`${API_URL}/jobsheets/${id}`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+  
+      if (!getResponse.ok) return;
+      const jobsheetData = await getResponse.json();
+  
+      await fetch(`${API_URL}/jobsheets/${id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          vehicle_id: jobsheetData.vehicle_id,
+          customer_id: jobsheetData.customer_id,
+          state: newStatus
+        }),
+      });
+      
+      // Update local state
+      fetchJobsheets(searchTerm, statusFilter);
+    } catch (error) {
+      console.error("Error updating jobsheet status:", error);
+    }
+  };
   const fetchJobsheetPayments = async (jobsheetId) => {
     try {
       const token = localStorage.getItem("token");
@@ -1212,7 +1190,7 @@ const JobsheetView = () => {
   };
   const handleStatusChange = async (id, currentStatus) => {
     // Define el ciclo de estados
-    const statusCycle = ["pending", "in progress", "completed", "cancelled"];
+    const statusCycle = ["pending", "in progress", "completed"];
 
     // Encuentra el índice del estado actual
     const currentIndex = statusCycle.indexOf(currentStatus);
@@ -1358,52 +1336,12 @@ const JobsheetView = () => {
     });
   };
 
-  const handleDelete = (jobsheet) => {
+  const handleCancel = (jobsheet) => {
     setCurrentJobsheet(jobsheet);
-    setShowDeleteModal(true);
+    setShowCancelModal(true);
   };
 
-  // Save jobsheet (create or update)
-  const handleSave = async () => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      console.error("No token found");
-      return;
-    }
-
-    try {
-      let url = `${API_URL}/jobsheets`;
-      let method = "POST";
-
-      if (currentJobsheet) {
-        url += `/${currentJobsheet.id}`;
-        method = "PUT";
-      }
-
-      const response = await fetch(url, {
-        method: method,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(formData),
-      });
-
-      if (response.ok) {
-        setShowModal(false);
-        fetchJobsheets(searchTerm);
-      } else {
-        console.error("Error saving jobsheet:", response.status);
-        alert("Error saving jobsheet");
-      }
-    } catch (error) {
-      console.error("Error saving jobsheet:", error);
-      alert("Error saving jobsheet");
-    }
-  };
-
-  // Confirm delete
-  const handleConfirmDelete = async () => {
+  const handleConfirmCancel = async () => {
     const token = localStorage.getItem("token");
     if (!token || !currentJobsheet) {
       console.error("No token found or no jobsheet selected");
@@ -1411,27 +1349,59 @@ const JobsheetView = () => {
     }
 
     try {
-      const response = await fetch(
-        `${API_URL}/jobsheets/${currentJobsheet.id}`,
-        {
-          method: "DELETE",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      const getResponse = await fetch(`${API_URL}/jobsheets/${currentJobsheet.id}`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!getResponse.ok) {
+        console.error("Error getting jobsheet:", getResponse.status);
+        return;
+      }
+      
+      const jobsheetData = await getResponse.json();
+
+      const response = await fetch(`${API_URL}/jobsheets/${currentJobsheet.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          vehicle_id: jobsheetData.vehicle_id,
+          customer_id: jobsheetData.customer_id,
+          state: "cancelled"
+        }),
+      });
 
       if (response.ok) {
-        setShowDeleteModal(false);
+        setShowCancelModal(false);
         fetchJobsheets(searchTerm);
+        setNotification({
+          show: true,
+          message: "Jobsheet successfully cancelled",
+          type: "success",
+        });
+        setTimeout(() => setNotification({ show: false }), 3000);
       } else {
-        console.error("Error deleting jobsheet:", response.status);
-        alert("Error deleting jobsheet");
+        console.error("Error cancelling jobsheet:", response.status);
+        setNotification({
+          show: true,
+          message: "Error cancelling jobsheet",
+          type: "error",
+        });
+        setTimeout(() => setNotification({ show: false }), 3000);
       }
     } catch (error) {
-      console.error("Error deleting jobsheet:", error);
-      alert("Error deleting jobsheet");
+      console.error("Error cancelling jobsheet:", error);
+      setNotification({
+        show: true,
+        message: "Error: " + error.message,
+        type: "error",
+      });
+      setTimeout(() => setNotification({ show: false }), 3000);
     }
   };
 
@@ -6006,7 +5976,7 @@ const JobsheetView = () => {
     </div>
   </div>
 )}
-{showDeleteModal && (
+{showCancelModal && (
   <div style={{
     position: "fixed",
     top: 0,
@@ -6029,13 +5999,14 @@ const JobsheetView = () => {
       flexDirection: "column",
       alignItems: "center"
     }}>
-      <h2 style={{margin: 0, marginBottom: 16, fontSize: 20, color: '#C62828'}}>Confirm Deletion</h2>
+      <h2 style={{margin: 0, marginBottom: 16, fontSize: 20, color: '#FF9800'}}>Confirm Cancellation</h2>
       <p style={{margin: 0, marginBottom: 24, color: '#444', textAlign: 'center'}}>
-        Are you sure you want to delete this jobsheet?<br/>This action cannot be undone.
+        Are you sure you want to cancel this jobsheet?<br/>
+        This will mark it as cancelled but preserve all records.
       </p>
       <div style={{display: 'flex', gap: 16}}>
         <button
-          onClick={() => setShowDeleteModal(false)}
+          onClick={() => setShowCancelModal(false)}
           style={{
             padding: '10px 18px',
             backgroundColor: '#f5f5f5',
@@ -6046,13 +6017,13 @@ const JobsheetView = () => {
             fontWeight: 500
           }}
         >
-          Cancel
+          No, Keep Active
         </button>
         <button
-          onClick={handleConfirmDelete}
+          onClick={handleConfirmCancel}
           style={{
             padding: '10px 18px',
-            backgroundColor: '#C62828',
+            backgroundColor: '#FF9800',
             color: 'white',
             border: 'none',
             borderRadius: 8,
@@ -6060,92 +6031,7 @@ const JobsheetView = () => {
             fontWeight: 600
           }}
         >
-          Delete
-        </button>
-      </div>
-    </div>
-  </div>
-)}
-{showBillingConfirmModal && (
-  <div style={{
-    position: "fixed",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 2000
-  }}>
-    <div style={{
-      background: "#fff",
-      borderRadius: 12,
-      padding: 28,
-      width: 380,
-      boxShadow: "0 4px 24px rgba(0,0,0,0.18)",
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center"
-    }}>
-      <div style={{
-        width: "60px",
-        height: "60px",
-        borderRadius: "50%",
-        backgroundColor: "#fff3e0",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        marginBottom: "16px"
-      }}>
-        <FontAwesomeIcon icon={faExclamationCircle} style={{ fontSize: '28px', color: '#FF9800' }} />
-      </div>
-      
-      <h2 style={{margin: 0, marginBottom: 16, fontSize: 18, color: '#333', textAlign: 'center'}}>Remove from Billing?</h2>
-      
-      <p style={{margin: 0, marginBottom: 24, color: '#555', textAlign: 'center', fontSize: '14px'}}>
-        This action will remove this service from billing and the saved price will be lost.
-      </p>
-      
-      <div style={{display: 'flex', gap: 16, width: '100%'}}>
-        <button
-          onClick={() => setShowBillingConfirmModal(false)}
-          style={{
-            flex: 1,
-            padding: '12px 10px',
-            backgroundColor: '#f5f5f5',
-            color: '#333',
-            border: 'none',
-            borderRadius: 8,
-            cursor: 'pointer',
-            fontWeight: 500,
-            fontSize: '14px'
-          }}
-        >
-          Cancel
-        </button>
-        <button
-          onClick={() => {
-            if (laborToUnbill) {
-              handleToggleLaborBilled(laborToUnbill);
-              setLaborToUnbill(null);
-            }
-            setShowBillingConfirmModal(false);
-          }}
-          style={{
-            flex: 1,
-            padding: '12px 10px',
-            backgroundColor: '#1976d2',
-            color: 'white',
-            border: 'none',
-            borderRadius: 8,
-            cursor: 'pointer',
-            fontWeight: 600,
-            fontSize: '14px'
-          }}
-        >
-          Confirm
+          Yes, Cancel Jobsheet
         </button>
       </div>
     </div>
