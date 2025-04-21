@@ -186,7 +186,7 @@ const JobsheetView = () => {
       suppressMenu: true,
       headerClass: "custom-header-sumary",
       cellRenderer: (params) => {
-        const state = params.data.state || "pending";
+        const state = params.data.state || "in progress";
         let color = "#FF9500";
 
         if (state === "completed") color = "#00C853";
@@ -963,30 +963,81 @@ const JobsheetView = () => {
   const handleCloseCreateModal = (jobsheetId) => {
     setShowModal(false);
     
-    // Si se recibió un ID, abrir el modal de inventario con ese jobsheet
     if (jobsheetId) {
-      // Obtener el jobsheet completo utilizando el ID
-      fetch(`${API_URL}/jobsheets/${jobsheetId}`, {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-      })
-      .then(response => response.json())
-      .then(jobsheetData => {
-        setCurrentJobsheet(jobsheetData);
-        // Abrir el modal de inventario con este jobsheet
-        setShowItemsModal(true);
-        // Opcional: cargar los items para este jobsheet
-        fetchJobsheetItems(jobsheetId);
-      })
-      .catch(err => console.error("Error al cargar el jobsheet:", err));
+      setIsLoading(true);
+      
+      // First get the complete jobsheet data
+      const getCompleteJobsheetData = async () => {
+        try {
+          // Get jobsheet data
+          const response = await fetch(`${API_URL}/jobsheets/${jobsheetId}`, {
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${localStorage.getItem("token")}`,
+            },
+          });
+          
+          if (!response.ok) throw new Error("Failed to fetch jobsheet");
+          const jobsheetData = await response.json();
+          
+          console.log("Initial jobsheet data:", jobsheetData);
+          
+          // If we don't have license plate but have vehicle ID, fetch vehicle details
+          if ((!jobsheetData.license_plate || jobsheetData.license_plate === '') && jobsheetData.vehicle_id) {
+            try {
+              const vehicleResponse = await fetch(`${API_URL}/vehicles/${jobsheetData.vehicle_id}`, {
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${localStorage.getItem("token")}`,
+                },
+              });
+              
+              if (!vehicleResponse.ok) throw new Error("Failed to fetch vehicle");
+              const vehicleData = await vehicleResponse.json();
+              
+              console.log("Vehicle data:", vehicleData);
+              
+              // Create a complete jobsheet with license plate
+              const completeJobsheet = {
+                ...jobsheetData,
+                license_plate: vehicleData.license_plate || vehicleData.plate || ''
+              };
+              
+              console.log("Complete jobsheet with license plate:", completeJobsheet);
+              
+              // Set data and show modal
+              setCurrentJobsheet(completeJobsheet);
+              await fetchJobsheetItems(jobsheetId);
+              setShowItemsModal(true);
+            } catch (vehicleError) {
+              console.error("Error fetching vehicle:", vehicleError);
+              setCurrentJobsheet(jobsheetData);
+              await fetchJobsheetItems(jobsheetId);
+              setShowItemsModal(true);
+            }
+          } else {
+            // We already have license plate or no vehicle ID
+            console.log("Using existing jobsheet data with license plate:", jobsheetData.license_plate);
+            setCurrentJobsheet(jobsheetData);
+            await fetchJobsheetItems(jobsheetId);
+            setShowItemsModal(true);
+          }
+        } catch (error) {
+          console.error("Error in getCompleteJobsheetData:", error);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      
+      // Add a slight delay to ensure DB operations are complete
+      setTimeout(() => {
+        getCompleteJobsheetData();
+      }, 500);
     }
     
-    // Refrescar la lista de jobsheets
+    // Refresh jobsheets list
     fetchJobsheets(searchTerm, statusFilter);
   };
-
   const getPaymentStatus = (jobsheet) => {
     if (!jobsheet.total_amount) return "No Items";
     if (!jobsheet.amount_paid) return "Unpaid";
@@ -1165,7 +1216,7 @@ const JobsheetView = () => {
   };
   const handleStatusChange = async (id, currentStatus) => {
     // Define el ciclo de estados
-    const statusCycle = ["pending", "in progress"];
+    const statusCycle = ["in progress"];
     if (currentStatus === "completed") {
       setNotification({
         show: true,
@@ -1175,8 +1226,15 @@ const JobsheetView = () => {
       setTimeout(() => setNotification({ show: false }), 3000);
       return;
     }
-  
-    // Encuentra el índice del estado actual
+    if (currentStatus === "cancelled") {
+      setNotification({
+        show: true,
+        message: "Cancelled jobs cannot be reverted to another status",
+        type: "error",
+      });
+      setTimeout(() => setNotification({ show: false }), 3000);
+      return;
+    }
     const currentIndex = statusCycle.indexOf(currentStatus);
 
     // Calcula el siguiente estado (vuelve al inicio si llega al final)
@@ -3487,11 +3545,34 @@ const JobsheetView = () => {
                   borderTop: "1px solid rgba(0,0,0,0.06)",
                   display: "flex",
                   justifyContent: "flex-end",
+                  gap: "12px",
                   backgroundColor: "#fafbfc",
                 }}
               >
                 <button
                   onClick={() => setShowItemsModal(false)}
+                  style={{
+                    padding: "10px 24px",
+                    backgroundColor: "#f5f5f5",
+                    color: "#333",
+                    border: "1px solid #e0e0e0",
+                    borderRadius: "10px",
+                    cursor: "pointer",
+                    fontSize: "14px",
+                    fontWeight: "500",
+                    transition: "all 0.2s",
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#e8e8e8"}
+                  onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#f5f5f5"}
+                >
+                  Save Only
+                </button>
+                
+                <button
+                  onClick={() => {
+                    setShowItemsModal(false);
+                    handleOpenPaymentsModal(currentJobsheet);
+                  }}
                   style={{
                     padding: "10px 24px",
                     backgroundColor: "#5932EA",
@@ -3503,13 +3584,16 @@ const JobsheetView = () => {
                     fontWeight: "600",
                     transition: "all 0.2s",
                     boxShadow: "0 2px 6px rgba(89, 50, 234, 0.2)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
                   }}
                   onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#4321C9"}
                   onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#5932EA"}
                 >
-                  Close
+                  <FontAwesomeIcon icon={faMoneyBillWave} size="sm" />
+                  Save & Go to Payment
                 </button>
-        
               </div>
 
               {/* CSS Keyframes */}
@@ -5330,8 +5414,7 @@ const JobsheetView = () => {
             </h2>
           </div>
           <p style={{ margin: "4px 0 0 0", opacity: "0.9", fontSize: "14px" }}>
-            Job Sheet #{currentJobsheet.id} • {currentJobsheet.customer_name || "Customer"} • {currentJobsheet.vehicle_model || "Vehicle"}
-          </p>
+          Job Sheet #{currentJobsheet.id} • {currentJobsheet.license_plate || ''} • {currentJobsheet.customer_name || "Customer"}          </p>
         </div>
         <button
           onClick={() => setShowLaborModal(false)}

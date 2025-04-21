@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faSearch, faMotorcycle, faPlus, 
-  faListCheck, faTools, faSave, faTimes, faCheck, faInfoCircle
+  faListCheck, faTools, faSave, faTimes, faCheck, faInfoCircle, faStore
 } from '@fortawesome/free-solid-svg-icons';
 
 const CreateJobsheetModal = ({ 
@@ -24,6 +24,7 @@ const CreateJobsheetModal = ({
     plate: '',
     model: '',
   });
+  const [transactionType, setTransactionType] = useState('service'); // 'service' o 'walkin'
 
   // Control for temporary vehicle
   const [isTemporaryVehicle, setIsTemporaryVehicle] = useState(false);
@@ -138,10 +139,17 @@ const CreateJobsheetModal = ({
       setSearchResults([]);
       return;
     }
+    
+    // Si el usuario está buscando "walkin", no buscar motos
+    if (plate.toLowerCase().includes('walk')) {
+      setSearchResults([]);
+      return;
+    }
+    
     setIsLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`${API_URL}/vehicles?search=${encodeURIComponent(plate)}`, {
+      const response = await fetch(`${API_URL}/vehicles?search=${encodeURIComponent(plate)}&plate_only=true`, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
@@ -149,7 +157,11 @@ const CreateJobsheetModal = ({
       });
       if (response.ok) {
         const data = await response.json();
-        setSearchResults(data);
+        // Filtrar para asegurarnos de que solo muestre resultados que coincidan con la placa
+        const filteredResults = data.filter(vehicle => 
+          vehicle.plate && vehicle.plate.toLowerCase().includes(plate.toLowerCase())
+        );
+        setSearchResults(filteredResults);
       } else {
         setSearchResults([]);
       }
@@ -391,7 +403,6 @@ const CreateJobsheetModal = ({
       const vehicleData = {
         plate: newVehicleDetails.plate,
         model: newVehicleDetails.model,
-        customer_id: 4
       };
   
       const response = await fetch(`${API_URL}/vehicles`, {
@@ -411,7 +422,6 @@ const CreateJobsheetModal = ({
           id: responseData.id || Date.now(),
           plate: newVehicleDetails.plate,
           model: newVehicleDetails.model,
-          customer_id: 4
         };
         
         setSelectedVehicle(vehicle);
@@ -433,8 +443,6 @@ const CreateJobsheetModal = ({
       setIsLoading(false);
     }
   };
-
-
 
 const handleCreateJobsheet = async () => {
   if (!selectedVehicle) {
@@ -485,10 +493,46 @@ const handleCreateJobsheet = async () => {
   }
 };
 
-  
+const handleWalkInJobsheet = async () => {
+  setIsLoading(true);
+  try {
+    const token = localStorage.getItem("token");
+    if (!token) return;
 
+    const jobsheetData = {
+      vehicle_id: null,
+      customer_id: null,
+      state: "pending",
+      description: "Walk-in Sale",
+      service_notes: ""
+    };
 
+    const response = await fetch(`${API_URL}/jobsheets`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(jobsheetData),
+    });
 
+    if (response.ok) {
+      const jobsheet = await response.json();
+      showNotification("Walk-in jobsheet created successfully", "success");
+      
+      setTimeout(() => {
+        if (refreshJobsheets) refreshJobsheets();
+        if (onClose) onClose(jobsheet.id);
+      }, 1500);
+    } else {
+      showNotification("Error creating walk-in jobsheet", "error");
+    }
+  } catch (error) {
+    showNotification("Error creating walk-in jobsheet", "error");
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   // Nuevo: Pre-cargar datos si editingJobsheet cambia
   useEffect(() => {
@@ -665,203 +709,262 @@ const handleCreateJobsheet = async () => {
           {/* Step 1: License Plate Search */}
           {step === 'plate-search' && (
             <div style={{ animation: "fadeIn 0.3s" }}>
-              <div style={{ 
-                display: "flex",
-                alignItems: "center",
-                marginBottom: "20px"
-              }}>
-                <div style={{
-                  width: "50px",
-                  height: "50px",
-                  borderRadius: "50%",
-                  backgroundColor: "#f0f0ff",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "#5932EA",
-                  marginRight: "15px"
-                }}>
-                  <FontAwesomeIcon icon={faMotorcycle} size="lg" />
-                </div>
-                <div>
-                  <h3 style={{ margin: "0 0 4px 0", fontSize: "16px" }}>Find by License Plate</h3>
-                  <p style={{ margin: 0, fontSize: "14px", color: "#666" }}>
-                    Enter the motorcycle's license plate to begin
-                  </p>
-                </div>
-              </div>
-              {/* Search Input simple */}
-              <div style={{ position: "relative", marginBottom: "20px" }}>
-                <div style={{
-                  display: "flex",
-                  alignItems: "center",
-                  backgroundColor: "#f9fafc",
-                  border: "1px solid #e0e0e0",
-                  borderRadius: "12px",
-                  padding: "12px 15px",
-                  boxShadow: "0 1px 3px rgba(0,0,0,0.05)"
-                }}>
-                  <FontAwesomeIcon icon={faSearch} style={{ color: "#5932EA", marginRight: "12px" }} />
-                  <input
-                    ref={plateInputRef}
-                    type="text"
-                    value={plateNumber}
-                    onChange={e => { setPlateNumber(e.target.value); searchMotorcyclesByPlate(e.target.value); }}
-                    placeholder="Enter license plate..."
-                    style={{
-                      flex: 1,
-                      border: "none",
-                      outline: "none",
-                      fontSize: "16px",
-                      fontWeight: "500",
-                      backgroundColor: "transparent"
-                    }}
-                  />
-                  {isLoading && (
-                    <div style={{
-                      width: "20px",
-                      height: "20px",
-                      border: "2px solid rgba(89,50,234,0.1)",
-                      borderLeftColor: "#5932EA",
-                      borderRadius: "50%",
-                      animation: "spin 0.8s linear infinite"
-                    }}></div>
-                  )}
-                </div>
-              </div>
-              {/* Search Results */}
-              {searchResults.length > 0 ? (
-                <div style={{
-                  backgroundColor: "#fff",
-                  borderRadius: "12px",
-                  border: "1px solid #eee",
-                  overflow: "hidden",
-                  marginBottom: "20px"
-                }}>
-                  <h4 style={{
-                    margin: 0,
-                    padding: "10px 15px",
-                    backgroundColor: "#f9fafc",
-                    borderBottom: "1px solid #eee",
-                    fontSize: "14px",
-                    fontWeight: "600"
-                  }}>Found Motorcycles</h4>
-                  {searchResults.map(vehicle => (
-                    <div 
-                      key={vehicle.id}
-                      onClick={() => handleSelectVehicle(vehicle)}
-                      style={{
-                        padding: "15px",
-                        borderBottom: "1px solid #f0f0f0",
-                        cursor: "pointer",
-                        transition: "background-color 0.2s"
-                      }}
-                      onMouseOver={e => e.currentTarget.style.backgroundColor = "#f9fafc"}
-                      onMouseOut={e => e.currentTarget.style.backgroundColor = "transparent"}
-                    >
-                      <div style={{ fontWeight: "600", fontSize: "15px" }}>
-                        {vehicle.plate ? vehicle.plate.toUpperCase() : "No plate"} - 
-                        {vehicle.model ? vehicle.model : ""}
-                      </div>
-                      <div style={{ 
-                        display: "flex",
-                        alignItems: "center",
-                        marginTop: "4px",
-                        fontSize: "13px",
-                        color: "#666"
-                      }}>
-                        {vehicle.customer_name ? (
-                          <>
-                            <span style={{ fontWeight: "500" }}>Owner:</span>
-                            <span style={{ marginLeft: "5px" }}>{vehicle.customer_name}</span>
-                          </>
-                        ) : (
-                          <span style={{ color: "#ff7043" }}>No customer assigned</span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : plateNumber.length >= 2 ? (
-                <div style={{
-                  backgroundColor: "#fff8e1",
-                  borderRadius: "12px",
-                  border: "1px solid #ffe082",
-                  padding: "15px",
+              <div style={{ marginBottom: "20px" }}>
+                <div style={{ 
                   display: "flex",
                   alignItems: "center",
                   marginBottom: "20px"
                 }}>
                   <div style={{
-                    backgroundColor: "#fff3e0",
-                    width: "40px",
-                    height: "40px",
+                    width: "50px",
+                    height: "50px",
                     borderRadius: "50%",
+                    backgroundColor: "#f0f0ff",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    color: "#ff8f00",
-                    marginRight: "12px"
+                    color: "#5932EA",
+                    marginRight: "15px"
                   }}>
-                    <FontAwesomeIcon icon={faMotorcycle} />
+                    <FontAwesomeIcon icon={faSearch} size="lg" />
                   </div>
                   <div>
-                    <h4 style={{ margin: "0 0 4px 0", fontSize: "15px" }}>
-                      No motorcycles found
-                    </h4>
-                    <p style={{ margin: 0, fontSize: "13px", color: "#666" }}>
-                      Create a new record for license plate "{plateNumber.toUpperCase()}"
+                    <h3 style={{ margin: "0 0 4px 0", fontSize: "16px" }}>Search</h3>
+                    <p style={{ margin: 0, fontSize: "14px", color: "#666" }}>
+                      Enter license plate or type "walkin" for quick sale
                     </p>
                   </div>
                 </div>
-              ) : null}
-              {/* Actions */}
-              <div style={{
-                display: "flex",
-                justifyContent: "space-between",
-                marginTop: "10px"
-              }}>
-                <button
-                  onClick={() => setPlateNumber('')}
-                  disabled={!plateNumber}
-                  style={{
-                    padding: "10px 15px",
-                    backgroundColor: "transparent",
-                    border: "1px solid #e0e0e0",
-                    borderRadius: "8px",
-                    fontSize: "14px",
-                    fontWeight: "500",
-                    color: "#666",
-                    cursor: plateNumber ? "pointer" : "default",
-                    opacity: plateNumber ? 1 : 0.5
-                  }}
-                >
-                  Clear
-                </button>
-                <button
-                    onClick={showCreateVehicleForm}
-                  disabled={!plateNumber}
-                  style={{
-                    padding: "10px 15px",
-                    backgroundColor: "#5932EA",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "8px",
-                    fontSize: "14px",
-                    fontWeight: "500",
+                
+                {/* Barra de búsqueda unificada */}
+                <div style={{ position: "relative", marginBottom: "20px" }}>
+                  <div style={{
                     display: "flex",
                     alignItems: "center",
-                    gap: "8px",
-                    cursor: plateNumber ? "pointer" : "default",
-                    opacity: plateNumber ? 1 : 0.5,
-                    transition: "background-color 0.2s"
-                  }}
-                  onMouseOver={e => e.currentTarget.style.backgroundColor = "#4321C9"}
-                  onMouseOut={e => e.currentTarget.style.backgroundColor = "#5932EA"}
-                >
-                  <FontAwesomeIcon icon={faPlus} />
-                  Create New Motorcycle
-                </button>
+                    backgroundColor: "#f9fafc",
+                    border: "1px solid #e0e0e0",
+                    borderRadius: "12px",
+                    padding: "12px 15px",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.05)"
+                  }}>
+                    <FontAwesomeIcon icon={faSearch} style={{ color: "#5932EA", marginRight: "12px" }} />
+                    <input
+                      ref={plateInputRef}
+                      type="text"
+                      value={plateNumber}
+                      onChange={e => { 
+                        setPlateNumber(e.target.value); 
+                        // Siempre buscar vehículos normalmente
+                        searchMotorcyclesByPlate(e.target.value); 
+                      }}
+                      placeholder="Enter license plate or type 'walkin'..."
+                      style={{
+                        flex: 1,
+                        border: "none",
+                        outline: "none",
+                        fontSize: "16px",
+                        fontWeight: "500",
+                        backgroundColor: "transparent"
+                      }}
+                    />
+                    {isLoading && (
+                      <div style={{
+                        width: "20px",
+                        height: "20px",
+                        border: "2px solid rgba(89,50,234,0.1)",
+                        borderLeftColor: "#5932EA",
+                        borderRadius: "50%",
+                        animation: "spin 0.8s linear infinite"
+                      }}></div>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Mostrar opción Walk-in si el texto coincide */}
+                {plateNumber.toLowerCase().includes('walk') && (
+                  <div 
+                    onClick={() => handleWalkInJobsheet()}
+                    style={{
+                      padding: "15px",
+                      borderRadius: "12px",
+                      border: "1px solid #5932EA",
+                      backgroundColor: "#f0f0ff",
+                      cursor: "pointer",
+                      marginBottom: "20px",
+                      display: "flex",
+                      alignItems: "center",
+                      transition: "transform 0.2s, box-shadow 0.2s"
+                    }}
+                    onMouseOver={e => {
+                      e.currentTarget.style.transform = "translateY(-2px)";
+                      e.currentTarget.style.boxShadow = "0 4px 12px rgba(89,50,234,0.15)";
+                    }}
+                    onMouseOut={e => {
+                      e.currentTarget.style.transform = "translateY(0)";
+                      e.currentTarget.style.boxShadow = "none";
+                    }}
+                  >
+                    <div style={{
+                      width: "40px",
+                      height: "40px",
+                      borderRadius: "50%",
+                      backgroundColor: "#5932EA",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "white",
+                      marginRight: "15px"
+                    }}>
+                      <FontAwesomeIcon icon={faStore} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: "600", fontSize: "16px", color: "#5932EA" }}>
+                        Walk-in Sale
+                      </div>
+                      <div style={{ fontSize: "13px", color: "#666", marginTop: "4px" }}>
+                        Create a quick sale without customer or vehicle
+                      </div>
+                    </div>
+                    <FontAwesomeIcon icon={faCheck} style={{ color: "#5932EA", fontSize: "18px" }} />
+                  </div>
+                )}
+                
+                {/* Resultados de búsqueda de motocicletas (mantener igual) */}
+                {searchResults.length > 0 ? (
+                  <div style={{
+                    backgroundColor: "#fff",
+                    borderRadius: "12px",
+                    border: "1px solid #eee",
+                    overflow: "hidden",
+                    marginBottom: "20px"
+                  }}>
+                    <h4 style={{
+                      margin: 0,
+                      padding: "10px 15px",
+                      backgroundColor: "#f9fafc",
+                      borderBottom: "1px solid #eee",
+                      fontSize: "14px",
+                      fontWeight: "600"
+                    }}>Found Motorcycles</h4>
+                    {searchResults.map(vehicle => (
+                      <div 
+                        key={vehicle.id}
+                        onClick={() => handleSelectVehicle(vehicle)}
+                        style={{
+                          padding: "15px",
+                          borderBottom: "1px solid #f0f0f0",
+                          cursor: "pointer",
+                          transition: "background-color 0.2s"
+                        }}
+                        onMouseOver={e => e.currentTarget.style.backgroundColor = "#f9fafc"}
+                        onMouseOut={e => e.currentTarget.style.backgroundColor = "transparent"
+                        }
+                      >
+                        <div style={{ fontWeight: "600", fontSize: "15px" }}>
+                          {vehicle.plate ? vehicle.plate.toUpperCase() : "No plate"} - 
+                          {vehicle.model ? vehicle.model : ""}
+                        </div>
+                        <div style={{ 
+                          display: "flex",
+                          alignItems: "center",
+                          marginTop: "4px",
+                          fontSize: "13px",
+                          color: "#666"
+                        }}>
+                          {vehicle.customer_name ? (
+                            <>
+                              <span style={{ fontWeight: "500" }}>Owner:</span>
+                              <span style={{ marginLeft: "5px" }}>{vehicle.customer_name}</span>
+                            </>
+                          ) : (
+                            <span style={{ color: "#ff7043" }}>No customer assigned</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : plateNumber.length >= 2 && !plateNumber.toLowerCase().includes('walk') ? (
+                  <div style={{
+                    backgroundColor: "#fff8e1",
+                    borderRadius: "12px",
+                    border: "1px solid #ffe082",
+                    padding: "15px",
+                    display: "flex",
+                    alignItems: "center",
+                    marginBottom: "20px"
+                  }}>
+                    <div style={{
+                      backgroundColor: "#fff3e0",
+                      width: "40px",
+                      height: "40px",
+                      borderRadius: "50%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "#ff8f00",
+                      marginRight: "12px"
+                    }}>
+                      <FontAwesomeIcon icon={faMotorcycle} />
+                    </div>
+                    <div>
+                      <h4 style={{ margin: "0 0 4px 0", fontSize: "15px" }}>
+                        No motorcycles found
+                      </h4>
+                      <p style={{ margin: 0, fontSize: "13px", color: "#666" }}>
+                        Create a new record for license plate "{plateNumber.toUpperCase()}"
+                      </p>
+                    </div>
+                  </div>
+                ) : null}
+                
+                {/* Acciones */}
+                <div style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  marginTop: "10px"
+                }}>
+                  <button
+                    onClick={() => setPlateNumber('')}
+                    disabled={!plateNumber}
+                    style={{
+                      padding: "10px 15px",
+                      backgroundColor: "transparent",
+                      border: "1px solid #e0e0e0",
+                      borderRadius: "8px",
+                      fontSize: "14px",
+                      fontWeight: "500",
+                      color: "#666",
+                      cursor: plateNumber ? "pointer" : "default",
+                      opacity: plateNumber ? 1 : 0.5
+                    }}
+                  >
+                    Clear
+                  </button>
+                  <button
+                    onClick={showCreateVehicleForm}
+                    disabled={!plateNumber}
+                    style={{
+                      padding: "10px 15px",
+                      backgroundColor: "#5932EA",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "8px",
+                      fontSize: "14px",
+                      fontWeight: "500",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      cursor: plateNumber ? "pointer" : "default",
+                      opacity: plateNumber ? 1 : 0.5,
+                      transition: "background-color 0.2s"
+                    }}
+                    onMouseOver={e => e.currentTarget.style.backgroundColor = "#4321C9"}
+                    onMouseOut={e => e.currentTarget.style.backgroundColor = "#5932EA"}
+                  >
+                    <FontAwesomeIcon icon={faPlus} />
+                    Create New Motorcycle
+                  </button>
+                </div>
               </div>
             </div>
           )}

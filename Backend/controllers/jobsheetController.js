@@ -7,21 +7,16 @@ class JobsheetController {
   static async getAllJobsheets(req, res) {
     try {
       const { search, state, vehicle_id } = req.query;
-
+      
       const jobsheets = await JobsheetService.getAllJobsheets(search, state);
       
-      
       const enrichedJobsheets = await Promise.all(jobsheets.map(async (js) => {
-        
         let customer = null;
         let vehicle = null;
-        let jobsheets;
-    
-        if (vehicle_id) {
-          jobsheets = await JobsheetService.getJobsheetsByVehicleId(vehicle_id);
-        } else {
-          jobsheets = await JobsheetService.getAllJobsheets(search, state);
-        }
+        
+        // Determinar si es un walk-in (sin vehicle_id y sin customer_id)
+        const isWalkin = !js.vehicle_id && !js.customer_id;
+        
         try {
           if (js.customer_id) {
             customer = await CustomerService.getCustomerById(js.customer_id);
@@ -40,12 +35,23 @@ class JobsheetController {
         
         const enriched = {
           ...js,
-          customer_name: customer ? (customer.name || `${customer.first_name || ''} ${customer.last_name || ''}`.trim()) : `Cliente #${js.customer_id || 'desconocido'}`,
-          vehicle_model: vehicle ? `${vehicle.make || ''} ${vehicle.model || ''}`.trim() : `Vehículo #${js.vehicle_id || 'desconocido'}`,
-          license_plate: vehicle ? vehicle.plate : 'Sin placa'
+          // Si es walk-in, mostrar "Walk-in" como nombre del cliente
+          customer_name: isWalkin 
+            ? "Walk-in" 
+            : (customer 
+                ? (customer.name || `${customer.first_name || ''} ${customer.last_name || ''}`.trim()) 
+                : `Customer #${js.customer_id || 'unknown'}`),
+          // Si es walk-in, mostrar "N/A" como modelo de vehículo
+          vehicle_model: isWalkin 
+            ? "N/A" 
+            : (vehicle 
+                ? `${vehicle.make || ''} ${vehicle.model || ''}`.trim() 
+                : `Vehicle #${js.vehicle_id || 'unknown'}`),
+          // Si es walk-in, mostrar "N/A" como placa
+          license_plate: isWalkin 
+            ? "N/A" 
+            : (vehicle ? vehicle.plate : 'Sin placa')
         };
-        
-
         
         return enriched;
       }));
@@ -87,11 +93,9 @@ class JobsheetController {
     try {
       const jobsheetData = req.body;
       
-      // Validar campos obligatorios
-      if (!jobsheetData.vehicle_id || !jobsheetData.customer_id) {
-        return res.status(400).json({ error: 'Vehicle ID and Customer ID are required' });
-      }
-
+      // Eliminamos la validación obligatoria de vehicle_id y customer_id
+      // Los walk-in tendrán ambos valores como null
+  
       const newJobsheet = await JobsheetService.createJobsheet(jobsheetData);
       res.status(201).json(newJobsheet);
     } catch (err) {
@@ -105,11 +109,8 @@ class JobsheetController {
       const { id } = req.params;
       const jobsheetData = req.body;
       
-      // Validar campos obligatorios
-      if (!jobsheetData.vehicle_id || !jobsheetData.customer_id) {
-        return res.status(400).json({ error: 'Vehicle ID and Customer ID are required' });
-      }
-
+      // Eliminamos la validación obligatoria de vehicle_id y customer_id
+  
       await JobsheetService.updateJobsheet(id, jobsheetData);
       res.json({ success: true, message: 'Jobsheet updated successfully' });
     } catch (err) {
