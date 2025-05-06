@@ -72,17 +72,33 @@ class JobsheetModel {
 
   static async create(jobsheetData) {
     try {
+      // Validar que workflow_type sea un entero entre 1 y 6
+      const workflow_type = jobsheetData.workflow_type 
+        ? Math.min(Math.max(parseInt(jobsheetData.workflow_type), 1), 6) 
+        : 1; // Valor por defecto: 1 (Repair)
+
       const [result] = await pool.query(`
-        INSERT INTO jobsheets (state, vehicle_id, customer_id, user_id)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO jobsheets (
+          state, 
+          vehicle_id, 
+          customer_id, 
+          user_id,
+          workflow_type
+        )
+        VALUES (?, ?, ?, ?, ?)
       `, [
         jobsheetData.state || 'pending',
         jobsheetData.vehicle_id || null,     // Permitir NULL para walk-in
         jobsheetData.customer_id || null,    // Permitir NULL para walk-in
-        jobsheetData.user_id
+        jobsheetData.user_id,
+        workflow_type
       ]);
-  
-      return { id: result.insertId, ...jobsheetData };
+
+      return { 
+        id: result.insertId, 
+        ...jobsheetData, 
+        workflow_type 
+      };
     } catch (error) {
       throw error;
     }

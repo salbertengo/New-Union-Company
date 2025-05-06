@@ -422,6 +422,7 @@ const CreateJobsheetModal = ({
           id: responseData.id || Date.now(),
           plate: newVehicleDetails.plate,
           model: newVehicleDetails.model,
+        
         };
         
         setSelectedVehicle(vehicle);
@@ -459,7 +460,7 @@ const handleCreateJobsheet = async () => {
       vehicle_id: selectedVehicle.id,
       customer_id: selectedVehicle.customer_id || null,
       state: "pending",
-      description: "", // Ya que eliminamos las notas de servicio
+      description: "", 
       service_notes: ""
     };
 

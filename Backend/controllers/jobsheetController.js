@@ -40,17 +40,17 @@ class JobsheetController {
             ? "Walk-in" 
             : (customer 
                 ? (customer.name || `${customer.first_name || ''} ${customer.last_name || ''}`.trim()) 
-                : `Customer #${js.customer_id || 'unknown'}`),
+                : `Customer unknown`),
           // Si es walk-in, mostrar "N/A" como modelo de vehículo
           vehicle_model: isWalkin 
             ? "N/A" 
             : (vehicle 
                 ? `${vehicle.make || ''} ${vehicle.model || ''}`.trim() 
-                : `Vehicle #${js.vehicle_id || 'unknown'}`),
+                : `No vehicle`),
           // Si es walk-in, mostrar "N/A" como placa
           license_plate: isWalkin 
             ? "N/A" 
-            : (vehicle ? vehicle.plate : 'Sin placa')
+            : (vehicle ? vehicle.plate : 'No plate')
         };
         
         return enriched;

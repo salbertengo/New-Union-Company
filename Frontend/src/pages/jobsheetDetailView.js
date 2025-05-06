@@ -1,0 +1,2816 @@
+import React, { useState, useEffect, useRef } from "react";
+import ReactDOM from "react-dom";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import {
+  faTrash, faPlus, faTimes, faPrint, 
+  faArrowLeft, faSearch, faExclamationCircle, 
+  faCheckCircle, faCar, faSave, faUser, faStore
+} from "@fortawesome/free-solid-svg-icons";
+import Invoice from "../components/invoice";
+
+const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobsheets, isModal = false, isNew: propIsNew = false }) => {
+  const [internalJobsheetId, setInternalJobsheetId] = useState(propJobsheetId);
+  const [internalIsNew, setInternalIsNew] = useState(propIsNew);
+  
+  const [jobsheet, setJobsheet] = useState(null);
+  const [items, setItems] = useState([]);
+  const [labors, setLabors] = useState([]);
+  const [payments, setPayments] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [notification, setNotification] = useState({ show: false, message: "", type: "" });
+  const [licensePlate, setLicensePlate] = useState("");
+  const [plateSearchResults, setPlateSearchResults] = useState([]);
+  const [newVehicleDetails, setNewVehicleDetails] = useState({
+    plate: '',
+    model: ''
+  });
+  const [workflowType, setWorkflowType] = useState("1"); // Repair siempre por defecto
+  const [inventorySearchTerm, setInventorySearchTerm] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [newItemQuantity, setNewItemQuantity] = useState(1);
+  const [newMiscName, setNewMiscName] = useState("");
+  const [newMiscPrice, setNewMiscPrice] = useState("");
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [taxRate, setTaxRate] = useState(9); // Default 9% GST
+  const [customerSearchTerm, setCustomerSearchTerm] = useState("");
+  const [customerSearchResults, setCustomerSearchResults] = useState([]);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [selectedCustomerId, setSelectedCustomerId] = useState(null);
+  const [showNewCustomerForm, setShowNewCustomerForm] = useState(false);
+  const [newCustomerDetails, setNewCustomerDetails] = useState({
+    name: "",
+    contact: "",
+    email: ""
+  });
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+  
+  const printableContentRef = useRef(null);
+  const API_URL = process.env.REACT_APP_API_URL;
+
+  const effectiveJobsheetId = internalJobsheetId || propJobsheetId;
+  const effectiveIsNew = internalIsNew && !internalJobsheetId;
+
+  const allItems = [...items, ...labors.map(labor => ({
+    id: `labor-${labor.id}`,
+    name: labor.description || "Labor",
+    price: labor.price,
+    quantity: 1,
+    isLabor: true
+  }))];
+
+  const notificationTimerRef = useRef(null);
+
+  const showNotification = (message, type) => {
+    if (notificationTimerRef.current) {
+      clearTimeout(notificationTimerRef.current);
+    }
+    
+    setNotification({ show: true, message, type });
+    
+    notificationTimerRef.current = setTimeout(() => {
+      setNotification({ show: false, message: "", type: "" });
+      notificationTimerRef.current = null;
+    }, 3000);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (notificationTimerRef.current) {
+        clearTimeout(notificationTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    // Limpiar el término de búsqueda cuando el componente se monta
+    setInventorySearchTerm("");
+    setSearchResults([]);
+    
+    return () => {
+      // Limpiar al desmontar
+      setInventorySearchTerm("");
+      setSearchResults([]);
+    };
+  }, []);
+
+  useEffect(() => {
+    // Forzar el workflowType a "1" al cargar el componente
+    setWorkflowType("1");
+  }, []);
+
+  const handleApiError = (error, defaultMessage) => {
+    console.error(`${defaultMessage}:`, error);
+    
+    let errorMessage = defaultMessage;
+    
+    if (typeof error === 'string') {
+      try {
+        const parsedError = JSON.parse(error);
+        errorMessage = parsedError.error || parsedError.message || defaultMessage;
+      } catch (e) {
+        errorMessage = error || defaultMessage;
+      }
+    } else if (error && error.message) {
+      errorMessage = error.message;
+    }
+    
+    showNotification(errorMessage, "error");
+  };
+
+  useEffect(() => {
+    setInternalJobsheetId(propJobsheetId);
+  }, [propJobsheetId]);
+  
+  useEffect(() => {
+    setInternalIsNew(propIsNew);
+  }, [propIsNew]);
+  
+  useEffect(() => {
+    if (effectiveJobsheetId) {
+      loadJobsheetData();
+    } else {
+      setIsLoading(false);
+    }
+  }, [effectiveJobsheetId, effectiveIsNew]);
+
+  useEffect(() => {
+    // Forzar el valor inicial de workflowType a "1" cuando es un nuevo jobsheet
+    if (effectiveIsNew) {
+      setWorkflowType("1");
+    }
+  }, [effectiveIsNew]);
+
+  useEffect(() => {
+    if (effectiveJobsheetId) {
+      setInventorySearchTerm("");
+      // ... cargas (loadJobsheetData) ...
+    }
+  }, [effectiveJobsheetId]);
+
+  const fetchItems = async (token, id = null) => {
+    const idToUse = id || effectiveJobsheetId;
+    try {
+      const res = await fetch(`${API_URL}/jobsheets/${idToUse}/items`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setItems(data);
+      } else {
+        console.error("Failed to load items:", res.status);
+      }
+    } catch (error) {
+      console.error("Error loading items:", error);
+    }
+  };
+
+  const fetchLabors = async (token, id = null) => {
+    const idToUse = id || effectiveJobsheetId;
+    try {
+      const res = await fetch(`${API_URL}/labor/jobsheet/${idToUse}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setLabors(data);
+      } else {
+        console.error("Failed to load labors:", res.status);
+      }
+    } catch (error) {
+      console.error("Error loading labors:", error);
+    }
+  };
+
+  const fetchPayments = async (token, id = null) => {
+    const idToUse = id || effectiveJobsheetId;
+    try {
+      const res = await fetch(`${API_URL}/jobsheets/payments/jobsheet/${idToUse}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPayments(data);
+      } else {
+        console.error("Failed to load payments:", res.status);
+      }
+    } catch (error) {
+      console.error("Error loading payments:", error);
+    }
+  };
+
+  const getWorkflowButtonColor = (type) => {
+    const colors = {
+      "1": "#FF9800", // Repair (naranja)
+      "2": "#2196F3", // Deposit for Bike Sale (azul)
+      "3": "#9C27B0", // Insurance (púrpura)
+      "4": "#4CAF50", // HP Payment (verde)
+      "5": "#F44336", // Road Tax (rojo)
+      "6": "#FF5722"  // HP Payment 2 (naranja oscuro)
+    };
+    return colors[type] || "#FF9800";
+  };
+
+  const handleAddWorkflowCharge = async () => {
+    if (jobsheet?.state === "completed") {
+      showNotification("This order is completed and cannot be modified", "error");
+      return;
+    }
+    if (!newMiscName || !newMiscPrice) {
+      showNotification("Please provide both description and amount", "error");
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+
+      const description = `${getWorkflowTypeName(workflowType)}: ${newMiscName}`;
+      
+      const laborData = {
+        jobsheet_id: effectiveJobsheetId,
+        description: description,
+        price: newMiscPrice,
+        is_completed: 1,
+        is_billed: 1,
+        workflow_type: workflowType
+      };
+
+      const response = await fetch(`${API_URL}/labor`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(laborData),
+      });
+
+      if (response.ok) {
+        await fetchLabors(token);
+        setNewMiscName("");
+        setNewMiscPrice("");
+        showNotification(`${getWorkflowTypeName(workflowType)} added successfully`, "success");
+      } else {
+        console.error(`Failed to add ${getWorkflowTypeName(workflowType)}:`, response.status);
+        showNotification(`Failed to add ${getWorkflowTypeName(workflowType)}`, "error");
+      }
+    } catch (error) {
+      console.error(`Error adding ${getWorkflowTypeName(workflowType)}:`, error);
+      showNotification(`Error adding ${getWorkflowTypeName(workflowType)}`, "error");
+    }
+  };
+  const handleUpdateJobsheetCustomer = async () => {
+    if (!selectedCustomerId) {
+      showNotification("No customer selected", "error");
+      return;
+    }
+    
+    setIsLoading(true);
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+      
+      // Actualizar el jobsheet con el nuevo cliente
+      const updateData = {
+        ...jobsheet,
+        customer_id: selectedCustomerId,
+        workflow_type: workflowType // Mantener el tipo de workflow actual
+      };
+      
+      const response = await fetch(`${API_URL}/jobsheets/${effectiveJobsheetId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(updateData),
+      });
+      
+      if (response.ok) {
+        await loadJobsheetData(); // Recargar jobsheet para obtener datos actualizados
+        setShowCustomerModal(false);
+        setSelectedCustomer(null);
+        setSelectedCustomerId(null);
+        showNotification("Customer assigned successfully", "success");
+      } else {
+        const errorText = await response.text();
+        let errorMessage = "Failed to update customer";
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error || errorData.message || errorMessage;
+        } catch (e) {}
+        showNotification(errorMessage, "error");
+      }
+    } catch (error) {
+      console.error("Error updating customer:", error);
+      showNotification("Error updating customer: " + error.message, "error");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  const handleLicensePlateSearch = async (e) => {
+    const value = e.target.value;
+    setLicensePlate(value);
+    setNewVehicleDetails({
+      ...newVehicleDetails,
+      plate: value
+    });
+
+    if (value.toLowerCase().includes('walk')) {
+      setPlateSearchResults([]);
+      return;
+    }
+
+    if (value.length >= 2) {
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) return;
+
+        const response = await fetch(`${API_URL}/vehicles?search=${encodeURIComponent(value)}`, {
+          headers: { 
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}` 
+          },
+        });
+
+        if (response.ok) {
+          const vehicles = await response.json();
+          const filteredResults = vehicles.filter(vehicle => {
+            const plateValue = vehicle.plate || vehicle.license_plate || "";
+            return plateValue.toLowerCase().includes(value.toLowerCase());
+          });
+
+          setPlateSearchResults(filteredResults);
+        } else {
+          console.error("Error searching vehicles:", response.status);
+        }
+      } catch (error) {
+        console.error("Error searching vehicles:", error);
+      }
+    } else {
+      setPlateSearchResults([]);
+    }
+  };
+
+  const handleSelectVehicle = (vehicle) => {
+    const plateValue = vehicle.plate || vehicle.license_plate || "";
+    setLicensePlate(plateValue);
+    setPlateSearchResults([]);
+    handleCreateJobsheet(vehicle.id);
+  };
+
+  const handleCreateVehicle = async () => {
+    if (!newVehicleDetails.plate || !newVehicleDetails.model) {
+      showNotification("License plate and model are required", "error");
+      return;
+    }
+  
+    setIsLoading(true);
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+  
+      let customerIdToUse = selectedCustomerId; // Prioritize explicitly selected customer
+
+      if (!customerIdToUse) {
+        // If no customer was explicitly selected on the new vehicle screen,
+        // fall back to finding/creating "General Customer"
+        const customerResponse = await fetch(`${API_URL}/customers?limit=1&search=General%20Customer`, { // More specific search
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+        
+        if (customerResponse.ok) {
+          const customers = await customerResponse.json();
+          if (customers && customers.length > 0 && customers[0].name === "General Customer") {
+            customerIdToUse = customers[0].id;
+          } else {
+            // If "General Customer" not found, create it
+            const newCustomerResponse = await fetch(`${API_URL}/customers`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`
+              },
+              body: JSON.stringify({
+                name: "General Customer",
+                contact: "N/A",
+                email: "general@example.com",
+                is_active: 1
+              })
+            });
+            
+            if (newCustomerResponse.ok) {
+              const newCustomer = await newCustomerResponse.json();
+              customerIdToUse = newCustomer.id;
+            } else {
+              throw new Error("Failed to create default customer");
+            }
+          }
+        } else {
+          throw new Error("Failed to query for General Customer");
+        }
+      }
+  
+      const vehicleData = {
+        plate: newVehicleDetails.plate,
+        model: newVehicleDetails.model,
+        customer_id: customerIdToUse, 
+        year: new Date().getFullYear(),
+        is_active: 1
+      };
+  
+      console.log("Sending vehicle data:", vehicleData);
+  
+      const response = await fetch(`${API_URL}/vehicles`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(vehicleData),
+      });
+  
+      if (response.ok) {
+        const newVehicle = await response.json();
+        showNotification("Vehicle created successfully", "success");
+        handleCreateJobsheet(newVehicle.id);
+      } else {
+        const errorText = await response.text();
+        let errorMessage = "Error creating vehicle";
+        
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error || errorData.message || errorText;
+        } catch (e) {
+          errorMessage = errorText;
+        }
+        
+        console.error("Vehicle creation error:", errorMessage);
+        showNotification("Error creating vehicle: " + errorMessage, "error");
+      }
+    } catch (error) {
+      console.error("Exception in vehicle creation:", error);
+      showNotification("Error creating vehicle: " + error.message, "error");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  const handleCreateJobsheet = async (vehicleId) => {
+    if (!vehicleId) {
+      showNotification("No vehicle selected", "error");
+      return;
+    }
+    
+    setIsLoading(true);
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+  
+      const jobsheetData = {
+        vehicle_id: vehicleId,
+        customer_id: null,
+        state: "pending",
+        description: "",
+        service_notes: "",
+        workflow_type: "1" // Forzar a "1" sin depender de otra variable
+      };
+  
+      const response = await fetch(`${API_URL}/jobsheets`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(jobsheetData),
+      });
+  
+      if (response.ok) {
+        const newJobsheet = await response.json();
+        showNotification("Jobsheet created successfully", "success");
+        
+        setTimeout(() => {
+          if (refreshJobsheets) refreshJobsheets();
+          setInternalIsNew(false);
+          setInternalJobsheetId(newJobsheet.id);
+          setWorkflowType("1"); // Asegurar que el estado local está actualizado
+          loadJobsheetData(newJobsheet.id);
+        }, 500);
+      } else {
+        const errorData = await response.text();
+        showNotification("Error creating jobsheet: " + errorData, "error");
+      }
+    } catch (error) {
+      showNotification("Error creating jobsheet: " + error.message, "error");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  const handleWalkInJobsheet = async () => {
+    setIsLoading(true);
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+  
+      const jobsheetData = {
+        vehicle_id: null,
+        customer_id: null,
+        state: "pending",
+        description: "Walk-in Sale",
+        service_notes: "",
+        workflow_type: workflowType
+      };
+  
+      const response = await fetch(`${API_URL}/jobsheets`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(jobsheetData),
+      });
+  
+      if (response.ok) {
+        const newJobsheet = await response.json();
+        showNotification("Walk-in jobsheet created successfully", "success");
+        
+        setTimeout(() => {
+          if (refreshJobsheets) refreshJobsheets();
+          setInternalIsNew(false);
+          setInternalJobsheetId(newJobsheet.id);
+          loadJobsheetData(newJobsheet.id);
+        }, 500);
+      } else {
+        const errorData = await response.text();
+        showNotification("Error creating walk-in jobsheet: " + errorData, "error");
+      }
+    } catch (error) {
+      showNotification("Error creating walk-in jobsheet: " + error.message, "error");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  const loadJobsheetData = async (id = null) => {
+    // Asegurar que el inventorySearchTerm esté vacío inmediatamente
+    setInventorySearchTerm("");
+    setSearchResults([]);
+    setNewMiscName(""); // Reset miscellaneous name input
+    setNewMiscPrice(""); // Reset miscellaneous price input
+    
+    setIsLoading(true);
+    
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        console.error("No token found");
+        return;
+      }
+  
+      const idToUse = id || effectiveJobsheetId;
+      
+      const response = await fetch(`${API_URL}/jobsheets/${idToUse}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+  
+      if (response.ok) {
+        const jobsheetData = await response.json();
+        setJobsheet(jobsheetData);
+        // Ensure workflowType is always a string
+        setWorkflowType(String(jobsheetData.workflow_type || "1")); 
+        setLicensePlate(jobsheetData.license_plate || jobsheetData.plate || "");
+  
+        await Promise.all([
+          fetchItems(token, idToUse),
+          fetchLabors(token, idToUse),
+          fetchPayments(token, idToUse)
+        ]);
+      } else {
+        console.error("Failed to load jobsheet:", response.status);
+        showNotification("Error loading jobsheet data", "error");
+      }
+    } catch (error) {
+      console.error("Error loading data:", error);
+      showNotification("Error loading jobsheet data", "error");
+    } finally {
+      // Garantizar nuevamente que esté vacío al finalizar la carga
+      setInventorySearchTerm("");
+      setSearchResults([]);
+      setIsLoading(false);
+    }
+  };
+
+  const calculateTotals = () => {
+    const itemsTotal = items.reduce((sum, item) => 
+      sum + (parseFloat(item.price || 0) * parseInt(item.quantity || 1)), 0);
+    
+    const laborTotal = labors
+      .filter(l => l.is_completed === 1 && l.is_billed === 1)
+      .reduce((sum, l) => sum + parseFloat(l.price || 0), 0);
+    
+    const subtotal = itemsTotal + laborTotal;
+    const tax = subtotal * (taxRate / 100);
+    const total = subtotal + tax;
+    const paid = payments.reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
+    
+    return {
+      items: itemsTotal,
+      labor: laborTotal,
+      subtotal,
+      tax,
+      total,
+      paid,
+      balance: total - paid
+    };
+  };
+
+  const getWorkflowTypeName = (type) => {
+    const types = {
+      "1": "Repair",
+      "2": "Deposit for Bike Sale",
+      "3": "Insurance",
+      "4": "HP Payment",
+      "5": "Road Tax",
+      "6": "HP Payment 2"
+    };
+    return types[type] || "Repair";
+  };
+
+  const handleSearch = (e) => {
+    const term = e.target.value;
+    setInventorySearchTerm(term);
+    
+    if (term.length >= 2) {
+      fetchSearchResults(term);
+    } else {
+      setSearchResults([]);
+    }
+  };
+
+  const fetchSearchResults = async (term) => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+
+      const response = await fetch(`${API_URL}/inventory?search=${encodeURIComponent(term)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.ok) {
+        const results = await response.json();
+        setSearchResults(results);
+      } else {
+        console.error("Error searching inventory:", response.status);
+      }
+    } catch (error) {
+      console.error("Error searching inventory:", error);
+    }
+  };
+
+  const handleSelectItem = async (selectedItem) => {
+    if (jobsheet?.state === "completed") {
+      showNotification("This order is completed and cannot be modified", "error");
+      return;
+    }
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+  
+      if (!effectiveJobsheetId) {
+        showNotification("Cannot add item: No active jobsheet", "error");
+        return;
+      }
+      
+      const quantity = parseInt(newItemQuantity) || 1;
+  
+      const itemData = {
+        jobsheet_id: effectiveJobsheetId,
+        product_id: selectedItem.id,
+        quantity: quantity,
+        price: selectedItem.sale,
+        description: selectedItem.description || ""
+      };
+  
+      const response = await fetch(`${API_URL}/jobsheets/items`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(itemData),
+      });
+  
+      if (response.ok) {
+        await fetchItems(token);
+        setInventorySearchTerm("");
+        setSearchResults([]);
+        setNewItemQuantity(1);
+        showNotification("Item added successfully", "success");
+      } else {
+        console.error("Failed to add item:", response.status);
+        const errorText = await response.text();
+        console.error("Error details:", errorText);
+        showNotification(`Failed to add item: ${response.status}`, "error");
+      }
+    } catch (error) {
+      console.error("Error adding item:", error);
+      showNotification("Error adding item", "error");
+    }
+  };
+
+  const handleAddLabor = async () => {
+    if (jobsheet?.state === "completed") {
+      showNotification("This order is completed and cannot be modified", "error");
+      return;
+    }
+    if (!newMiscName || !newMiscPrice) {
+      showNotification("Please provide a description and price", "error");
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+
+      const laborData = {
+        jobsheet_id: effectiveJobsheetId,
+        description: newMiscName,
+        price: newMiscPrice,
+        is_completed: 1,
+        is_billed: 1
+      };
+
+      const response = await fetch(`${API_URL}/labor`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(laborData),
+      });
+
+      if (response.ok) {
+        await fetchLabors(token);
+        setNewMiscName("");
+        setNewMiscPrice("");
+        setInventorySearchTerm("");
+        showNotification("Labor service added successfully", "success");
+      } else {
+        console.error("Failed to add labor:", response.status);
+        showNotification("Failed to add labor service", "error");
+      }
+    } catch (error) {
+      console.error("Error adding labor:", error);
+      showNotification("Error adding labor service", "error");
+    }
+  };
+
+  const handleDeleteItem = async (itemId) => {
+    if (jobsheet?.state === "completed") {
+      showNotification("This order is completed and cannot be modified", "error");
+      return;
+    }
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+  
+      const response = await fetch(`${API_URL}/jobsheets/items/${itemId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+  
+      if (response.ok) {
+        await fetchItems(token);
+        showNotification("Item removed successfully", "success");
+      } else {
+        console.error("Failed to delete item:", response.status);
+        
+        try {
+          const errorText = await response.text();
+          console.error("Error details:", errorText);
+        } catch (e) {
+        }
+        
+        showNotification(`Failed to remove item (${response.status})`, "error");
+      }
+    } catch (error) {
+      console.error("Error deleting item:", error);
+      showNotification("Error removing item", "error");
+    }
+  };
+
+  const handleDeleteLabor = async (laborId) => {
+    if (jobsheet?.state === "completed") {
+      showNotification("This order is completed and cannot be modified", "error");
+      return;
+    }
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+
+      const response = await fetch(`${API_URL}/labor/${laborId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.ok) {
+        await fetchLabors(token);
+        showNotification("Labor service removed successfully", "success");
+      } else {
+        console.error("Failed to delete labor:", response.status);
+        showNotification("Failed to remove labor service", "error");
+      }
+    } catch (error) {
+      console.error("Error deleting labor:", error);
+      showNotification("Error removing labor service", "error");
+    }
+  };
+
+  const handlePrint = () => {
+    const printWindow = window.open('', '_blank', 'width=800,height=600');
+    
+    if (!printWindow) {
+      showNotification("Could not open print preview. Please allow popups.", "error");
+      return;
+    }
+    
+    const totals = calculateTotals();
+    
+    const htmlContent = `
+      <html>
+        <head>
+          <title>Invoice #${jobsheet?.id || ''}</title>
+          <style>
+            body { 
+              font-family: Arial, sans-serif; 
+              margin: 0; 
+              padding: 20px;
+              color: #333;
+            }
+            .invoice-header {
+              text-align: center;
+              margin-bottom: 30px;
+            }
+            .invoice-header h1 {
+              margin: 0;
+              font-size: 24px;
+              color: #444;
+            }
+            .invoice-header p {
+              margin: 5px 0;
+              color: #666;
+            }
+            .invoice-info {
+              display: flex;
+              justify-content: space-between;
+              margin-bottom: 20px;
+              border-bottom: 1px solid #eee;
+              padding-bottom: 10px;
+            }
+            .invoice-info div {
+              margin-bottom: 15px;
+            }
+            .invoice-info h3 {
+              margin: 0 0 5px 0;
+              font-size: 14px;
+              color: #888;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-bottom: 20px;
+            }
+            th, td {
+              padding: 8px 10px;
+              text-align: left;
+              border-bottom: 1px solid #eee;
+            }
+            th {
+              background-color: #f8f9fa;
+              font-size: 12px;
+              text-transform: uppercase;
+              color: #666;
+            }
+            .text-right {
+              text-align: right;
+            }
+            .totals {
+              width: 300px;
+              margin-left: auto;
+            }
+            .totals table {
+              margin-bottom: 0;
+            }
+            .total-row {
+              font-weight: bold;
+              background-color: #f8f9fa;
+            }
+            .payments {
+              margin-top: 30px;
+            }
+            .balance {
+              font-weight: bold;
+              color: ${totals.balance <= 0 ? 'green' : 'red'};
+            }
+            .footer {
+              margin-top: 30px;
+              text-align: center;
+              color: #888;
+              font-size: 12px;
+              border-top: 1px solid #eee;
+              padding-top: 20px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="invoice-header">
+            <h1>INVOICE</h1>
+            <p>New Union Company</p>
+            <p>Invoice #${jobsheet?.id || ''}</p>
+            <p>Date: ${jobsheet?.created_at ? new Date(jobsheet.created_at).toLocaleDateString() : new Date().toLocaleDateString()}</p>
+          </div>
+          
+          <div class="invoice-info">
+            <div>
+              <h3>VEHICLE</h3>
+              <p>
+                ${jobsheet?.license_plate || jobsheet?.plate || "No plate"}<br>
+                ${jobsheet?.model || ""}
+              </p>
+            </div>
+            <div>
+              <h3>WORKFLOW</h3>
+              <p>${getWorkflowTypeName(workflowType)}</p>
+            </div>
+          </div>
+          
+          <table>
+            <thead>
+              <tr>
+                <th>Description</th>
+                <th class="text-right">Quantity</th>
+                <th class="text-right">Price</th>
+                <th class="text-right">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${items.map(item => `
+                <tr>
+                  <td>${item.description || item.name || "Product"}</td>
+                  <td class="text-right">${item.quantity || 1}</td>
+                  <td class="text-right">$${parseFloat(item.price).toFixed(2)}</td>
+                  <td class="text-right">$${(parseFloat(item.price) * parseInt(item.quantity || 1)).toFixed(2)}</td>
+                </tr>
+              `).join('')}
+              
+              ${labors.map(labor => `
+                <tr>
+                  <td>${labor.description || "Labor"}</td>
+                  <td class="text-right">1</td>
+                  <td class="text-right">$${parseFloat(labor.price).toFixed(2)}</td>
+                  <td class="text-right">$${parseFloat(labor.price).toFixed(2)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          
+          <div class="totals">
+            <table>
+              <tr>
+                <td>Subtotal:</td>
+                <td class="text-right">$${totals.subtotal.toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td>GST (${taxRate}%):</td>
+                <td class="text-right">$${totals.tax.toFixed(2)}</td>
+              </tr>
+              <tr class="total-row">
+                <td>Total:</td>
+                <td class="text-right">$${totals.total.toFixed(2)}</td>
+              </tr>
+            </table>
+          </div>
+          
+          <div class="payments">
+            <h3>Payment Information</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Method</th>
+                  <th class="text-right">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${payments.map(payment => `
+                  <tr>
+                    <td>${new Date(payment.payment_date).toLocaleDateString()}</td>
+                    <td>${payment.method.replace('_', ' ')}</td>
+                    <td class="text-right">$${parseFloat(payment.amount).toFixed(2)}</td>
+                  </tr>
+                `).join('')}
+                <tr>
+                  <td colspan="2"><strong>Total Paid:</strong></td>
+                  <td class="text-right">$${totals.paid.toFixed(2)}</td>
+                </tr>
+                <tr>
+                  <td colspan="2"><strong>Balance:</strong></td>
+                  <td class="text-right balance">$${Math.max(0, totals.balance).toFixed(2)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          
+          <div class="footer">
+            <p>Thank you for your business!</p>
+          </div>
+          
+          <script>
+            window.onload = function() { 
+              setTimeout(() => {
+                window.print();
+              }, 500);
+            }
+          </script>
+        </body>
+      </html>
+    `;
+    
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+  };
+
+  const handleAddPayment = async () => {
+    if (jobsheet?.state === "completed") {
+      showNotification("This order is completed and no additional payments can be added", "error");
+      return;
+    }
+    if (!paymentAmount || parseFloat(paymentAmount) <= 0) {
+      showNotification("Please enter a valid payment amount", "error");
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+
+      const paymentData = {
+        jobsheet_id: effectiveJobsheetId,
+        amount: parseFloat(paymentAmount),
+        method: paymentMethod,
+        payment_date: new Date().toISOString().split('T')[0]
+      };
+
+      const response = await fetch(`${API_URL}/jobsheets/payments`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(paymentData),
+      });
+
+      if (response.ok) {
+        await fetchPayments(token);
+        setPaymentAmount("");
+        showNotification("Payment added successfully", "success");
+      } else {
+        console.error("Failed to add payment:", response.status);
+        showNotification("Failed to add payment", "error");
+      }
+    } catch (error) {
+      console.error("Error adding payment:", error);
+      showNotification("Error adding payment", "error");
+    }
+  };
+
+  useEffect(() => {
+    const updateJobsheetStatusIfPaid = async () => {
+      if (jobsheet && !isLoading) {
+        const totals = calculateTotals();
+        
+        if (totals.balance <= 0 && 
+          totals.subtotal > 0 && // Asegura que hay algún producto o servicio
+          jobsheet.state !== "completed") {
+          try {
+            const token = localStorage.getItem("token");
+            if (!token) return;
+            
+            const updateData = {
+              ...jobsheet,
+              state: "completed"
+            };
+            
+            const response = await fetch(`${API_URL}/jobsheets/${effectiveJobsheetId}`, {
+              method: "PUT",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify(updateData),
+            });
+            
+            if (response.ok) {
+              setJobsheet({...jobsheet, state: "completed"});
+              showNotification("Order marked as completed", "success");
+            }
+          } catch (error) {
+            console.error("Error updating jobsheet status:", error);
+          }
+        }
+      }
+    };
+    
+    updateJobsheetStatusIfPaid();
+  }, [jobsheet, payments]);
+
+  const handleCustomerSearch = async (e) => {
+    const term = e.target.value;
+    setCustomerSearchTerm(term);
+
+    if (term.length >= 2) {
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) return;
+
+        const response = await fetch(`${API_URL}/customers?search=${encodeURIComponent(term)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (response.ok) {
+          const results = await response.json();
+          setCustomerSearchResults(results);
+        } else {
+          console.error("Error searching customers:", response.status);
+        }
+      } catch (error) {
+        console.error("Error searching customers:", error);
+      }
+    } else {
+      setCustomerSearchResults([]);
+    }
+  };
+
+  const handleSelectCustomer = (customer) => {
+    setSelectedCustomer(customer);
+    setSelectedCustomerId(customer.id);
+  };
+
+  const handleCreateCustomer = async () => {
+    if (!newCustomerDetails.name) {
+      showNotification("Customer name is required", "error");
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+
+      const response = await fetch(`${API_URL}/customers`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({...newCustomerDetails, is_active: 1}), // Ensure is_active is set
+      });
+
+      if (response.ok) {
+        setNewCustomerDetails({ name: "", contact: "", email: "" }); // Clear form
+        setShowNewCustomerForm(false); // Hide form
+        showNotification("Customer created successfully. You can now search for them.", "success");
+        // Optionally, refresh customer search results if a search term is active
+        if (customerSearchTerm) {
+          handleCustomerSearch({ target: { value: customerSearchTerm } });
+        }
+      } else {
+        const errorText = await response.text();
+        let errorMessage = "Failed to create customer";
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error || errorData.message || errorMessage;
+        } catch (e) {}
+        console.error("Failed to create customer:", response.status, errorMessage);
+        showNotification(`Failed to create customer: ${errorMessage}`, "error");
+      }
+    } catch (error) {
+      console.error("Error creating customer:", error);
+      showNotification("Error creating customer: " + error.message, "error");
+    }
+  };
+
+  const handleUseGeneralCustomer = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+
+      const response = await fetch(`${API_URL}/customers?search=General Customer`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.ok) {
+        const results = await response.json();
+        if (results.length > 0) {
+          setSelectedCustomer(results[0]);
+          setSelectedCustomerId(results[0].id);
+          showNotification("General Customer selected", "success");
+        } else {
+          showNotification("General Customer not found", "error");
+        }
+      } else {
+        console.error("Error searching General Customer:", response.status);
+        showNotification("Error searching General Customer", "error");
+      }
+    } catch (error) {
+      console.error("Error searching General Customer:", error);
+      showNotification("Error searching General Customer", "error");
+    }
+  };
+
+  const isCompleted = effectiveJobsheetId && jobsheet?.state === "completed";
+
+  if (isLoading) {
+    return <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh" }}>
+      <div style={{
+        width: "50px", 
+        height: "50px", 
+        border: "5px solid #f3f3f3",
+        borderTop: "5px solid #5932EA",
+        borderRadius: "50%",
+        animation: "spin 1s linear infinite"
+      }}></div>
+      <style>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
+    </div>;
+  }
+
+  if (effectiveIsNew) {
+    return (
+      <div style={{
+        position: isModal ? "relative" : "fixed",
+        top: isModal ? "auto" : 0,
+        left: isModal ? "auto" : 0, 
+        right: isModal ? "auto" : 0,
+        bottom: isModal ? "auto" : 0,
+        height: isModal ? "100%" : "auto",
+        width: isModal ? "100%" : "auto",
+        backgroundColor: "#f0f2f5",
+        display: "flex",
+        flexDirection: "column",
+        zIndex: isModal ? 1 : 1000,
+        padding: "20px",
+        overflow: "hidden"
+      }}>
+        <div style={{
+          backgroundColor: "#5932EA",
+          color: "white",
+          padding: "12px 20px",
+          margin: "-20px -20px 20px -20px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center"
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <button 
+              onClick={onClose}
+              style={{
+                backgroundColor: "rgba(255,255,255,0.2)",
+                border: "none",
+                color: "white",
+                borderRadius: "50%",
+                width: "26px",
+                height: "26px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer"
+              }}
+            >
+              <FontAwesomeIcon icon={faArrowLeft} />
+            </button>
+            <h2 style={{ margin: 0, fontSize: "16px" }}>New Jobsheet | {getWorkflowTypeName(workflowType)}</h2>
+          </div>
+        </div>
+
+        <div style={{ 
+          backgroundColor: "white", 
+          padding: "20px", 
+          borderRadius: "8px",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+          marginBottom: "20px"
+        }}>
+          <h3 style={{ margin: "0 0 15px 0", fontSize: "16px", fontWeight: "500" }}>Vehicle Information</h3>
+          
+          <div style={{ marginBottom: "15px" }}>
+            <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", color: "#555" }}>
+              License Plate
+            </label>
+            <div style={{ position: "relative", maxWidth: "100%" }}>
+              <input
+                type="text"
+                value={licensePlate}
+                onChange={handleLicensePlateSearch}
+                placeholder="Input license plate or type 'walk' for walk-in sale"
+                style={{ 
+                  width: "100%",
+                  padding: "10px 10px 10px 35px",
+                  borderRadius: "4px",
+                  border: "1px solid #ddd",
+                  fontSize: "14px",
+                  boxSizing: "border-box" // Esto evita desbordamiento
+                }}
+              />
+              <FontAwesomeIcon 
+                icon={faCar} 
+                style={{ 
+                  position: "absolute",
+                  left: "12px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  color: "#666"
+                }}
+              />
+            </div>
+          </div>
+
+          {plateSearchResults.length > 0 && (
+            <div style={{
+              border: "1px solid #eee",
+              borderRadius: "4px",
+              marginBottom: "15px",
+              maxHeight: "200px",
+              overflowY: "auto",
+              maxWidth: "100%" // Evitar desbordamiento horizontal
+            }}>
+              {plateSearchResults.map(vehicle => (
+                <div 
+                  key={vehicle.id}
+                  onClick={() => handleSelectVehicle(vehicle)}
+                  style={{
+                    padding: "10px 15px",
+                    borderBottom: "1px solid #f0f0f0",
+                    cursor: "pointer",
+                    backgroundColor: "white",
+                    transition: "background-color 0.2s",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis"
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#f9f9f9"}
+                  onMouseOut={(e) => e.currentTarget.style.backgroundColor = "white"}
+                >
+                  <div style={{ fontWeight: "500" }}>{vehicle.plate || vehicle.license_plate}</div>
+                  <div style={{ fontSize: "13px", color: "#666", marginTop: "3px" }}>
+                    {vehicle.model || "Unknown Model"}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {licensePlate && !licensePlate.toLowerCase().includes('walk') && plateSearchResults.length === 0 && (
+            <div style={{ 
+              padding: "15px",
+              backgroundColor: "#f9f9f9",
+              borderRadius: "4px",
+              marginBottom: "15px",
+              maxWidth: "100%"
+            }}>
+              <p style={{ margin: "0 0 10px 0", fontSize: "14px" }}>
+                Vehicle not found with plate: <strong>{licensePlate}</strong>.
+              </p>
+              <div style={{ marginBottom: "10px" }}>
+                <label style={{ 
+                  display: "block", 
+                  marginBottom: "5px", 
+                  fontSize: "14px", 
+                  fontWeight: "500", 
+                  color: "#333" 
+                }}>
+                  Model *
+                </label>
+                <input
+                  type="text"
+                  value={newVehicleDetails.model}
+                  onChange={(e) => setNewVehicleDetails({...newVehicleDetails, model: e.target.value})}
+                  placeholder="Enter vehicle model (e.g. Honda CBR 150R)"
+                  style={{ 
+                    width: "100%",
+                    padding: "10px",
+                    borderRadius: "4px",
+                    border: "1px solid #ddd",
+                    fontSize: "14px",
+                    boxSizing: "border-box"
+                  }}
+                />
+              </div>
+              <button
+                onClick={handleCreateVehicle}
+                style={{
+                  padding: "10px 16px",
+                  backgroundColor: "#5932EA",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                  width: "100%"
+                }}
+              >
+                Create Vehicle & Jobsheet
+              </button>
+            </div>
+          )}
+
+          {licensePlate.toLowerCase().includes('walk') && (
+            <button
+              onClick={handleWalkInJobsheet}
+              style={{
+                width: "100%",
+                padding: "10px",
+                backgroundColor: "#00C853",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                cursor: "pointer",
+                fontSize: "14px",
+                marginTop: "10px"
+              }}
+            >
+              Create Walk-in Sale
+            </button>
+          )}
+        </div>
+
+        <div style={{ 
+          backgroundColor: "white",
+          padding: "15px",
+          borderRadius: "8px",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.05)"
+        }}>
+          <h3 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 600 }}>Workflow Type</h3>
+          
+          <div style={{ 
+            display: "flex", 
+            flexWrap: "wrap", 
+            gap: "8px" 
+          }}>
+            <button
+              key="workflow-button-1"
+              onClick={() => setWorkflowType("1")}
+              style={{
+                padding: "8px 12px",
+                borderRadius: "4px",
+                border: "1px solid #ddd",
+                background: workflowType === "1" ? "#5932EA" : "white",
+                color: workflowType === "1" ? "white" : "#333",
+                cursor: "pointer",
+                fontSize: "13px"
+              }}
+            >
+              Repair
+            </button>
+            <button
+              onClick={() => setWorkflowType("2")}
+              style={{
+                padding: "8px 12px",
+                borderRadius: "4px",
+                border: "1px solid #ddd",
+                background: workflowType === "2" ? "#5932EA" : "white",
+                color: workflowType === "2" ? "white" : "#333",
+                cursor: "pointer",
+                fontSize: "13px"
+              }}
+            >
+              Deposit for Bike Sale
+            </button>
+            <button
+              onClick={() => setWorkflowType("3")}
+              style={{
+                padding: "8px 12px",
+                borderRadius: "4px",
+                border: "1px solid #ddd",
+                background: workflowType === "3" ? "#5932EA" : "white",
+                color: workflowType === "3" ? "white" : "#333",
+                cursor: "pointer",
+                fontSize: "13px"
+              }}
+            >
+              Insurance
+            </button>
+            <button
+              onClick={() => setWorkflowType("4")}
+              style={{
+                padding: "8px 12px",
+                borderRadius: "4px",
+                border: "1px solid #ddd",
+                background: workflowType === "4" ? "#5932EA" : "white",
+                color: workflowType === "4" ? "white" : "#333",
+                cursor: "pointer",
+                fontSize: "13px"
+              }}
+            >
+              HP Payment
+            </button>
+            <button
+              onClick={() => setWorkflowType("5")}
+              style={{
+                padding: "8px 12px",
+                borderRadius: "4px",
+                border: "1px solid #ddd",
+                background: workflowType === "5" ? "#5932EA" : "white",
+                color: workflowType === "5" ? "white" : "#333",
+                cursor: "pointer",
+                fontSize: "13px"
+              }}
+            >
+              Road Tax
+            </button>
+            <button
+              onClick={() => setWorkflowType("6")}
+              style={{
+                padding: "8px 12px",
+                borderRadius: "4px",
+                border: "1px solid #ddd",
+                background: workflowType === "6" ? "#5932EA" : "white",
+                color: workflowType === "6" ? "white" : "#333",
+                cursor: "pointer",
+                fontSize: "13px"
+              }}
+            >
+              HP Payment 2
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const totals = effectiveJobsheetId ? calculateTotals() : { items: 0, labor: 0, subtotal: 0, tax: 0, total: 0, paid: 0, balance: 0 };
+
+  return (
+    <div style={{
+      position: isModal ? "relative" : "fixed",
+      top: isModal ? "auto" : 0,
+      left: isModal ? "auto" : 0, 
+      right: isModal ? "auto" : 0,
+      bottom: isModal ? "auto" : 0,
+      height: isModal ? "100%" : "auto",
+      width: isModal ? "100%" : "auto",
+      backgroundColor: "#f0f2f5",
+      display: "flex",
+      flexDirection: "column",
+      zIndex: isModal ? 1 : 1000,
+      overflow: "hidden"
+    }}>
+      <div style={{
+        backgroundColor: "#5932EA",
+        color: "white",
+        padding: "12px 20px",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center"
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <button 
+            onClick={onClose}
+            style={{
+              backgroundColor: "rgba(255,255,255,0.2)",
+              border: "none",
+              color: "white",
+              borderRadius: "50%",
+              width: "26px",
+              height: "26px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer"
+            }}
+          >
+            <FontAwesomeIcon icon={faArrowLeft} />
+          </button>
+          <div>
+            <h2 style={{ margin: 0, fontSize: "16px" }}>
+              {effectiveJobsheetId ? `Jobsheet #${jobsheet?.id || ''}` : 'New Jobsheet'}
+            </h2>
+            <div style={{ fontSize: "12px", marginTop: "4px", display: "flex", gap: "15px", alignItems: "center" }}>
+              <span>Date: {jobsheet?.created_at ? new Date(jobsheet.created_at).toLocaleDateString() : new Date().toLocaleDateString()}</span>
+              <span>Vehicle: {jobsheet?.license_plate || jobsheet?.plate || "No plate"}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ 
+        padding: "12px 20px",
+        backgroundColor: "#f8f9fa",
+        borderBottom: "1px solid #e0e0e0",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        flexWrap: "wrap",
+        gap: "12px"
+      }}>
+        {/* Columna izquierda - Información del vehículo */}
+        <div style={{ 
+          display: "flex", 
+          alignItems: "center",
+          minWidth: "200px",
+          flex: "1"
+        }}>
+          <div style={{
+            backgroundColor: "#5932EA",
+            color: "white",
+            borderRadius: "50%",
+            width: "32px",
+            height: "32px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            marginRight: "10px"
+          }}>
+            <FontAwesomeIcon icon={faCar} />
+          </div>
+          <div>
+            <div style={{ fontSize: "12px", color: "#666", marginBottom: "2px" }}>Vehicle</div>
+            <div style={{ fontSize: "14px", fontWeight: "500" }}>
+              {jobsheet?.license_plate || jobsheet?.plate || "No license plate recorded"}
+            </div>
+          </div>
+        </div>
+
+        {/* Columna derecha - Información del cliente y botón de acción */}
+        <div style={{ 
+          display: "flex", 
+          alignItems: "center", 
+          gap: "15px",
+          flex: "2",
+          justifyContent: "flex-end"
+        }}>
+          <div style={{ 
+            display: "flex", 
+            alignItems: "center",
+            flex: "1",
+            maxWidth: "350px"
+          }}>
+            <div style={{
+              backgroundColor: jobsheet?.customer_id ? "#e3f2fd" : "#fff8e1",
+              color: jobsheet?.customer_id ? "#1976d2" : "#f57c00",
+              borderRadius: "50%",
+              width: "32px",
+              height: "32px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              marginRight: "10px"
+            }}>
+              <FontAwesomeIcon icon={faUser} />
+            </div>
+            <div style={{ flex: "1", overflow: "hidden" }}>
+              <div style={{ fontSize: "12px", color: "#666", marginBottom: "2px" }}>Customer</div>
+              <div style={{ 
+                fontSize: "14px", 
+                fontWeight: "500",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis"
+              }}>
+                {jobsheet?.customer_name || "No customer assigned"}
+                {jobsheet?.customer_contact && (
+                  <span style={{ 
+                    marginLeft: "8px", 
+                    color: "#666", 
+                    fontWeight: "normal",
+                    fontSize: "13px" 
+                  }}>
+                    | {jobsheet.customer_contact}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {!isCompleted && (
+            <button
+              onClick={() => setShowCustomerModal(true)}
+              style={{
+                backgroundColor: "#5932EA",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                padding: "8px 12px",
+                fontSize: "13px",
+                display: "flex",
+                alignItems: "center",
+                gap: "5px",
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.12)"
+              }}
+            >
+              <FontAwesomeIcon icon={faUser} size="sm" />
+              {jobsheet?.customer_id ? "Change Customer" : "Assign Customer"}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div style={{ 
+        padding: "15px", 
+        overflowY: "auto",
+        display: "grid",
+        gridTemplateColumns: "1fr 350px",
+        gap: "15px",
+        flex: 1
+      }} ref={printableContentRef}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+          <div style={{ 
+            backgroundColor: "white",
+            padding: "15px",
+            borderRadius: "8px",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+            opacity: isCompleted ? 0.6 : 1,
+            pointerEvents: isCompleted ? "none" : "auto"
+          }}>
+            <h3 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 600 }}>
+              {isCompleted && <span style={{color: "#2e7d32", marginRight: "8px"}}>✓</span>}
+              {workflowType === "1" ? "Add Products/Services" : `Add ${getWorkflowTypeName(workflowType)} Amount`}
+              {isCompleted && <span style={{fontSize: "12px", color: "#666", marginLeft: "10px"}}>(Completed - No Changes Allowed)</span>}
+            </h3>
+            
+            {isCompleted ? (
+              <div style={{
+                padding: "15px",
+                backgroundColor: "#f9f9f9",
+                borderRadius: "4px",
+                textAlign: "center",
+                color: "#666"
+              }}>
+                This order has been completed and cannot be modified.
+              </div>
+            ) : (
+              workflowType === "1" ? (
+                <>
+                  <div style={{ 
+                    display: "grid", 
+                    gridTemplateColumns: "1fr auto", 
+                    gap: "8px", 
+                    marginBottom: "10px" 
+                  }}>
+                    <input
+                      type="text"
+                      value={inventorySearchTerm}
+                      onChange={handleSearch}
+                      placeholder="Search product or type 'labor' for services"
+                      style={{ 
+                        padding: "8px", 
+                        borderRadius: "4px",
+                        border: "1px solid #ddd" 
+                      }}
+                    />
+                    <input
+                      type="number"
+                      value={newItemQuantity}
+                      onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)}
+                      min="1"
+                      placeholder="Qty"
+                      style={{ 
+                        padding: "8px", 
+                        borderRadius: "4px",
+                        border: "1px solid #ddd" 
+                      }}
+                    />
+                  </div>
+  
+                  {searchResults.length > 0 && (
+                    <div style={{
+                      border: "1px solid #eee",
+                      borderRadius: "4px",
+                      marginBottom: "10px",
+                      maxHeight: "200px",
+                      overflowY: "auto"
+                    }}>
+                      {searchResults.map(item => (
+                        <div 
+                          key={item.id}
+                          onClick={() => handleSelectItem(item)}
+                          style={{
+                            padding: "8px 12px",
+                            borderBottom: "1px solid #f0f0f0",
+                            cursor: "pointer",
+                            backgroundColor: "white"
+                          }}
+                          onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#f9f9f9"}
+                          onMouseOut={(e) => e.currentTarget.style.backgroundColor = "white"}
+                        >
+                          <div style={{ fontWeight: "500", fontSize: "14px" }}>{item.name}</div>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", marginTop: "2px" }}>
+                            <span style={{ 
+                              color: parseInt(item.stock) > 0 ? "#2e7d32" : "#c62828",
+                              fontWeight: "500"
+                            }}>
+                              Stock: {item.stock ? Number(item.stock).toFixed(0) : '0'}
+                            </span>
+                            {!item.isLabourItem && <span>${parseFloat(item.sale || 0).toFixed(2)}</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {inventorySearchTerm !== null && 
+                   inventorySearchTerm !== undefined &&
+                   typeof inventorySearchTerm === 'string' &&
+                   inventorySearchTerm.toLowerCase().trim() === "labor" && (
+                    <div style={{
+                      padding: "10px",
+                      backgroundColor: "#fff8e1",
+                      borderRadius: "4px",
+                      marginTop: "10px",
+                      border: "1px solid #ffe0b2"
+                    }}>
+                      <div style={{ marginBottom: "10px" }}>
+                        <label style={{ display: "block", marginBottom: "5px", fontSize: "13px", fontWeight: "500" }}>
+                          Labor Description
+                        </label>
+                        <input
+                          type="text"
+                          value={newMiscName}
+                          onChange={e => setNewMiscName(e.target.value)}
+                          placeholder="e.g. Oil change, Brake service"
+                          style={{ width: "100%", padding: "8px", borderRadius: "4px", border: "1px solid #ddd" }}
+                        />
+                      </div>
+  
+                      <div style={{ marginBottom: "10px" }}>
+                        <label style={{ display: "block", marginBottom: "5px", fontSize: "13px", fontWeight: "500" }}>
+                          Price ($)
+                        </label>
+                        <input
+                          type="number"
+                          value={newMiscPrice}
+                          onChange={e => setNewMiscPrice(e.target.value)}
+                          placeholder="0.00"
+                          step="0.01"
+                          min="0"
+                          style={{ width: "100%", padding: "8px", borderRadius: "4px", border: "1px solid #ddd" }}
+                        />
+                      </div>
+  
+                      <button
+                        onClick={handleAddLabor}
+                        style={{
+                          width: "100%",
+                          padding: "8px",
+                          backgroundColor: "#FF9800",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "4px",
+                          cursor: "pointer",
+                          fontSize: "13px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: "6px"
+                        }}
+                      >
+                        <FontAwesomeIcon icon={faPlus} size="sm" />
+                        Add Labor Service
+                      </button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div style={{
+                  padding: "15px",
+                  backgroundColor: "#f9f9f9",
+                  borderRadius: "4px",
+                  border: "1px solid #e0e0e0"
+                }}>
+                  <div style={{ marginBottom: "15px" }}>
+                    <label style={{ display: "block", marginBottom: "5px", fontSize: "14px", fontWeight: "500" }}>
+                      Description
+                    </label>
+                    <input
+                      type="text"
+                      value={newMiscName}
+                      onChange={e => setNewMiscName(e.target.value)}
+                      placeholder={`Enter ${getWorkflowTypeName(workflowType)} description`}
+                      style={{ width: "100%", padding: "10px", borderRadius: "4px", border: "1px solid #ddd" }}
+                    />
+                  </div>
+  
+                  <div style={{ marginBottom: "15px" }}>
+                    <label style={{ display: "block", marginBottom: "5px", fontSize: "14px", fontWeight: "500" }}>
+                      Amount ($)
+                    </label>
+                    <input
+                      type="number"
+                      value={newMiscPrice}
+                      onChange={e => setNewMiscPrice(e.target.value)}
+                      placeholder="0.00"
+                      step="0.01"
+                      min="0"
+                      style={{ width: "100%", padding: "10px", borderRadius: "4px", border: "1px solid #ddd" }}
+                    />
+                  </div>
+  
+                  <button
+                    onClick={handleAddWorkflowCharge}
+                    style={{
+                      width: "100%",
+                      padding: "10px",
+                      backgroundColor: getWorkflowButtonColor(workflowType),
+                      color: "white",
+                      border: "none",
+                      borderRadius: "4px",
+                      cursor: "pointer",
+                      fontSize: "14px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "8px"
+                    }}
+                  >
+                    <FontAwesomeIcon icon={faPlus} />
+                    Add {getWorkflowTypeName(workflowType)}
+                  </button>
+                </div>
+              )
+            )}
+          </div>
+
+          <div style={{ 
+            backgroundColor: "white",
+            padding: "15px",
+            borderRadius: "8px",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+            flex: 1,
+            display: "flex",
+            flexDirection: "column"
+          }}>
+            <h3 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 600 }}>Items & Services</h3>
+            
+            {allItems.length > 0 ? (
+              <div style={{ flex: 1, overflowY: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid #eee" }}>
+                      <th style={{ textAlign: "left", padding: "8px 6px", color: "#666" }}>Item/Service</th>
+                      <th style={{ width: "60px", textAlign: "center", padding: "8px 6px", color: "#666" }}>Qty</th>
+                      <th style={{ width: "80px", textAlign: "right", padding: "8px 6px", color: "#666" }}>Price</th>
+                      <th style={{ width: "80px", textAlign: "right", padding: "8px 6px", color: "#666" }}>Total</th>
+                      <th style={{ width: "40px", padding: "8px 6px" }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allItems.map(item => (
+                      <tr key={item.id} style={{ borderBottom: "1px solid #f8f8f8" }}>
+                        <td style={{ padding: "8px 6px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            {item.isLabor && (
+                              <span style={{ 
+                                fontSize: "10px", 
+                                backgroundColor: "#FF9800", 
+                                color: "white",
+                                padding: "2px 4px",
+                                borderRadius: "3px"
+                              }}>
+                                LABOR
+                              </span>
+                            )}
+                            {item.name}
+                          </div>
+                        </td>
+                        <td style={{ textAlign: "center", padding: "8px 6px" }}>{item.quantity}</td>
+                        <td style={{ textAlign: "right", padding: "8px 6px" }}>${parseFloat(item.price).toFixed(2)}</td>
+                        <td style={{ textAlign: "right", padding: "8px 6px", fontWeight: "500" }}>
+                          ${(parseFloat(item.price) * item.quantity).toFixed(2)}
+                        </td>
+                        <td style={{ textAlign: "center", padding: "8px 6px" }}>
+                          <button
+                            onClick={() => item.isLabor 
+                              ? handleDeleteLabor(item.id.replace('labor-', '')) 
+                              : handleDeleteItem(item.id)
+                            }
+                            style={{
+                              background: "none",
+                              border: "none",
+                              color: isCompleted ? "#ccc" : "#F44336",
+                              cursor: isCompleted ? "not-allowed" : "pointer",
+                              padding: "2px",
+                              borderRadius: "3px"
+                            }}
+                            disabled={isCompleted}
+                          >
+                            <FontAwesomeIcon icon={faTrash} size="xs" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div style={{ 
+                flex: 1,
+                display: "flex", 
+                alignItems: "center", 
+                justifyContent: "center", 
+                color: "#888", 
+                backgroundColor: "#f9f9f9", 
+                borderRadius: "4px",
+                padding: "20px"
+              }}>
+                No items or services added yet
+              </div>
+            )}
+          </div>
+        </div>
+        
+        <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+          <div style={{ 
+            backgroundColor: "white",
+            padding: "15px",
+            borderRadius: "8px",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.05)"
+          }}>
+            <h3 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 600 }}>Financial Summary</h3>
+            
+            <div style={{ 
+              backgroundColor: "#f8f9fa",
+              borderRadius: "5px",
+              padding: "10px",
+              marginBottom: "10px"
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px", fontSize: "13px" }}>
+                <span>Items:</span>
+                <span>${totals.items.toFixed(2)}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px", fontSize: "13px" }}>
+                <span>Labor:</span>
+                <span>${totals.labor.toFixed(2)}</span>
+              </div>
+              <div style={{ 
+                display: "flex", 
+                justifyContent: "space-between", 
+                marginBottom: "6px",
+                fontSize: "13px",
+                paddingTop: "6px",
+                borderTop: "1px dashed #e0e0e0"
+              }}>
+                <span>Subtotal:</span>
+                <span>${totals.subtotal.toFixed(2)}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px", fontSize: "13px" }}>
+                <span>GST ({taxRate}%):</span>
+                <span>${totals.tax.toFixed(2)}</span>
+              </div>
+              <div style={{ 
+                display: "flex", 
+                justifyContent: "space-between", 
+                fontWeight: "600",
+                fontSize: "14px",
+                paddingTop: "6px",
+                borderTop: "1px dashed #e0e0e0"
+              }}>
+                <span>TOTAL:</span>
+                <span>${totals.total.toFixed(2)}</span>
+              </div>
+            </div>
+            
+            <div style={{ 
+              backgroundColor: isCompleted ? "#e8f5e9" : totals.balance <= 0 ? "#e8f5e9" : totals.paid > 0 ? "#fff8e1" : "#ffebee",
+              borderRadius: "5px",
+              padding: "10px",
+              marginBottom: "10px",
+              border: `1px solid ${isCompleted ? "#c8e6c9" : totals.balance <= 0 ? "#c8e6c9" : totals.paid > 0 ? "#ffe0b2" : "#ffcdd2"}`
+            }}>
+              <div style={{ 
+                fontWeight: "600", 
+                marginBottom: "5px",
+                fontSize: "13px",
+                color: isCompleted ? "#2e7d32" : totals.balance <= 0 ? "#2e7d32" : totals.paid > 0 ? "#ef6c00" : "#c62828"
+              }}>
+                {isCompleted ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                    <FontAwesomeIcon icon={faCheckCircle} />
+                    Order Completed - No Changes Allowed
+                  </div>
+                ) : totals.balance <= 0 ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                    <FontAwesomeIcon icon={faCheckCircle} />
+                    Fully Paid
+                  </div>
+                ) : totals.paid > 0 ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                    <FontAwesomeIcon icon={faExclamationCircle} />
+                    Partially Paid
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                    <FontAwesomeIcon icon={faExclamationCircle} />
+                    Payment Pending
+                  </div>
+                )}
+              </div>
+              
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px" }}>
+                <span>Paid:</span>
+                <span>${totals.paid.toFixed(2)}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px" }}>
+                <span>Balance:</span>
+                <span>${Math.max(0, totals.balance).toFixed(2)}</span>
+              </div>
+            </div>
+            
+            <button 
+              onClick={handlePrint}
+              style={{
+                width: "100%",
+                padding: "8px",
+                backgroundColor: "#5932EA",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                fontSize: "13px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "6px",
+                cursor: "pointer"
+              }}
+            >
+              <FontAwesomeIcon icon={faPrint} size="sm" />
+              Print Invoice
+            </button>
+          </div>
+          
+          <div style={{ 
+            backgroundColor: "white",
+            padding: "15px",
+            borderRadius: "8px",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+            opacity: isCompleted ? 0.6 : 1,
+            pointerEvents: isCompleted ? "none" : "auto"
+          }}>
+            <h3 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 600 }}>
+              Add Payment
+              {isCompleted && <span style={{fontSize: "12px", color: "#666", marginLeft: "10px"}}>(Completed - No Changes Allowed)</span>}
+            </h3>
+            
+            {isCompleted ? (
+              <div style={{ 
+                backgroundColor: "#e8f5e9",
+                padding: "10px",
+                borderRadius: "4px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#2e7d32",
+                gap: "8px",
+                fontSize: "14px"
+              }}>
+                <FontAwesomeIcon icon={faCheckCircle} />
+                Order completed - No more payments needed
+              </div>
+            ) : totals.balance > 0 ? (
+              <>
+                <div style={{ 
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "8px",
+                  marginBottom: "10px"
+                }}>
+                  <input
+                    type="number"
+                    value={paymentAmount}
+                    onChange={e => {
+                      const value = e.target.value;
+                      if (!value || parseFloat(value) <= totals.balance) {
+                        setPaymentAmount(value);
+                      } else {
+                        setPaymentAmount(totals.balance.toString());
+                        showNotification(`Maximum amount is $${totals.balance.toFixed(2)}`, "error");
+                      }
+                    }}
+                    placeholder="Amount"
+                    min="0"
+                    max={totals.balance}
+                    step="0.01"
+                    style={{ padding: "8px", borderRadius: "4px", border: "1px solid #ddd" }}
+                  />
+                  
+                  <select
+                    value={paymentMethod}
+                    onChange={e => setPaymentMethod(e.target.value)}
+                    style={{ padding: "8px", borderRadius: "4px", border: "1px solid #ddd" }}
+                  >
+                    <option value="cash">Cash</option>
+                    <option value="credit_card">Paynow</option>
+                    <option value="debit_card">Other</option>
+                  </select>
+                </div>
+                
+                <button
+                  onClick={handleAddPayment}
+                  style={{
+                    width: "100%",
+                    padding: "8px",
+                    backgroundColor: "#00C853",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                    fontSize: "13px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "6px"
+                  }}
+                >
+                  <FontAwesomeIcon icon={faPlus} size="sm" />
+                  Add Payment
+                </button>
+              </>
+            ) : (
+              <div style={{ 
+                backgroundColor: "#e8f5e9",
+                padding: "10px",
+                borderRadius: "4px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#2e7d32",
+                gap: "8px",
+                fontSize: "14px"
+              }}>
+                <FontAwesomeIcon icon={faCheckCircle} />
+                Invoice is fully paid
+              </div>
+            )}
+          </div>
+          
+          <div style={{ 
+            backgroundColor: "white",
+            padding: "15px",
+            borderRadius: "8px",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+            flex: 1,
+            display: "flex",
+            flexDirection: "column"
+          }}>
+            <h3 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 600 }}>Payment History</h3>
+            
+            {payments.length > 0 ? (
+              <div style={{ flex: 1, overflowY: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid #eee" }}>
+                      <th style={{ textAlign: "left", padding: "6px" }}>Date</th>
+                      <th style={{ textAlign: "left", padding: "6px" }}>Method</th>
+                      <th style={{ textAlign: "right", padding: "6px" }}>Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {payments.map(payment => (
+                      <tr key={payment.id} style={{ borderBottom: "1px solid #f8f8f8" }}>
+                        <td style={{ padding: "6px" }}>
+                          {new Date(payment.payment_date).toLocaleDateString()}
+                        </td>
+                        <td style={{ padding: "6px", textTransform: "capitalize" }}>
+                          {payment.method.replace('_', ' ')}
+                        </td>
+                        <td style={{ textAlign: "right", padding: "6px", color: "#00C853" }}>
+                          ${parseFloat(payment.amount).toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                    <tr>
+                      <td colSpan="2" style={{ padding: "6px", fontWeight: "500" }}>Total paid:</td>
+                      <td style={{ textAlign: "right", padding: "6px", fontWeight: "500", color: "#00C853" }}>
+                        ${totals.paid.toFixed(2)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div style={{ 
+                flex: 1,
+                display: "flex", 
+                alignItems: "center", 
+                justifyContent: "center", 
+                color: "#888", 
+                backgroundColor: "#f9f9f9", 
+                borderRadius: "4px",
+                padding: "20px"
+              }}>
+                No payments recorded
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div style={{ 
+          backgroundColor: "white",
+          padding: "15px",
+          borderRadius: "8px",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+          gridColumn: "1 / -1",
+          opacity: isCompleted ? 0.6 : 1,
+          pointerEvents: isCompleted ? "none" : "auto"
+        }}>
+          <h3 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 600 }}>
+            Workflow Type
+            {isCompleted && <span style={{fontSize: "12px", color: "#666", marginLeft: "10px"}}>(Completed - Cannot Change)</span>}
+          </h3>
+          
+          <div style={{ 
+            display: "flex", 
+            flexWrap: "wrap", 
+            gap: "8px" 
+          }}>
+            <button
+              onClick={() => setWorkflowType("1")}
+              style={{
+                padding: "8px 12px",
+                borderRadius: "4px",
+                border: "1px solid #ddd",
+                background: workflowType === "1" ? "#5932EA" : "white",
+                color: workflowType === "1" ? "white" : "#333",
+                cursor: "pointer",
+                fontSize: "13px"
+              }}
+            >
+              Repair
+            </button>
+            <button
+              onClick={() => setWorkflowType("2")}
+              style={{
+                padding: "8px 12px",
+                borderRadius: "4px",
+                border: "1px solid #ddd",
+                background: workflowType === "2" ? "#5932EA" : "white",
+                color: workflowType === "2" ? "white" : "#333",
+                cursor: "pointer",
+                fontSize: "13px"
+              }}
+            >
+              Deposit for Bike Sale
+            </button>
+            <button
+              onClick={() => setWorkflowType("3")}
+              style={{
+                padding: "8px 12px",
+                borderRadius: "4px",
+                border: "1px solid #ddd",
+                background: workflowType === "3" ? "#5932EA" : "white",
+                color: workflowType === "3" ? "white" : "#333",
+                cursor: "pointer",
+                fontSize: "13px"
+              }}
+            >
+              Insurance
+            </button>
+            <button
+              onClick={() => setWorkflowType("4")}
+              style={{
+                padding: "8px 12px",
+                borderRadius: "4px",
+                border: "1px solid #ddd",
+                background: workflowType === "4" ? "#5932EA" : "white",
+                color: workflowType === "4" ? "white" : "#333",
+                cursor: "pointer",
+                fontSize: "13px"
+              }}
+            >
+              HP Payment
+            </button>
+            <button
+              onClick={() => setWorkflowType("5")}
+              style={{
+                padding: "8px 12px",
+                borderRadius: "4px",
+                border: "1px solid #ddd",
+                background: workflowType === "5" ? "#5932EA" : "white",
+                color: workflowType === "5" ? "white" : "#333",
+                cursor: "pointer",
+                fontSize: "13px"
+              }}
+            >
+              Road Tax
+            </button>
+            <button
+              onClick={() => setWorkflowType("6")}
+              style={{
+                padding: "8px 12px",
+                borderRadius: "4px",
+                border: "1px solid #ddd",
+                background: workflowType === "6" ? "#5932EA" : "white",
+                color: workflowType === "6" ? "white" : "#333",
+                cursor: "pointer",
+                fontSize: "13px"
+              }}
+            >
+              HP Payment 2
+            </button>
+          </div>
+          
+          {isCompleted && (
+            <div style={{
+              marginTop: "10px",
+              padding: "10px",
+              backgroundColor: "#e8f5e9",
+              borderRadius: "4px",
+              fontSize: "13px",
+              color: "#2e7d32",
+              textAlign: "center"
+            }}>
+              This order is completed and its workflow type cannot be changed.
+            </div>
+          )}
+        </div>
+      </div>
+     
+      {notification.show && (
+        <div style={{
+          position: "fixed",
+          bottom: "20px",
+          right: "20px",
+          padding: "10px 16px",
+          borderRadius: "4px",
+          backgroundColor: notification.type === "success" ? "#E8F5E9" : "#FFEBEE",
+          border: `1px solid ${notification.type === "success" ? "#C8E6C9" : "#FFCDD2"}`,
+          color: notification.type === "success" ? "#2E7D32" : "#C62828",
+          boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+          zIndex: 1000,
+          fontSize: "13px"
+        }}>
+          {notification.message}
+        </div>
+      )}
+
+      {showCustomerModal && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: "rgba(0,0,0,0.5)",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          zIndex: 1100
+        }}>
+          <div style={{
+            backgroundColor: "white",
+            borderRadius: "8px",
+            width: "90%",
+            maxWidth: "500px",
+            padding: "20px",
+            maxHeight: "80vh",
+            overflowY: "auto",
+            boxShadow: "0 4px 8px rgba(0,0,0,0.1)"
+          }}>
+            <div style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "15px",
+              borderBottom: "1px solid #eee",
+              paddingBottom: "10px"
+            }}>
+              <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 600 }}>
+                {jobsheet?.customer_id ? "Change Customer" : "Assign Customer"}
+              </h3>
+              <button
+                onClick={() => setShowCustomerModal(false)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  fontSize: "20px",
+                  cursor: "pointer",
+                  color: "#666"
+                }}
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Buscador de clientes */}
+            <div style={{ marginBottom: "15px" }}>
+              <label style={{ display: "block", marginBottom: "5px", fontSize: "14px" }}>
+                Search Customers
+              </label>
+              <div style={{ position: "relative" }}>
+                <input
+                  type="text"
+                  value={customerSearchTerm || ''}
+                  onChange={handleCustomerSearch}
+                  placeholder="Search by name, contact or email"
+                  style={{ 
+                    width: "100%",
+                    padding: "10px 10px 10px 35px",
+                    borderRadius: "4px",
+                    border: "1px solid #ddd",
+                    fontSize: "14px"
+                  }}
+                />
+                <FontAwesomeIcon 
+                  icon={faSearch} 
+                  style={{ 
+                    position: "absolute",
+                    left: "12px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    color: "#666"
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Resultados de búsqueda */}
+            {customerSearchResults.length > 0 && (
+              <div style={{
+                border: "1px solid #eee",
+                borderRadius: "4px",
+                marginBottom: "15px",
+                maxHeight: "200px",
+                overflowY: "auto"
+              }}>
+                {customerSearchResults.map(customer => (
+                  <div 
+                    key={customer.id}
+                    onClick={() => handleSelectCustomer(customer)}
+                    style={{
+                      padding: "10px 15px",
+                      borderBottom: "1px solid #f0f0f0",
+                      cursor: "pointer",
+                      backgroundColor: selectedCustomerId === customer.id ? "#f0f7ff" : "white",
+                      transition: "background-color 0.2s"
+                    }}
+                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = selectedCustomerId === customer.id ? "#f0f7ff" : "#f9f9f9"}
+                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = selectedCustomerId === customer.id ? "#f0f7ff" : "white"}
+                  >
+                    <div style={{ fontWeight: "500" }}>{customer.name}</div>
+                    <div style={{ fontSize: "13px", color: "#666", marginTop: "3px" }}>
+                      {customer.contact || "No contact"} | {customer.email || "No email"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Cliente seleccionado o actual */}
+            {(selectedCustomer || jobsheet?.customer_id) && (
+              <div style={{
+                padding: "15px",
+                backgroundColor: "#f0f7ff",
+                borderRadius: "4px",
+                marginBottom: "15px",
+                border: "1px solid #d0e0ff"
+              }}>
+                <h4 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 500 }}>
+                  {selectedCustomer ? "Selected Customer:" : "Current Customer:"}
+                </h4>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <div style={{ fontWeight: "500" }}>
+                      {selectedCustomer?.name || jobsheet?.customer_name || "Unknown"}
+                    </div>
+                    <div style={{ fontSize: "13px", color: "#666", marginTop: "3px" }}>
+                      {selectedCustomer?.contact || jobsheet?.customer_contact || "No contact"}
+                      {" | "}
+                      {selectedCustomer?.email || jobsheet?.customer_email || "No email"}
+                    </div>
+                  </div>
+                  {selectedCustomer && (
+                    <button 
+                      onClick={() => {
+                        setSelectedCustomer(null);
+                        setSelectedCustomerId(null);
+                      }}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: "#5932EA",
+                        cursor: "pointer"
+                      }}
+                    >
+                      <FontAwesomeIcon icon={faTimes} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Opción para crear nuevo cliente */}
+            <div style={{ 
+              padding: "10px",
+              backgroundColor: "#f9f9f9",
+              borderRadius: "4px",
+              marginBottom: "15px",
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center"
+            }}>
+              <button
+                onClick={() => setShowNewCustomerForm(!showNewCustomerForm)}
+                style={{
+                  padding: "6px 12px",
+                  backgroundColor: "#5932EA",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  fontSize: "13px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "5px"
+                }}
+              >
+                <FontAwesomeIcon icon={faPlus} size="xs" />
+                Create New Customer
+              </button>
+            </div>
+
+            {/* Formulario para nuevo cliente */}
+            {showNewCustomerForm && (
+              <div style={{
+                padding: "15px",
+                backgroundColor: "#f9f9f9",
+                borderRadius: "4px",
+                marginBottom: "15px",
+                border: "1px solid #eee"
+              }}>
+                <h4 style={{ margin: "0 0 15px 0", fontSize: "14px", fontWeight: 500 }}>New Customer Details</h4>
+                
+                <div style={{ marginBottom: "12px" }}>
+                  <label style={{ display: "block", marginBottom: "5px", fontSize: "13px" }}>
+                    Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={newCustomerDetails.name}
+                    onChange={(e) => setNewCustomerDetails({...newCustomerDetails, name: e.target.value})}
+                    placeholder="Customer name"
+                    style={{ 
+                      width: "100%",
+                      padding: "8px",
+                      borderRadius: "4px",
+                      border: "1px solid #ddd",
+                      fontSize: "13px",
+                      boxSizing: "border-box" // Added
+                    }}
+                  />
+                </div>
+                
+                <div style={{ marginBottom: "12px" }}>
+                  <label style={{ display: "block", marginBottom: "5px", fontSize: "13px" }}>
+                    Contact
+                  </label>
+                  <input
+                    type="text"
+                    value={newCustomerDetails.contact}
+                    onChange={(e) => setNewCustomerDetails({...newCustomerDetails, contact: e.target.value})}
+                    placeholder="Phone number"
+                    style={{ 
+                      width: "100%",
+                      padding: "8px",
+                      borderRadius: "4px",
+                      border: "1px solid #ddd",
+                      fontSize: "13px",
+                      boxSizing: "border-box" // Added
+                    }}
+                  />
+                </div>
+                
+                <div style={{ marginBottom: "15px" }}>
+                  <label style={{ display: "block", marginBottom: "5px", fontSize: "13px" }}>
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={newCustomerDetails.email}
+                    onChange={(e) => setNewCustomerDetails({...newCustomerDetails, email: e.target.value})}
+                    placeholder="Email address"
+                    style={{ 
+                      width: "100%",
+                      padding: "8px",
+                      borderRadius: "4px",
+                      border: "1px solid #ddd",
+                      fontSize: "13px",
+                      boxSizing: "border-box" // Added
+                    }}
+                  />
+                </div>
+                
+                <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+                  <button
+                    onClick={() => setShowNewCustomerForm(false)}
+                    style={{
+                      padding: "6px 12px",
+                      backgroundColor: "#f1f1f1",
+                      color: "#333",
+                      border: "1px solid #ddd",
+                      borderRadius: "4px",
+                      cursor: "pointer",
+                      fontSize: "13px"
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleCreateCustomer}
+                    style={{
+                      padding: "6px 12px",
+                      backgroundColor: "#00C853",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "4px",
+                      cursor: "pointer",
+                      fontSize: "13px"
+                    }}
+                  >
+                    Create Customer
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Botones de acción */}
+            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "15px" }}>
+              <button
+                onClick={() => setShowCustomerModal(false)}
+                style={{
+                  padding: "8px 16px",
+                  backgroundColor: "#f1f1f1",
+                  color: "#333",
+                  border: "1px solid #ddd",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  fontSize: "14px"
+                }}
+              >
+                Close
+              </button>
+              <button
+                onClick={handleUpdateJobsheetCustomer}
+                disabled={!selectedCustomerId}
+                style={{
+                  padding: "8px 16px",
+                  backgroundColor: selectedCustomerId ? "#00C853" : "#e0e0e0",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "4px",
+                  cursor: selectedCustomerId ? "pointer" : "not-allowed",
+                  fontSize: "14px"
+                }}
+              >
+                {jobsheet?.customer_id ? "Update Customer" : "Assign Customer"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style jsx="true">{`
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        @keyframes slideIn {
+          from { transform: translateX(20px); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          #printSection, #printSection * {
+            visibility: visible;
+          }
+          #printSection {
+            position: absolute;
+            left: 0,
+            top: 0;
+          }
+        }
+      `}</style>
+      
+    </div>
+    
+  );
+};
+
+export default JobsheetDetailView;
