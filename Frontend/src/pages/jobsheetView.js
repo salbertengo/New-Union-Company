@@ -154,7 +154,8 @@ const JobsheetView = () => {
       cellRenderer: (params) => {
         if (!params.data) return '';
         
-        // Use total_amount if it exists and is not 0, otherwise show 0
+        // Since we're already showing a button that navigates to details,
+        // we can use the existing data without additional API calls
         const totalValue = parseFloat(params.data.total_amount || 0);
         
         return (
@@ -182,6 +183,7 @@ const JobsheetView = () => {
               e.currentTarget.style.transform = "translateY(0)";
               e.currentTarget.style.boxShadow = "none";
             }}
+            title="Click to see complete financial details"
           >
             <div style={{ fontWeight: "600", color: "#0277BD", fontSize: "14px" }}>
               ${totalValue.toFixed(2)}

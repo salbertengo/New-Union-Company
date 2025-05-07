@@ -674,8 +674,8 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
   };
 
   const handleSelectItem = async (selectedItem) => {
-    if (jobsheet?.state === "completed") {
-      showNotification("This order is completed and cannot be modified", "error");
+    if (isReadOnly) {
+      showNotification(`This order is ${jobsheet?.state} and cannot be modified`, "error");
       return;
     }
     try {
@@ -725,8 +725,8 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
   };
 
   const handleAddLabor = async (description, price, workflowTypeId = "1") => {
-    if (jobsheet?.state === "completed") {
-      showNotification("This order is completed and cannot be modified", "error");
+    if (isReadOnly) {
+      showNotification(`This order is ${jobsheet?.state} and cannot be modified`, "error");
       return;
     }
     if (!description || !price) {
@@ -775,8 +775,8 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
   };
 
   const handleDeleteItem = async (itemId) => {
-    if (jobsheet?.state === "completed") {
-      showNotification("This order is completed and cannot be modified", "error");
+    if (isReadOnly) {
+      showNotification(`This order is ${jobsheet?.state} and cannot be modified`, "error");
       return;
     }
     try {
@@ -809,8 +809,8 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
   };
 
   const handleDeleteLabor = async (laborId) => {
-    if (jobsheet?.state === "completed") {
-      showNotification("This order is completed and cannot be modified", "error");
+    if (isReadOnly) {
+      showNotification(`This order is ${jobsheet?.state} and cannot be modified`, "error");
       return;
     }
     try {
@@ -1076,8 +1076,8 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
   };
 
   const handleAddPayment = async () => {
-    if (jobsheet?.state === "completed") {
-      showNotification("This order is completed and no additional payments can be added", "error");
+    if (isReadOnly) {
+      showNotification(`This order is ${jobsheet?.state} and no additional payments can be added`, "error");
       return;
     }
     if (!paymentAmount || parseFloat(paymentAmount) <= 0) {
@@ -1266,7 +1266,7 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
     }
   };
 
-  const isCompleted = effectiveJobsheetId && jobsheet?.state === "completed";
+  const isReadOnly = effectiveJobsheetId && (jobsheet?.state === "completed" || jobsheet?.state === "cancelled");
 
   if (isLoading) {
     return <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh" }}>
@@ -1629,7 +1629,7 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
             </div>
           </div>
 
-          {!isCompleted && (
+          {!isReadOnly && (
             <button
               onClick={() => setShowCustomerModal(true)}
               style={{
@@ -1668,16 +1668,18 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
             padding: "15px",
             borderRadius: "8px",
             boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-            opacity: isCompleted ? 0.6 : 1,
-            pointerEvents: isCompleted ? "none" : "auto"
+            opacity: isReadOnly ? 0.6 : 1,
+            pointerEvents: isReadOnly ? "none" : "auto"
           }}>
             <h3 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 600 }}>
-              {isCompleted && <span style={{color: "#2e7d32", marginRight: "8px"}}>✓</span>}
+              {isReadOnly && <span style={{color: "#2e7d32", marginRight: "8px"}}>✓</span>}
               Add Products/Services/Charges
-              {isCompleted && <span style={{fontSize: "12px", color: "#666", marginLeft: "10px"}}>(Completed - No Changes Allowed)</span>}
+              {isReadOnly && <span style={{fontSize: "12px", color: "#666", marginLeft: "10px"}}>
+                ({jobsheet?.state === "cancelled" ? "Cancelled" : "Completed"} - No Changes Allowed)
+              </span>}
             </h3>
             
-            {isCompleted ? (
+            {isReadOnly ? (
               <div style={{
                 padding: "15px",
                 backgroundColor: "#f9f9f9",
@@ -1685,7 +1687,7 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
                 textAlign: "center",
                 color: "#666"
               }}>
-                This order has been completed and cannot be modified.
+                This order has been {jobsheet?.state === "cancelled" ? "cancelled" : "completed"} and cannot be modified.
               </div>
             ) : (
               <>
@@ -1885,12 +1887,12 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
                             style={{
                               background: "none",
                               border: "none",
-                              color: isCompleted ? "#ccc" : "#F44336",
-                              cursor: isCompleted ? "not-allowed" : "pointer",
+                              color: isReadOnly ? "#ccc" : "#F44336",
+                              cursor: isReadOnly ? "not-allowed" : "pointer",
                               padding: "2px",
                               borderRadius: "3px"
                             }}
-                            disabled={isCompleted}
+                            disabled={isReadOnly}
                           >
                             <FontAwesomeIcon icon={faTrash} size="xs" />
                           </button>
@@ -1986,19 +1988,37 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
             </div>
             
             <div style={{ 
-              backgroundColor: isCompleted ? "#e8f5e9" : totals.balance <= 0 ? "#e8f5e9" : totals.paid > 0 ? "#fff8e1" : "#ffebee",
+              backgroundColor: 
+                isReadOnly && jobsheet?.state === "cancelled" ? "#ffebee" :
+                isReadOnly ? "#e8f5e9" : 
+                totals.balance <= 0 ? "#e8f5e9" : 
+                totals.paid > 0 ? "#fff8e1" : "#ffebee",
               borderRadius: "5px",
               padding: "10px",
               marginBottom: "10px",
-              border: `1px solid ${isCompleted ? "#c8e6c9" : totals.balance <= 0 ? "#c8e6c9" : totals.paid > 0 ? "#ffe0b2" : "#ffcdd2"}`
+              border: `1px solid ${
+                isReadOnly && jobsheet?.state === "cancelled" ? "#ffcdd2" :
+                isReadOnly ? "#c8e6c9" : 
+                totals.balance <= 0 ? "#c8e6c9" : 
+                totals.paid > 0 ? "#ffe0b2" : "#ffcdd2"
+              }`
             }}>
-               <div style={{ 
+              <div style={{ 
                 fontWeight: "600", 
                 marginBottom: "5px",
                 fontSize: "13px",
-                color: isCompleted ? "#2e7d32" : totals.balance <= 0 && totals.total > 0 ? "#2e7d32" : totals.paid > 0 ? "#ef6c00" : "#c62828"
+                color: 
+                  isReadOnly && jobsheet?.state === "cancelled" ? "#c62828" :
+                  isReadOnly ? "#2e7d32" : 
+                  totals.balance <= 0 && totals.total > 0 ? "#2e7d32" : 
+                  totals.paid > 0 ? "#ef6c00" : "#c62828"
               }}>
-                {isCompleted ? (
+                {isReadOnly && jobsheet?.state === "cancelled" ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                    <FontAwesomeIcon icon={faExclamationCircle} />
+                    Order Cancelled - No Changes Allowed
+                  </div>
+                ) : isReadOnly ? (
                   <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
                     <FontAwesomeIcon icon={faCheckCircle} />
                     Order Completed - No Changes Allowed
@@ -2062,28 +2082,30 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
             padding: "15px",
             borderRadius: "8px",
             boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-            opacity: isCompleted ? 0.6 : 1,
-            pointerEvents: isCompleted ? "none" : "auto"
+            opacity: isReadOnly ? 0.6 : 1,
+            pointerEvents: isReadOnly ? "none" : "auto"
           }}>
            <h3 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 600 }}>
               Add Payment
-              {isCompleted && <span style={{fontSize: "12px", color: "#666", marginLeft: "10px"}}>(Completed - No Changes Allowed)</span>}
+              {isReadOnly && <span style={{fontSize: "12px", color: "#666", marginLeft: "10px"}}>
+                ({jobsheet?.state === "cancelled" ? "Cancelled" : "Completed"} - No Changes Allowed)
+              </span>}
             </h3>
             
-            {isCompleted ? (
+            {isReadOnly ? (
               <div style={{ 
-                backgroundColor: "#e8f5e9",
+                backgroundColor: jobsheet?.state === "cancelled" ? "#ffebee" : "#e8f5e9",
                 padding: "10px",
                 borderRadius: "4px",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                color: "#2e7d32",
+                color: jobsheet?.state === "cancelled" ? "#c62828" : "#2e7d32",
                 gap: "8px",
                 fontSize: "14px"
               }}>
-                <FontAwesomeIcon icon={faCheckCircle} />
-                Order completed - No more payments needed
+                <FontAwesomeIcon icon={jobsheet?.state === "cancelled" ? faExclamationCircle : faCheckCircle} />
+                Order {jobsheet?.state === "cancelled" ? "cancelled" : "completed"} - No more payments needed
               </div>
             ) : totals.balance > 0 ? (
               <>

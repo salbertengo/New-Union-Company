@@ -103,7 +103,30 @@ class JobsheetModel {
       
       // Verificar si estamos cambiando a estado "cancelled"
       if (jobsheetData.state === 'cancelled') {
-        // ... código existente para cancelación ...
+        // Obtener el estado actual del jobsheet para verificar si realmente está cambiando a cancelado
+        const [currentState] = await connection.query(
+          'SELECT state FROM jobsheets WHERE id = ?',
+          [id]
+        );
+        
+        // Solo restaurar el stock si el jobsheet no estaba ya cancelado
+        if (currentState[0] && currentState[0].state !== 'cancelled') {
+          // Obtener todos los items del jobsheet
+          const [items] = await connection.query(
+            'SELECT id, product_id, quantity FROM jobsheet_items WHERE jobsheet_id = ?',
+            [id]
+          );
+          
+          // Restaurar el stock en el inventario para cada item
+          for (const item of items) {
+            await connection.query(
+              'UPDATE inventory SET stock = stock + ? WHERE id = ?',
+              [item.quantity, item.product_id]
+            );
+            
+            console.log(`Stock restored for product ${item.product_id}: ${item.quantity} units`);
+          }
+        }
       }
   
       // Actualizar el jobsheet
@@ -126,6 +149,7 @@ class JobsheetModel {
       return result.affectedRows > 0;
     } catch (error) {
       await connection.rollback();
+      console.error('Error updating jobsheet:', error);
       throw error;
     } finally {
       connection.release();
