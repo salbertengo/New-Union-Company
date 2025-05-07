@@ -546,23 +546,54 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
     }
   };
 
+  const getLaborCategoryName = (workflowType) => {
+    // Añadir log para ver qué tipo de workflow está procesando
+    
+    if (workflowType === "1" || workflowType === 1 || !workflowType) {
+      return "General Labor";
+    }
+    
+    // Mejorar esta búsqueda para considerar valores numéricos o strings
+    const keywordEntry = Object.values(WORKFLOW_KEYWORDS).find(entry => 
+      entry.id === workflowType || entry.id === String(workflowType)
+    );
+    
+    if (keywordEntry) {
+      return keywordEntry.defaultDescription;
+    }
+    return "Other Services/Charges";
+  };
+
   const calculateTotals = () => {
     const itemsTotal = items.reduce((sum, item) => 
       sum + (parseFloat(item.price || 0) * parseInt(item.quantity || 1)), 0);
     
-    const laborTotal = labors
+    const laborBreakdown = {};
+    let taxableAmount = itemsTotal;
+
+    labors
       .filter(l => l.is_completed === 1 && l.is_billed === 1)
-      .reduce((sum, l) => sum + parseFloat(l.price || 0), 0);
+      .forEach(labor => {
+        const price = parseFloat(labor.price || 0);
+        const categoryName = getLaborCategoryName(labor.workflow_type);
+        laborBreakdown[categoryName] = (laborBreakdown[categoryName] || 0) + price;
+        
+        if (labor.workflow_type === "1") {
+          taxableAmount += price;
+        }
+      });
     
-    const subtotal = itemsTotal + laborTotal;
-    const tax = subtotal * (taxRate / 100);
+    const totalLaborAndWorkflowCosts = Object.values(laborBreakdown).reduce((sum, val) => sum + val, 0);
+    const subtotal = itemsTotal + totalLaborAndWorkflowCosts;
+    const tax = taxableAmount * (taxRate / 100);
     const total = subtotal + tax;
     const paid = payments.reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
     
     return {
       items: itemsTotal,
-      labor: laborTotal,
+      laborBreakdown,
       subtotal,
+      taxableAmount,
       tax,
       total,
       paid,
@@ -572,14 +603,16 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
 
   const getWorkflowTypeName = (type) => {
     const types = {
-      "1": "Repair Service",
+      "1": "", 
       "2": "Deposit for Bike Sale",
       "3": "Insurance Payment",
       "4": "HP Payment",
       "5": "Road Tax",
       "6": "HP Payment 2"
     };
-    return types[type] || "Service/Charge";
+    const name = types[type];
+    if (name === "") return ""; 
+    return name || "Service/Charge";
   };
 
   const handleSearch = (e) => {
@@ -811,6 +844,35 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
     }
     
     const totals = calculateTotals();
+
+    const groupedLaborsForInvoice = labors
+      .filter(l => l.is_completed === 1 && l.is_billed === 1)
+      .reduce((acc, labor) => {
+        const categoryName = getLaborCategoryName(labor.workflow_type);
+        if (!acc[categoryName]) {
+          acc[categoryName] = [];
+        }
+        acc[categoryName].push(labor);
+        return acc;
+      }, {});
+
+    let laborInvoiceRows = "";
+    const categoryOrderForInvoice = ["General Labor", ...Object.values(WORKFLOW_KEYWORDS).map(kw => kw.defaultDescription), "Other Services/Charges"];
+
+    categoryOrderForInvoice.forEach(categoryName => {
+      if (groupedLaborsForInvoice[categoryName] && groupedLaborsForInvoice[categoryName].length > 0) {
+        groupedLaborsForInvoice[categoryName].forEach(labor => {
+          laborInvoiceRows += `
+            <tr>
+              <td>${labor.description || categoryName}</td>
+              <td class="text-right">1</td>
+              <td class="text-right">$${parseFloat(labor.price).toFixed(2)}</td>
+              <td class="text-right">$${(parseFloat(labor.price) * 1).toFixed(2)}</td>
+            </tr>
+          `;
+        });
+      }
+    });
     
     const htmlContent = `
       <html>
@@ -886,7 +948,7 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
             }
             .balance {
               font-weight: bold;
-              color: ${totals.balance <= 0 ? 'green' : 'red'};
+              color: ${totals.balance <= 0 && totals.total > 0 ? 'green' : (totals.total > 0 ? 'red' : '#333')};
             }
             .footer {
               margin-top: 30px;
@@ -914,6 +976,13 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
                 ${jobsheet?.model || ""}
               </p>
             </div>
+             <div>
+              <h3>CUSTOMER</h3>
+              <p>
+                ${jobsheet?.customer_name || "N/A"}<br>
+                ${jobsheet?.customer_contact || ""}
+              </p>
+            </div>
           </div>
           
           <table>
@@ -935,14 +1004,7 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
                 </tr>
               `).join('')}
               
-              ${labors.map(labor => `
-                <tr>
-                  <td>${labor.description || "Labor"}</td>
-                  <td class="text-right">1</td>
-                  <td class="text-right">$${parseFloat(labor.price).toFixed(2)}</td>
-                  <td class="text-right">$${parseFloat(labor.price).toFixed(2)}</td>
-                </tr>
-              `).join('')}
+              ${laborInvoiceRows}
             </tbody>
           </table>
           
@@ -953,7 +1015,7 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
                 <td class="text-right">$${totals.subtotal.toFixed(2)}</td>
               </tr>
               <tr>
-                <td>GST (${taxRate}%):</td>
+                <td>GST (${taxRate}% on $${totals.taxableAmount.toFixed(2)}):</td>
                 <td class="text-right">$${totals.tax.toFixed(2)}</td>
               </tr>
               <tr class="total-row">
@@ -963,6 +1025,7 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
             </table>
           </div>
           
+          ${payments.length > 0 ? `
           <div class="payments">
             <h3>Payment Information</h3>
             <table>
@@ -991,7 +1054,7 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
                 </tr>
               </tbody>
             </table>
-          </div>
+          </div>` : ''}
           
           <div class="footer">
             <p>Thank you for your business!</p>
@@ -1654,7 +1717,7 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
                       borderRadius: "4px",
                       border: "1px solid #ddd",
                       backgroundColor: activeInputMode === 'search' ? 'white' : '#f0f0f0',
-                      pointerEvents: activeInputMode === 'search' ? 'auto' : 'none'
+                      pointerEvents: activeInputMode === 'search' ? "auto" : "none"
                     }}
                     disabled={activeInputMode !== 'search'}
                   />
@@ -1799,21 +1862,12 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
                     </tr>
                   </thead>
                   <tbody>
-                  {allItems.map(item => (
+                    {allItems.map(item => (
                       <tr key={item.id} style={{ borderBottom: "1px solid #f8f8f8" }}>
                         <td style={{ padding: "8px 6px" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                            {item.isLabor && (
-                              <span style={{ 
-                                fontSize: "10px", 
-                                backgroundColor: getWorkflowButtonColor(item.workflow_type), // MODIFICADO
-                                color: "white",
-                                padding: "2px 4px",
-                                borderRadius: "3px"
-                              }}>
-                                {getWorkflowTypeName(item.workflow_type).toUpperCase()} {/* MODIFICADO */}
-                              </span>
-                            )}
+                            {/* La lógica para mostrar el tag de workflowName ha sido eliminada.
+                                Solo se mostrará item.name (que es labor.description) */}
                             {item.name}
                           </div>
                         </td>
@@ -1882,10 +1936,27 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
                 <span>Items:</span>
                 <span>${totals.items.toFixed(2)}</span>
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px", fontSize: "13px" }}>
-                <span>Labor:</span>
-                <span>${totals.labor.toFixed(2)}</span>
-              </div>
+              {Object.entries(totals.laborBreakdown)
+                .sort(([catA], [catB]) => {
+                  const order = ["General Labor", ...Object.values(WORKFLOW_KEYWORDS).map(kw => kw.defaultDescription), "Other Services/Charges"];
+                  const indexA = order.indexOf(catA);
+                  const indexB = order.indexOf(catB);
+                  if (indexA === -1 && indexB === -1) return catA.localeCompare(catB);
+                  if (indexA === -1) return 1;
+                  if (indexB === -1) return -1;
+                  return indexA - indexB;
+                })
+                .map(([category, amount]) => {
+                if (amount > 0 || (Object.keys(totals.laborBreakdown).length === 1 && category === "General Labor" && amount === 0 && items.length === 0)) {
+                  return (
+                    <div key={category} style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px", fontSize: "13px" }}>
+                      <span>{category}:</span>
+                      <span>${amount.toFixed(2)}</span>
+                    </div>
+                  );
+                }
+                return null;
+              })}
               <div style={{ 
                 display: "flex", 
                 justifyContent: "space-between", 
@@ -1898,7 +1969,7 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
                 <span>${totals.subtotal.toFixed(2)}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px", fontSize: "13px" }}>
-                <span>GST (${taxRate}%):</span>
+                <span>GST ({taxRate}% on ${totals.taxableAmount.toFixed(2)}):</span>
                 <span>${totals.tax.toFixed(2)}</span>
               </div>
               <div style={{ 
@@ -1934,7 +2005,6 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
                   </div>
                 ) : totals.total === 0 ? (
                   <div style={{ display: "flex", alignItems: "center", gap: "5px", color: "#666" }}>
-                    {/* No icon needed here or a neutral one if preferred */}
                     No items or services.
                   </div>
                 ) : totals.balance <= 0 ? (
@@ -2081,7 +2151,7 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
                 borderRadius: "4px",
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "center",
+                justifyContent: "centercenter",
                 color: "#2e7d32",
                 gap: "8px",
                 fontSize: "14px"

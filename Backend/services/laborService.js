@@ -17,13 +17,22 @@ class LaborService {
         throw new Error('Jobsheet ID es requerido');
       }
       
+      // Log para depuración
+      console.log("=== LABOR SERVICE ===");
+      console.log("Recibido workflow_type:", laborData.workflow_type);
+      
       // Normalizar datos
       const data = {
         jobsheet_id: laborData.jobsheet_id,
         description: laborData.description || 'Servicio técnico',
         price: laborData.price ? parseFloat(laborData.price) : 0,
-        is_completed: laborData.is_completed ? 1 : 0
+        is_completed: laborData.is_completed ? 1 : 0,
+        tracking_notes: laborData.tracking_notes || null,
+        workflow_type: laborData.workflow_type // Añadir el workflow_type
       };
+      
+      console.log("Objeto data normalizado:", data);
+      console.log("==================");
       
       // Si está marcado como completado, asegurarse de que tenga precio
       if (data.is_completed && (!data.price || data.price <= 0)) {

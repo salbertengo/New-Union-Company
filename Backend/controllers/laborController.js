@@ -19,19 +19,31 @@ class LaborController {
   
   static async addLabor(req, res) {
     try {
-      const { jobsheet_id, description, price, is_completed, tracking_notes } = req.body;
+      const { jobsheet_id, description, price, is_completed, tracking_notes, workflow_type } = req.body;
+      
+      // Log detallado para ver exactamente qué recibimos
+      console.log("=== LABOR CONTROLLER ===");
+      console.log("Payload completo:", req.body);
+      console.log("workflow_type recibido:", workflow_type);
+      console.log("Tipo de workflow_type:", typeof workflow_type);
+      console.log("========================");
       
       if (!jobsheet_id) {
         return res.status(400).json({ error: 'Jobsheet ID es requerido' });
       }
       
+      // Asegúrate de que workflow_type se pasa correctamente
       const labor = await LaborService.addLabor({
         jobsheet_id,
         description,
         price,
         is_completed,
-        tracking_notes
+        tracking_notes,
+        workflow_type: workflow_type // Aseguramos que se pase tal cual
       });
+      
+      // Log del resultado final
+      console.log("Labor creado:", labor);
       
       res.status(201).json(labor);
     } catch (err) {
@@ -44,7 +56,6 @@ class LaborController {
       res.status(500).json({ error: 'Error interno del servidor' });
     }
   }
-  
   static async updateLabor(req, res) {
     try {
       const { id } = req.params;

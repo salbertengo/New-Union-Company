@@ -23,17 +23,41 @@ class LaborModel {
         is_completed = 1, 
         is_billed = 1, 
         tracking_notes = null,
-        workflow_type = "1" // Default to "1" (Repair/General Labor) if not provided
       } = data;
       
+
+      
+      // Forzar conversión a string y validar
+      let workflow_type_to_insert;
+      
+      if (data.workflow_type === undefined || data.workflow_type === null) {
+        workflow_type_to_insert = "1";
+      } else if (data.workflow_type === "") {
+        workflow_type_to_insert = "1";
+      } else {
+        // Convertir explícitamente a String para asegurar consistencia
+        workflow_type_to_insert = String(data.workflow_type).trim();
+      }
+      
+ 
+  
+      // Insertar en BD con el valor procesado
       const [result] = await pool.execute(
         'INSERT INTO labor (jobsheet_id, description, price, is_completed, is_billed, tracking_notes, workflow_type) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [jobsheet_id, description, price, is_completed, is_billed, tracking_notes, workflow_type]
+        [jobsheet_id, description, price, is_completed, is_billed, tracking_notes, workflow_type_to_insert]
       );
       
       if (is_completed) {
         await this.updateJobsheetTotal(jobsheet_id);
       }
+      
+      // Verificar que se insertó correctamente
+      const [insertedRow] = await pool.execute(
+        'SELECT * FROM labor WHERE id = ?',
+        [result.insertId]
+      );
+      
+      console.log("Labor insertado en BD:", insertedRow[0]);
       
       return {
         id: result.insertId,
@@ -43,15 +67,14 @@ class LaborModel {
         is_completed,
         is_billed,
         tracking_notes,
-        workflow_type, // Add to return object
+        workflow_type: workflow_type_to_insert,
         created_at: new Date()
       };
     } catch (error) {
-      console.error('Error in add labor:', error);
+      console.error('Error en add labor:', error);
       throw error;
     }
   }
-
   async update(id, data) {
     try {
       const { description, price, is_completed, tracking_notes, is_billed, workflow_type } = data;
