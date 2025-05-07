@@ -94,11 +94,6 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
     };
   }, []);
 
-  useEffect(() => {
-    // Forzar el workflowType a "1" al cargar el componente
-    setWorkflowType("1");
-  }, []);
-
   const handleApiError = (error, defaultMessage) => {
     console.error(`${defaultMessage}:`, error);
     
@@ -470,11 +465,11 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
   
       const jobsheetData = {
         vehicle_id: vehicleId,
-        customer_id: null,
+        customer_id: null, // Considerar si el customer_id debería venir de la creación del vehículo
         state: "pending",
         description: "",
         service_notes: "",
-        workflow_type: "1" // Forzar a "1" sin depender de otra variable
+        workflow_type: workflowType // USAR EL VALOR DEL ESTADO ACTUAL
       };
   
       const response = await fetch(`${API_URL}/jobsheets`, {
@@ -494,7 +489,6 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
           if (refreshJobsheets) refreshJobsheets();
           setInternalIsNew(false);
           setInternalJobsheetId(newJobsheet.id);
-          setWorkflowType("1"); // Asegurar que el estado local está actualizado
           loadJobsheetData(newJobsheet.id);
         }, 500);
       } else {
@@ -1815,7 +1809,12 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
                             }}>
                               Stock: {item.stock ? Number(item.stock).toFixed(0) : '0'}
                             </span>
-                            {!item.isLabourItem && <span>${parseFloat(item.sale || 0).toFixed(2)}</span>}
+                            {!item.isLabourItem && (
+                              <span style={{ display: 'flex', gap: '10px' }}>
+                                <span>Cost: ${parseFloat(item.cost || 0).toFixed(2)}</span>
+                                <span>Sale: ${parseFloat(item.sale || 0).toFixed(2)}</span>
+                              </span>
+                            )}
                           </div>
                         </div>
                       ))}
