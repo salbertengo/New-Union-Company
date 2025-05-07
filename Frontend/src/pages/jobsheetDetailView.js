@@ -1081,19 +1081,24 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
 
   useEffect(() => {
     const updateJobsheetStatusIfPaid = async () => {
-      if (jobsheet && !isLoading) {
+      // Ensure jobsheet data is loaded and we are not in a loading state
+      if (jobsheet && !isLoading) { 
         const totals = calculateTotals();
         
+        // Condition to mark as completed:
+        // 1. Balance is zero or less (fully paid).
+        // 2. Subtotal was greater than zero (meaning there was something to pay off).
+        // 3. Current state is not already "completed".
         if (totals.balance <= 0 && 
-          totals.subtotal > 0 && // Asegura que hay algún producto o servicio
-          jobsheet.state !== "completed") {
+            totals.subtotal > 0 && 
+            jobsheet.state !== "completed") {
           try {
             const token = localStorage.getItem("token");
             if (!token) return;
             
             const updateData = {
-              ...jobsheet,
-              state: "completed"
+              ...jobsheet, // Spread existing jobsheet data
+              state: "completed" // Update the state
             };
             
             const response = await fetch(`${API_URL}/jobsheets/${effectiveJobsheetId}`, {
@@ -1106,18 +1111,24 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
             });
             
             if (response.ok) {
-              setJobsheet({...jobsheet, state: "completed"});
-              showNotification("Order marked as completed", "success");
+              setJobsheet(prevJobsheet => ({...prevJobsheet, state: "completed"})); // Update local state
+              showNotification("Order marked as completed as it is fully paid", "success");
+            } else {
+              // Handle error if backend update fails
+              const errorText = await response.text();
+              console.error("Failed to update jobsheet state to completed:", errorText);
+              showNotification("Could not automatically update order status.", "error");
             }
           } catch (error) {
             console.error("Error updating jobsheet status:", error);
+            showNotification("Error automatically updating order status.", "error");
           }
         }
       }
     };
     
     updateJobsheetStatusIfPaid();
-  }, [jobsheet, payments]);
+  }, [jobsheet, items, labors, payments, isLoading]); // MODIFIED DEPENDENCIES
 
   const handleCustomerSearch = async (e) => {
     const term = e.target.value;
