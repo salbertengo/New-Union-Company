@@ -8,6 +8,14 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import Invoice from "../components/invoice";
 
+const WORKFLOW_KEYWORDS = {
+  "deposit": { id: "2", defaultDescription: "Deposit for Bike Sale" },
+  "insurance": { id: "3", defaultDescription: "Insurance Payment" },
+  "hp payment": { id: "4", defaultDescription: "HP Payment" },
+  "road tax": { id: "5", defaultDescription: "Road Tax" },
+  "hp payment 2": { id: "6", defaultDescription: "HP Payment 2" }
+};
+
 const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobsheets, isModal = false, isNew: propIsNew = false }) => {
   const [internalJobsheetId, setInternalJobsheetId] = useState(propJobsheetId);
   const [internalIsNew, setInternalIsNew] = useState(propIsNew);
@@ -24,7 +32,6 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
     plate: '',
     model: ''
   });
-  const [workflowType, setWorkflowType] = useState("1"); // Repair siempre por defecto
   const [inventorySearchTerm, setInventorySearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [newItemQuantity, setNewItemQuantity] = useState(1);
@@ -44,6 +51,9 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
     email: ""
   });
   const [showCustomerModal, setShowCustomerModal] = useState(false);
+
+  const [activeInputMode, setActiveInputMode] = useState("search"); // 'search', 'labor', 'workflowSpecific'
+  const [currentWorkflowKeywordInfo, setCurrentWorkflowKeywordInfo] = useState(null);
   
   const printableContentRef = useRef(null);
   const API_URL = process.env.REACT_APP_API_URL;
@@ -56,7 +66,8 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
     name: labor.description || "Labor",
     price: labor.price,
     quantity: 1,
-    isLabor: true
+    isLabor: true,
+    workflow_type: labor.workflow_type
   }))];
 
   const notificationTimerRef = useRef(null);
@@ -83,14 +94,16 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
   }, []);
 
   useEffect(() => {
-    // Limpiar el término de búsqueda cuando el componente se monta
     setInventorySearchTerm("");
     setSearchResults([]);
+    setActiveInputMode("search");
+    setCurrentWorkflowKeywordInfo(null);
     
     return () => {
-      // Limpiar al desmontar
       setInventorySearchTerm("");
       setSearchResults([]);
+      setActiveInputMode("search");
+      setCurrentWorkflowKeywordInfo(null);
     };
   }, []);
 
@@ -130,16 +143,10 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
   }, [effectiveJobsheetId, effectiveIsNew]);
 
   useEffect(() => {
-    // Forzar el valor inicial de workflowType a "1" cuando es un nuevo jobsheet
-    if (effectiveIsNew) {
-      setWorkflowType("1");
-    }
-  }, [effectiveIsNew]);
-
-  useEffect(() => {
     if (effectiveJobsheetId) {
       setInventorySearchTerm("");
-      // ... cargas (loadJobsheetData) ...
+      setActiveInputMode("search"); 
+      setCurrentWorkflowKeywordInfo(null);
     }
   }, [effectiveJobsheetId]);
 
@@ -196,64 +203,16 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
 
   const getWorkflowButtonColor = (type) => {
     const colors = {
-      "1": "#FF9800", // Repair (naranja)
-      "2": "#2196F3", // Deposit for Bike Sale (azul)
-      "3": "#9C27B0", // Insurance (púrpura)
-      "4": "#4CAF50", // HP Payment (verde)
-      "5": "#F44336", // Road Tax (rojo)
-      "6": "#FF5722"  // HP Payment 2 (naranja oscuro)
+      "1": "#757575", // General Labor/Repair (Grey 600)
+      "2": "#03A9F4", // Deposit for Bike Sale (Light Blue 500)
+      "3": "#00ACC1", // Insurance (Cyan 600)
+      "4": "#00838F", // HP Payment (Cyan 800)
+      "5": "#006064", // Road Tax (Cyan 900)
+      "6": "#26A69A"  // HP Payment 2 (Teal 400)
     };
-    return colors[type] || "#FF9800";
+    return colors[type] || "#757575"; // Default to Grey 600
   };
 
-  const handleAddWorkflowCharge = async () => {
-    if (jobsheet?.state === "completed") {
-      showNotification("This order is completed and cannot be modified", "error");
-      return;
-    }
-    if (!newMiscName || !newMiscPrice) {
-      showNotification("Please provide both description and amount", "error");
-      return;
-    }
-
-    try {
-      const token = localStorage.getItem("token");
-      if (!token) return;
-
-      const description = `${getWorkflowTypeName(workflowType)}: ${newMiscName}`;
-      
-      const laborData = {
-        jobsheet_id: effectiveJobsheetId,
-        description: description,
-        price: newMiscPrice,
-        is_completed: 1,
-        is_billed: 1,
-        workflow_type: workflowType
-      };
-
-      const response = await fetch(`${API_URL}/labor`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(laborData),
-      });
-
-      if (response.ok) {
-        await fetchLabors(token);
-        setNewMiscName("");
-        setNewMiscPrice("");
-        showNotification(`${getWorkflowTypeName(workflowType)} added successfully`, "success");
-      } else {
-        console.error(`Failed to add ${getWorkflowTypeName(workflowType)}:`, response.status);
-        showNotification(`Failed to add ${getWorkflowTypeName(workflowType)}`, "error");
-      }
-    } catch (error) {
-      console.error(`Error adding ${getWorkflowTypeName(workflowType)}:`, error);
-      showNotification(`Error adding ${getWorkflowTypeName(workflowType)}`, "error");
-    }
-  };
   const handleUpdateJobsheetCustomer = async () => {
     if (!selectedCustomerId) {
       showNotification("No customer selected", "error");
@@ -265,11 +224,9 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
       const token = localStorage.getItem("token");
       if (!token) return;
       
-      // Actualizar el jobsheet con el nuevo cliente
       const updateData = {
         ...jobsheet,
-        customer_id: selectedCustomerId,
-        workflow_type: workflowType // Mantener el tipo de workflow actual
+        customer_id: selectedCustomerId
       };
       
       const response = await fetch(`${API_URL}/jobsheets/${effectiveJobsheetId}`, {
@@ -282,7 +239,7 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
       });
       
       if (response.ok) {
-        await loadJobsheetData(); // Recargar jobsheet para obtener datos actualizados
+        await loadJobsheetData();
         setShowCustomerModal(false);
         setSelectedCustomer(null);
         setSelectedCustomerId(null);
@@ -303,6 +260,7 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
       setIsLoading(false);
     }
   };
+
   const handleLicensePlateSearch = async (e) => {
     const value = e.target.value;
     setLicensePlate(value);
@@ -365,12 +323,10 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
       const token = localStorage.getItem("token");
       if (!token) return;
   
-      let customerIdToUse = selectedCustomerId; // Prioritize explicitly selected customer
+      let customerIdToUse = selectedCustomerId;
 
       if (!customerIdToUse) {
-        // If no customer was explicitly selected on the new vehicle screen,
-        // fall back to finding/creating "General Customer"
-        const customerResponse = await fetch(`${API_URL}/customers?limit=1&search=General%20Customer`, { // More specific search
+        const customerResponse = await fetch(`${API_URL}/customers?limit=1&search=General%20Customer`, {
           headers: {
             Authorization: `Bearer ${token}`
           }
@@ -381,7 +337,6 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
           if (customers && customers.length > 0 && customers[0].name === "General Customer") {
             customerIdToUse = customers[0].id;
           } else {
-            // If "General Customer" not found, create it
             const newCustomerResponse = await fetch(`${API_URL}/customers`, {
               method: "POST",
               headers: {
@@ -415,8 +370,6 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
         year: new Date().getFullYear(),
         is_active: 1
       };
-  
-      console.log("Sending vehicle data:", vehicleData);
   
       const response = await fetch(`${API_URL}/vehicles`, {
         method: "POST",
@@ -452,6 +405,7 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
       setIsLoading(false);
     }
   };
+
   const handleCreateJobsheet = async (vehicleId) => {
     if (!vehicleId) {
       showNotification("No vehicle selected", "error");
@@ -465,11 +419,10 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
   
       const jobsheetData = {
         vehicle_id: vehicleId,
-        customer_id: null, // Considerar si el customer_id debería venir de la creación del vehículo
+        customer_id: null, 
         state: "pending",
         description: "",
-        service_notes: "",
-        workflow_type: workflowType // USAR EL VALOR DEL ESTADO ACTUAL
+        service_notes: ""
       };
   
       const response = await fetch(`${API_URL}/jobsheets`, {
@@ -501,6 +454,7 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
       setIsLoading(false);
     }
   };
+
   const handleWalkInJobsheet = async () => {
     setIsLoading(true);
     try {
@@ -512,8 +466,7 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
         customer_id: null,
         state: "pending",
         description: "Walk-in Sale",
-        service_notes: "",
-        workflow_type: workflowType
+        service_notes: ""
       };
   
       const response = await fetch(`${API_URL}/jobsheets`, {
@@ -547,11 +500,12 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
   };
   
   const loadJobsheetData = async (id = null) => {
-    // Asegurar que el inventorySearchTerm esté vacío inmediatamente
     setInventorySearchTerm("");
     setSearchResults([]);
-    setNewMiscName(""); // Reset miscellaneous name input
-    setNewMiscPrice(""); // Reset miscellaneous price input
+    setNewMiscName(""); 
+    setNewMiscPrice(""); 
+    setActiveInputMode("search");
+    setCurrentWorkflowKeywordInfo(null);
     
     setIsLoading(true);
     
@@ -571,8 +525,6 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
       if (response.ok) {
         const jobsheetData = await response.json();
         setJobsheet(jobsheetData);
-        // Ensure workflowType is always a string
-        setWorkflowType(String(jobsheetData.workflow_type || "1")); 
         setLicensePlate(jobsheetData.license_plate || jobsheetData.plate || "");
   
         await Promise.all([
@@ -588,7 +540,6 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
       console.error("Error loading data:", error);
       showNotification("Error loading jobsheet data", "error");
     } finally {
-      // Garantizar nuevamente que esté vacío al finalizar la carga
       setInventorySearchTerm("");
       setSearchResults([]);
       setIsLoading(false);
@@ -621,24 +572,51 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
 
   const getWorkflowTypeName = (type) => {
     const types = {
-      "1": "Repair",
+      "1": "Repair Service",
       "2": "Deposit for Bike Sale",
-      "3": "Insurance",
+      "3": "Insurance Payment",
       "4": "HP Payment",
       "5": "Road Tax",
       "6": "HP Payment 2"
     };
-    return types[type] || "Repair";
+    return types[type] || "Service/Charge";
   };
 
   const handleSearch = (e) => {
     const term = e.target.value;
     setInventorySearchTerm(term);
-    
-    if (term.length >= 2) {
-      fetchSearchResults(term);
-    } else {
+    const lowerTerm = term.toLowerCase().trim();
+
+    if (lowerTerm === "labor") {
+      setActiveInputMode("labor");
+      setNewMiscName("");
+      setNewMiscPrice("");
       setSearchResults([]);
+      setCurrentWorkflowKeywordInfo(null);
+    } else {
+      let matchedWorkflow = null;
+      for (const keyword in WORKFLOW_KEYWORDS) {
+        if (lowerTerm === keyword) {
+          matchedWorkflow = WORKFLOW_KEYWORDS[keyword];
+          break;
+        }
+      }
+
+      if (matchedWorkflow) {
+        setActiveInputMode("workflowSpecific");
+        setCurrentWorkflowKeywordInfo(matchedWorkflow);
+        setNewMiscName(matchedWorkflow.defaultDescription);
+        setNewMiscPrice("");
+        setSearchResults([]);
+      } else {
+        setActiveInputMode("search");
+        setCurrentWorkflowKeywordInfo(null);
+        if (term.length >= 2) {
+          fetchSearchResults(term);
+        } else {
+          setSearchResults([]);
+        }
+      }
     }
   };
 
@@ -713,12 +691,12 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
     }
   };
 
-  const handleAddLabor = async () => {
+  const handleAddLabor = async (description, price, workflowTypeId = "1") => {
     if (jobsheet?.state === "completed") {
       showNotification("This order is completed and cannot be modified", "error");
       return;
     }
-    if (!newMiscName || !newMiscPrice) {
+    if (!description || !price) {
       showNotification("Please provide a description and price", "error");
       return;
     }
@@ -729,10 +707,11 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
 
       const laborData = {
         jobsheet_id: effectiveJobsheetId,
-        description: newMiscName,
-        price: newMiscPrice,
+        description: description,
+        price: parseFloat(price),
         is_completed: 1,
-        is_billed: 1
+        is_billed: 1,
+        workflow_type: workflowTypeId
       };
 
       const response = await fetch(`${API_URL}/labor`, {
@@ -749,14 +728,16 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
         setNewMiscName("");
         setNewMiscPrice("");
         setInventorySearchTerm("");
-        showNotification("Labor service added successfully", "success");
+        setActiveInputMode("search");
+        setCurrentWorkflowKeywordInfo(null);
+        showNotification(`${getWorkflowTypeName(workflowTypeId)} added successfully`, "success");
       } else {
-        console.error("Failed to add labor:", response.status);
-        showNotification("Failed to add labor service", "error");
+        console.error("Failed to add labor/charge:", response.status);
+        showNotification("Failed to add service/charge", "error");
       }
     } catch (error) {
-      console.error("Error adding labor:", error);
-      showNotification("Error adding labor service", "error");
+      console.error("Error adding labor/charge:", error);
+      showNotification("Error adding service/charge", "error");
     }
   };
 
@@ -933,10 +914,6 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
                 ${jobsheet?.model || ""}
               </p>
             </div>
-            <div>
-              <h3>WORKFLOW</h3>
-              <p>${getWorkflowTypeName(workflowType)}</p>
-            </div>
           </div>
           
           <table>
@@ -1081,14 +1058,9 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
 
   useEffect(() => {
     const updateJobsheetStatusIfPaid = async () => {
-      // Ensure jobsheet data is loaded and we are not in a loading state
       if (jobsheet && !isLoading) { 
         const totals = calculateTotals();
         
-        // Condition to mark as completed:
-        // 1. Balance is zero or less (fully paid).
-        // 2. Subtotal was greater than zero (meaning there was something to pay off).
-        // 3. Current state is not already "completed".
         if (totals.balance <= 0 && 
             totals.subtotal > 0 && 
             jobsheet.state !== "completed") {
@@ -1097,8 +1069,8 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
             if (!token) return;
             
             const updateData = {
-              ...jobsheet, // Spread existing jobsheet data
-              state: "completed" // Update the state
+              ...jobsheet,
+              state: "completed"
             };
             
             const response = await fetch(`${API_URL}/jobsheets/${effectiveJobsheetId}`, {
@@ -1111,10 +1083,9 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
             });
             
             if (response.ok) {
-              setJobsheet(prevJobsheet => ({...prevJobsheet, state: "completed"})); // Update local state
+              setJobsheet(prevJobsheet => ({...prevJobsheet, state: "completed"}));
               showNotification("Order marked as completed as it is fully paid", "success");
             } else {
-              // Handle error if backend update fails
               const errorText = await response.text();
               console.error("Failed to update jobsheet state to completed:", errorText);
               showNotification("Could not automatically update order status.", "error");
@@ -1128,7 +1099,7 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
     };
     
     updateJobsheetStatusIfPaid();
-  }, [jobsheet, items, labors, payments, isLoading]); // MODIFIED DEPENDENCIES
+  }, [jobsheet, items, labors, payments, isLoading, effectiveJobsheetId, API_URL, taxRate]);
 
   const handleCustomerSearch = async (e) => {
     const term = e.target.value;
@@ -1178,14 +1149,13 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({...newCustomerDetails, is_active: 1}), // Ensure is_active is set
+        body: JSON.stringify({...newCustomerDetails, is_active: 1}),
       });
 
       if (response.ok) {
-        setNewCustomerDetails({ name: "", contact: "", email: "" }); // Clear form
-        setShowNewCustomerForm(false); // Hide form
+        setNewCustomerDetails({ name: "", contact: "", email: "" });
+        setShowNewCustomerForm(false);
         showNotification("Customer created successfully. You can now search for them.", "success");
-        // Optionally, refresh customer search results if a search term is active
         if (customerSearchTerm) {
           handleCustomerSearch({ target: { value: customerSearchTerm } });
         }
@@ -1298,7 +1268,7 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
             >
               <FontAwesomeIcon icon={faArrowLeft} />
             </button>
-            <h2 style={{ margin: 0, fontSize: "16px" }}>New Jobsheet | {getWorkflowTypeName(workflowType)}</h2>
+            <h2 style={{ margin: 0, fontSize: "16px" }}>New Jobsheet</h2>
           </div>
         </div>
 
@@ -1327,7 +1297,7 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
                   borderRadius: "4px",
                   border: "1px solid #ddd",
                   fontSize: "14px",
-                  boxSizing: "border-box" // Esto evita desbordamiento
+                  boxSizing: "border-box"
                 }}
               />
               <FontAwesomeIcon 
@@ -1350,7 +1320,7 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
               marginBottom: "15px",
               maxHeight: "200px",
               overflowY: "auto",
-              maxWidth: "100%" // Evitar desbordamiento horizontal
+              maxWidth: "100%"
             }}>
               {plateSearchResults.map(vehicle => (
                 <div 
@@ -1450,107 +1420,6 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
             </button>
           )}
         </div>
-
-        <div style={{ 
-          backgroundColor: "white",
-          padding: "15px",
-          borderRadius: "8px",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.05)"
-        }}>
-          <h3 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 600 }}>Workflow Type</h3>
-          
-          <div style={{ 
-            display: "flex", 
-            flexWrap: "wrap", 
-            gap: "8px" 
-          }}>
-            <button
-              key="workflow-button-1"
-              onClick={() => setWorkflowType("1")}
-              style={{
-                padding: "8px 12px",
-                borderRadius: "4px",
-                border: "1px solid #ddd",
-                background: workflowType === "1" ? "#5932EA" : "white",
-                color: workflowType === "1" ? "white" : "#333",
-                cursor: "pointer",
-                fontSize: "13px"
-              }}
-            >
-              Repair
-            </button>
-            <button
-              onClick={() => setWorkflowType("2")}
-              style={{
-                padding: "8px 12px",
-                borderRadius: "4px",
-                border: "1px solid #ddd",
-                background: workflowType === "2" ? "#5932EA" : "white",
-                color: workflowType === "2" ? "white" : "#333",
-                cursor: "pointer",
-                fontSize: "13px"
-              }}
-            >
-              Deposit for Bike Sale
-            </button>
-            <button
-              onClick={() => setWorkflowType("3")}
-              style={{
-                padding: "8px 12px",
-                borderRadius: "4px",
-                border: "1px solid #ddd",
-                background: workflowType === "3" ? "#5932EA" : "white",
-                color: workflowType === "3" ? "white" : "#333",
-                cursor: "pointer",
-                fontSize: "13px"
-              }}
-            >
-              Insurance
-            </button>
-            <button
-              onClick={() => setWorkflowType("4")}
-              style={{
-                padding: "8px 12px",
-                borderRadius: "4px",
-                border: "1px solid #ddd",
-                background: workflowType === "4" ? "#5932EA" : "white",
-                color: workflowType === "4" ? "white" : "#333",
-                cursor: "pointer",
-                fontSize: "13px"
-              }}
-            >
-              HP Payment
-            </button>
-            <button
-              onClick={() => setWorkflowType("5")}
-              style={{
-                padding: "8px 12px",
-                borderRadius: "4px",
-                border: "1px solid #ddd",
-                background: workflowType === "5" ? "#5932EA" : "white",
-                color: workflowType === "5" ? "white" : "#333",
-                cursor: "pointer",
-                fontSize: "13px"
-              }}
-            >
-              Road Tax
-            </button>
-            <button
-              onClick={() => setWorkflowType("6")}
-              style={{
-                padding: "8px 12px",
-                borderRadius: "4px",
-                border: "1px solid #ddd",
-                background: workflowType === "6" ? "#5932EA" : "white",
-                color: workflowType === "6" ? "white" : "#333",
-                cursor: "pointer",
-                fontSize: "13px"
-              }}
-            >
-              HP Payment 2
-            </button>
-          </div>
-        </div>
       </div>
     );
   }
@@ -1620,7 +1489,6 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
         flexWrap: "wrap",
         gap: "12px"
       }}>
-        {/* Columna izquierda - Información del vehículo */}
         <div style={{ 
           display: "flex", 
           alignItems: "center",
@@ -1648,7 +1516,6 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
           </div>
         </div>
 
-        {/* Columna derecha - Información del cliente y botón de acción */}
         <div style={{ 
           display: "flex", 
           alignItems: "center", 
@@ -1743,7 +1610,7 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
           }}>
             <h3 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 600 }}>
               {isCompleted && <span style={{color: "#2e7d32", marginRight: "8px"}}>✓</span>}
-              {workflowType === "1" ? "Add Products/Services" : `Add ${getWorkflowTypeName(workflowType)} Amount`}
+              Add Products/Services/Charges
               {isCompleted && <span style={{fontSize: "12px", color: "#666", marginLeft: "10px"}}>(Completed - No Changes Allowed)</span>}
             </h3>
             
@@ -1758,198 +1625,153 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
                 This order has been completed and cannot be modified.
               </div>
             ) : (
-              workflowType === "1" ? (
-                <>
-                  <div style={{ 
-                    display: "grid", 
-                    gridTemplateColumns: "1fr auto", 
-                    gap: "8px", 
-                    marginBottom: "10px" 
-                  }}>
-                    <input
-                      type="text"
-                      value={inventorySearchTerm}
-                      onChange={handleSearch}
-                      placeholder="Search product or type 'labor' for services"
-                      style={{ 
-                        padding: "8px", 
-                        borderRadius: "4px",
-                        border: "1px solid #ddd" 
-                      }}
-                    />
-                    <input
-                      type="number"
-                      value={newItemQuantity}
-                      onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)}
-                      min="1"
-                      placeholder="Qty"
-                      style={{ 
-                        padding: "8px", 
-                        borderRadius: "4px",
-                        border: "1px solid #ddd" 
-                      }}
-                    />
-                  </div>
-  
-                  {searchResults.length > 0 && (
-                    <div style={{
-                      border: "1px solid #eee",
-                      borderRadius: "4px",
-                      marginBottom: "10px",
-                      maxHeight: "200px",
-                      overflowY: "auto"
-                    }}>
-                      {searchResults.map(item => (
-                        <div 
-                          key={item.id}
-                          onClick={() => handleSelectItem(item)}
-                          style={{
-                            padding: "8px 12px",
-                            borderBottom: "1px solid #f0f0f0",
-                            cursor: "pointer",
-                            backgroundColor: "white"
-                          }}
-                          onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#f9f9f9"}
-                          onMouseOut={(e) => e.currentTarget.style.backgroundColor = "white"}
-                        >
-                          <div style={{ fontWeight: "500", fontSize: "14px" }}>{item.name}</div>
-                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", marginTop: "2px" }}>
-                            <span style={{ 
-                              color: parseInt(item.stock) > 0 ? "#2e7d32" : "#c62828",
-                              fontWeight: "500"
-                            }}>
-                              Stock: {item.stock ? Number(item.stock).toFixed(0) : '0'}
-                            </span>
-                            {!item.isLabourItem && (
-                              <span style={{ display: 'flex', gap: '10px' }}>
-                                <span>Cost: ${parseFloat(item.cost || 0).toFixed(2)}</span>
-                                <span>Sale: ${parseFloat(item.sale || 0).toFixed(2)}</span>
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {inventorySearchTerm !== null && 
-                   inventorySearchTerm !== undefined &&
-                   typeof inventorySearchTerm === 'string' &&
-                   inventorySearchTerm.toLowerCase().trim() === "labor" && (
-                    <div style={{
-                      padding: "10px",
-                      backgroundColor: "#fff8e1",
-                      borderRadius: "4px",
-                      marginTop: "10px",
-                      border: "1px solid #ffe0b2"
-                    }}>
-                      <div style={{ marginBottom: "10px" }}>
-                        <label style={{ display: "block", marginBottom: "5px", fontSize: "13px", fontWeight: "500" }}>
-                          Labor Description
-                        </label>
-                        <input
-                          type="text"
-                          value={newMiscName}
-                          onChange={e => setNewMiscName(e.target.value)}
-                          placeholder="e.g. Oil change, Brake service"
-                          style={{ width: "100%", padding: "8px", borderRadius: "4px", border: "1px solid #ddd" }}
-                        />
-                      </div>
-  
-                      <div style={{ marginBottom: "10px" }}>
-                        <label style={{ display: "block", marginBottom: "5px", fontSize: "13px", fontWeight: "500" }}>
-                          Price ($)
-                        </label>
-                        <input
-                          type="number"
-                          value={newMiscPrice}
-                          onChange={e => setNewMiscPrice(e.target.value)}
-                          placeholder="0.00"
-                          step="0.01"
-                          min="0"
-                          style={{ width: "100%", padding: "8px", borderRadius: "4px", border: "1px solid #ddd" }}
-                        />
-                      </div>
-  
-                      <button
-                        onClick={handleAddLabor}
-                        style={{
-                          width: "100%",
-                          padding: "8px",
-                          backgroundColor: "#FF9800",
-                          color: "white",
-                          border: "none",
-                          borderRadius: "4px",
-                          cursor: "pointer",
-                          fontSize: "13px",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          gap: "6px"
-                        }}
-                      >
-                        <FontAwesomeIcon icon={faPlus} size="sm" />
-                        Add Labor Service
-                      </button>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div style={{
-                  padding: "15px",
-                  backgroundColor: "#f9f9f9",
-                  borderRadius: "4px",
-                  border: "1px solid #e0e0e0"
+              <>
+                <div style={{ 
+                  display: "grid", 
+                  gridTemplateColumns: "1fr auto", 
+                  gap: "8px", 
+                  marginBottom: "10px" 
                 }}>
-                  <div style={{ marginBottom: "15px" }}>
-                    <label style={{ display: "block", marginBottom: "5px", fontSize: "14px", fontWeight: "500" }}>
-                      Description
-                    </label>
-                    <input
-                      type="text"
-                      value={newMiscName}
-                      onChange={e => setNewMiscName(e.target.value)}
-                      placeholder={`Enter ${getWorkflowTypeName(workflowType)} description`}
-                      style={{ width: "100%", padding: "10px", borderRadius: "4px", border: "1px solid #ddd" }}
-                    />
-                  </div>
-  
-                  <div style={{ marginBottom: "15px" }}>
-                    <label style={{ display: "block", marginBottom: "5px", fontSize: "14px", fontWeight: "500" }}>
-                      Amount ($)
-                    </label>
-                    <input
-                      type="number"
-                      value={newMiscPrice}
-                      onChange={e => setNewMiscPrice(e.target.value)}
-                      placeholder="0.00"
-                      step="0.01"
-                      min="0"
-                      style={{ width: "100%", padding: "10px", borderRadius: "4px", border: "1px solid #ddd" }}
-                    />
-                  </div>
-  
-                  <button
-                    onClick={handleAddWorkflowCharge}
-                    style={{
-                      width: "100%",
-                      padding: "10px",
-                      backgroundColor: getWorkflowButtonColor(workflowType),
-                      color: "white",
-                      border: "none",
+                  <input
+                    type="text"
+                    value={inventorySearchTerm}
+                    onChange={handleSearch}
+                    placeholder="Search product or type 'labor', 'insurance', etc."
+                    style={{ 
+                      padding: "8px", 
                       borderRadius: "4px",
-                      cursor: "pointer",
-                      fontSize: "14px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "8px"
+                      border: "1px solid #ddd" 
                     }}
-                  >
-                    <FontAwesomeIcon icon={faPlus} />
-                    Add {getWorkflowTypeName(workflowType)}
-                  </button>
+                  />
+                  <input
+                    type="number"
+                    value={newItemQuantity}
+                    onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)}
+                    min="1"
+                    placeholder="Qty"
+                    style={{ 
+                      padding: "8px", 
+                      borderRadius: "4px",
+                      border: "1px solid #ddd",
+                      backgroundColor: activeInputMode === 'search' ? 'white' : '#f0f0f0',
+                      pointerEvents: activeInputMode === 'search' ? 'auto' : 'none'
+                    }}
+                    disabled={activeInputMode !== 'search'}
+                  />
                 </div>
-              )
+  
+                {activeInputMode === 'search' && searchResults.length > 0 && (
+                  <div style={{
+                    border: "1px solid #eee",
+                    borderRadius: "4px",
+                    marginBottom: "10px",
+                    maxHeight: "200px",
+                    overflowY: "auto"
+                  }}>
+                    {searchResults.map(item => (
+                      <div 
+                        key={item.id}
+                        onClick={() => handleSelectItem(item)}
+                        style={{
+                          padding: "8px 12px",
+                          borderBottom: "1px solid #f0f0f0",
+                          cursor: "pointer",
+                          backgroundColor: "white"
+                        }}
+                        onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#f9f9f9"}
+                        onMouseOut={(e) => e.currentTarget.style.backgroundColor = "white"}
+                      >
+                        <div style={{ fontWeight: "500", fontSize: "14px" }}>{item.name}</div>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", marginTop: "2px" }}>
+                          <span style={{ 
+                            color: parseInt(item.stock) > 0 ? "#2e7d32" : "#c62828",
+                            fontWeight: "500"
+                          }}>
+                            Stock: {item.stock ? Number(item.stock).toFixed(0) : '0'}
+                          </span>
+                          {!item.isLabourItem && (
+                            <span style={{ display: 'flex', gap: '10px' }}>
+                              <span>Cost: ${parseFloat(item.cost || 0).toFixed(2)}</span>
+                              <span>Sale: ${parseFloat(item.sale || 0).toFixed(2)}</span>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {(activeInputMode === 'labor' || activeInputMode === 'workflowSpecific') && (
+                  <div style={{
+                    padding: "10px",
+                    backgroundColor: activeInputMode === 'labor' ? "#f5f5f5" : 
+                                     (currentWorkflowKeywordInfo ? "#E0F7FA" : "#f5f5f5"),
+                    borderRadius: "4px",
+                    marginTop: "10px",
+                    border: `1px solid ${activeInputMode === 'labor' ? "#e0e0e0" : 
+                                        (currentWorkflowKeywordInfo ? "#B2EBF2" : "#e0e0e0")}`
+                  }}>
+                    <div style={{ marginBottom: "10px" }}>
+                      <label style={{ display: "block", marginBottom: "5px", fontSize: "13px", fontWeight: "500" }}>
+                        {activeInputMode === 'labor' ? "Labor Description" : 
+                         (currentWorkflowKeywordInfo ? currentWorkflowKeywordInfo.defaultDescription : "Description")
+                        }
+                      </label>
+                      <input
+                        type="text"
+                        value={newMiscName}
+                        onChange={e => setNewMiscName(e.target.value)}
+                        placeholder={activeInputMode === 'labor' ? "e.g. Oil change, Brake service" : "Enter description"}
+                        style={{ width: "100%", padding: "8px", borderRadius: "4px", border: "1px solid #ddd" }}
+                      />
+                    </div>
+
+                    <div style={{ marginBottom: "10px" }}>
+                      <label style={{ display: "block", marginBottom: "5px", fontSize: "13px", fontWeight: "500" }}>
+                        Price ($)
+                      </label>
+                      <input
+                        type="number"
+                        value={newMiscPrice}
+                        onChange={e => setNewMiscPrice(e.target.value)}
+                        placeholder="0.00"
+                        step="0.01"
+                        min="0"
+                        style={{ width: "100%", padding: "8px", borderRadius: "4px", border: "1px solid #ddd" }}
+                      />
+                    </div>
+
+                    <button
+                      onClick={() => handleAddLabor(
+                        newMiscName, 
+                        newMiscPrice, 
+                        activeInputMode === 'workflowSpecific' && currentWorkflowKeywordInfo ? currentWorkflowKeywordInfo.id : "1"
+                      )}
+                      style={{
+                        width: "100%",
+                        padding: "8px",
+                        backgroundColor: activeInputMode === 'labor' 
+                                         ? getWorkflowButtonColor("1") 
+                                         : (currentWorkflowKeywordInfo ? getWorkflowButtonColor(currentWorkflowKeywordInfo.id) : getWorkflowButtonColor("1")),
+                        color: "white",
+                        border: "none",
+                        borderRadius: "4px",
+                        cursor: "pointer",
+                        fontSize: "13px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "6px"
+                      }}
+                    >
+                      <FontAwesomeIcon icon={faPlus} size="sm" />
+                      {activeInputMode === 'labor' ? "Add Labor Service" : 
+                       (currentWorkflowKeywordInfo ? `Add ${getWorkflowTypeName(currentWorkflowKeywordInfo.id)}` : "Add Charge")
+                      }
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -1977,19 +1799,19 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
                     </tr>
                   </thead>
                   <tbody>
-                    {allItems.map(item => (
+                  {allItems.map(item => (
                       <tr key={item.id} style={{ borderBottom: "1px solid #f8f8f8" }}>
                         <td style={{ padding: "8px 6px" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                             {item.isLabor && (
                               <span style={{ 
                                 fontSize: "10px", 
-                                backgroundColor: "#FF9800", 
+                                backgroundColor: getWorkflowButtonColor(item.workflow_type), // MODIFICADO
                                 color: "white",
                                 padding: "2px 4px",
                                 borderRadius: "3px"
                               }}>
-                                LABOR
+                                {getWorkflowTypeName(item.workflow_type).toUpperCase()} {/* MODIFICADO */}
                               </span>
                             )}
                             {item.name}
@@ -2076,7 +1898,7 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
                 <span>${totals.subtotal.toFixed(2)}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px", fontSize: "13px" }}>
-                <span>GST ({taxRate}%):</span>
+                <span>GST (${taxRate}%):</span>
                 <span>${totals.tax.toFixed(2)}</span>
               </div>
               <div style={{ 
@@ -2099,16 +1921,21 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
               marginBottom: "10px",
               border: `1px solid ${isCompleted ? "#c8e6c9" : totals.balance <= 0 ? "#c8e6c9" : totals.paid > 0 ? "#ffe0b2" : "#ffcdd2"}`
             }}>
-              <div style={{ 
+               <div style={{ 
                 fontWeight: "600", 
                 marginBottom: "5px",
                 fontSize: "13px",
-                color: isCompleted ? "#2e7d32" : totals.balance <= 0 ? "#2e7d32" : totals.paid > 0 ? "#ef6c00" : "#c62828"
+                color: isCompleted ? "#2e7d32" : totals.balance <= 0 && totals.total > 0 ? "#2e7d32" : totals.paid > 0 ? "#ef6c00" : "#c62828"
               }}>
                 {isCompleted ? (
                   <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
                     <FontAwesomeIcon icon={faCheckCircle} />
                     Order Completed - No Changes Allowed
+                  </div>
+                ) : totals.total === 0 ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: "5px", color: "#666" }}>
+                    {/* No icon needed here or a neutral one if preferred */}
+                    No items or services.
                   </div>
                 ) : totals.balance <= 0 ? (
                   <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
@@ -2168,7 +1995,7 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
             opacity: isCompleted ? 0.6 : 1,
             pointerEvents: isCompleted ? "none" : "auto"
           }}>
-            <h3 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 600 }}>
+           <h3 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 600 }}>
               Add Payment
               {isCompleted && <span style={{fontSize: "12px", color: "#666", marginLeft: "10px"}}>(Completed - No Changes Allowed)</span>}
             </h3>
@@ -2247,7 +2074,7 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
                   Add Payment
                 </button>
               </>
-            ) : (
+            ) : totals.total > 0 ? (
               <div style={{ 
                 backgroundColor: "#e8f5e9",
                 padding: "10px",
@@ -2261,6 +2088,20 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
               }}>
                 <FontAwesomeIcon icon={faCheckCircle} />
                 Invoice is fully paid
+              </div>
+            ) : (
+              <div style={{ 
+                backgroundColor: "#f9f9f9",
+                padding: "10px",
+                borderRadius: "4px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#666",
+                gap: "8px",
+                fontSize: "14px"
+              }}>
+                No items or services to pay for.
               </div>
             )}
           </div>
@@ -2324,126 +2165,6 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
               </div>
             )}
           </div>
-        </div>
-
-        <div style={{ 
-          backgroundColor: "white",
-          padding: "15px",
-          borderRadius: "8px",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-          gridColumn: "1 / -1",
-          opacity: isCompleted ? 0.6 : 1,
-          pointerEvents: isCompleted ? "none" : "auto"
-        }}>
-          <h3 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 600 }}>
-            Workflow Type
-            {isCompleted && <span style={{fontSize: "12px", color: "#666", marginLeft: "10px"}}>(Completed - Cannot Change)</span>}
-          </h3>
-          
-          <div style={{ 
-            display: "flex", 
-            flexWrap: "wrap", 
-            gap: "8px" 
-          }}>
-            <button
-              onClick={() => setWorkflowType("1")}
-              style={{
-                padding: "8px 12px",
-                borderRadius: "4px",
-                border: "1px solid #ddd",
-                background: workflowType === "1" ? "#5932EA" : "white",
-                color: workflowType === "1" ? "white" : "#333",
-                cursor: "pointer",
-                fontSize: "13px"
-              }}
-            >
-              Repair
-            </button>
-            <button
-              onClick={() => setWorkflowType("2")}
-              style={{
-                padding: "8px 12px",
-                borderRadius: "4px",
-                border: "1px solid #ddd",
-                background: workflowType === "2" ? "#5932EA" : "white",
-                color: workflowType === "2" ? "white" : "#333",
-                cursor: "pointer",
-                fontSize: "13px"
-              }}
-            >
-              Deposit for Bike Sale
-            </button>
-            <button
-              onClick={() => setWorkflowType("3")}
-              style={{
-                padding: "8px 12px",
-                borderRadius: "4px",
-                border: "1px solid #ddd",
-                background: workflowType === "3" ? "#5932EA" : "white",
-                color: workflowType === "3" ? "white" : "#333",
-                cursor: "pointer",
-                fontSize: "13px"
-              }}
-            >
-              Insurance
-            </button>
-            <button
-              onClick={() => setWorkflowType("4")}
-              style={{
-                padding: "8px 12px",
-                borderRadius: "4px",
-                border: "1px solid #ddd",
-                background: workflowType === "4" ? "#5932EA" : "white",
-                color: workflowType === "4" ? "white" : "#333",
-                cursor: "pointer",
-                fontSize: "13px"
-              }}
-            >
-              HP Payment
-            </button>
-            <button
-              onClick={() => setWorkflowType("5")}
-              style={{
-                padding: "8px 12px",
-                borderRadius: "4px",
-                border: "1px solid #ddd",
-                background: workflowType === "5" ? "#5932EA" : "white",
-                color: workflowType === "5" ? "white" : "#333",
-                cursor: "pointer",
-                fontSize: "13px"
-              }}
-            >
-              Road Tax
-            </button>
-            <button
-              onClick={() => setWorkflowType("6")}
-              style={{
-                padding: "8px 12px",
-                borderRadius: "4px",
-                border: "1px solid #ddd",
-                background: workflowType === "6" ? "#5932EA" : "white",
-                color: workflowType === "6" ? "white" : "#333",
-                cursor: "pointer",
-                fontSize: "13px"
-              }}
-            >
-              HP Payment 2
-            </button>
-          </div>
-          
-          {isCompleted && (
-            <div style={{
-              marginTop: "10px",
-              padding: "10px",
-              backgroundColor: "#e8f5e9",
-              borderRadius: "4px",
-              fontSize: "13px",
-              color: "#2e7d32",
-              textAlign: "center"
-            }}>
-              This order is completed and its workflow type cannot be changed.
-            </div>
-          )}
         </div>
       </div>
      
@@ -2513,7 +2234,6 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
               </button>
             </div>
 
-            {/* Buscador de clientes */}
             <div style={{ marginBottom: "15px" }}>
               <label style={{ display: "block", marginBottom: "5px", fontSize: "14px" }}>
                 Search Customers
@@ -2545,7 +2265,6 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
               </div>
             </div>
 
-            {/* Resultados de búsqueda */}
             {customerSearchResults.length > 0 && (
               <div style={{
                 border: "1px solid #eee",
@@ -2577,7 +2296,6 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
               </div>
             )}
 
-            {/* Cliente seleccionado o actual */}
             {(selectedCustomer || jobsheet?.customer_id) && (
               <div style={{
                 padding: "15px",
@@ -2620,7 +2338,6 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
               </div>
             )}
 
-            {/* Opción para crear nuevo cliente */}
             <div style={{ 
               padding: "10px",
               backgroundColor: "#f9f9f9",
@@ -2650,7 +2367,6 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
               </button>
             </div>
 
-            {/* Formulario para nuevo cliente */}
             {showNewCustomerForm && (
               <div style={{
                 padding: "15px",
@@ -2676,7 +2392,7 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
                       borderRadius: "4px",
                       border: "1px solid #ddd",
                       fontSize: "13px",
-                      boxSizing: "border-box" // Added
+                      boxSizing: "border-box"
                     }}
                   />
                 </div>
@@ -2696,7 +2412,7 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
                       borderRadius: "4px",
                       border: "1px solid #ddd",
                       fontSize: "13px",
-                      boxSizing: "border-box" // Added
+                      boxSizing: "border-box"
                     }}
                   />
                 </div>
@@ -2716,7 +2432,7 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
                       borderRadius: "4px",
                       border: "1px solid #ddd",
                       fontSize: "13px",
-                      boxSizing: "border-box" // Added
+                      boxSizing: "border-box"
                     }}
                   />
                 </div>
@@ -2754,7 +2470,6 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
               </div>
             )}
 
-            {/* Botones de acción */}
             <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "15px" }}>
               <button
                 onClick={() => setShowCustomerModal(false)}

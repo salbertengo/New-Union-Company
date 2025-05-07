@@ -21,13 +21,14 @@ class LaborModel {
         description, 
         price = 0, 
         is_completed = 1, 
-        is_billed = 1,  // Añadir este parámetro con valor predeterminado 1
-        tracking_notes = null 
+        is_billed = 1, 
+        tracking_notes = null,
+        workflow_type = "1" // Default to "1" (Repair/General Labor) if not provided
       } = data;
       
       const [result] = await pool.execute(
-        'INSERT INTO labor (jobsheet_id, description, price, is_completed, is_billed, tracking_notes) VALUES (?, ?, ?, ?, ?, ?)',
-        [jobsheet_id, description, price, is_completed, is_billed, tracking_notes]
+        'INSERT INTO labor (jobsheet_id, description, price, is_completed, is_billed, tracking_notes, workflow_type) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [jobsheet_id, description, price, is_completed, is_billed, tracking_notes, workflow_type]
       );
       
       if (is_completed) {
@@ -40,8 +41,9 @@ class LaborModel {
         description,
         price,
         is_completed,
-        is_billed,  // Añadir al objeto de retorno
+        is_billed,
         tracking_notes,
+        workflow_type, // Add to return object
         created_at: new Date()
       };
     } catch (error) {
@@ -52,7 +54,7 @@ class LaborModel {
 
   async update(id, data) {
     try {
-      const { description, price, is_completed, tracking_notes, is_billed } = data;
+      const { description, price, is_completed, tracking_notes, is_billed, workflow_type } = data;
       
       // Obtener datos actuales para comparar cambios
       const [currentLabor] = await pool.execute(
@@ -106,6 +108,11 @@ class LaborModel {
       if (is_billed !== undefined) {
         updateFields.push('is_billed = ?');
         params.push(is_billed);
+      }
+
+      if (workflow_type !== undefined) {
+        updateFields.push('workflow_type = ?');
+        params.push(workflow_type);
       }
       
       // Check if there are fields to update
