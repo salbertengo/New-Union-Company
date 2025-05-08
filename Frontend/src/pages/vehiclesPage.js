@@ -213,12 +213,7 @@ const VehiclesPage = () => {
               tooltip="Edit Motorcycle"
               type="default"
             />
-            <ActionButton
-              icon={faClipboardList}
-              onClick={() => handleCreateJobsheet(params.data)}
-              tooltip="Create Job Sheet"
-              type="success"
-            />
+
           </ActionButtonsContainer>
         );
       },
@@ -711,111 +706,9 @@ const VehiclesPage = () => {
     }
   };
 
-  const handleSelectCommonModel = (model) => {
-    setCurrentVehicle(null);
-    setFormData({
-      ...formData,
-      brand: 'Ginsapur',
-      model: model.model,
-      year: model.year,
-      type: 'motorcycle'
-    });
-    setShowModal(true);
-    setShowCommonModels(false);
-  };
 
-  // Common motorcycle models panel component
-  const CommonModelsPanel = () => (
-    <div style={{
-      position: 'absolute',
-      top: '100%',
-      right: 0,
-      width: '550px',
-      backgroundColor: 'white',
-      borderRadius: '16px',
-      boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
-      zIndex: 100,
-      padding: '20px',
-      marginTop: '8px'
-    }}>
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center', 
-        marginBottom: '16px' 
-      }}>
-        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '600', color: '#333' }}>
-          <FontAwesomeIcon icon={faMotorcycle} style={{ marginRight: '8px', color: '#5932EA' }} />
-          Popular Singapore Models
-        </h3>
-        <button 
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowCommonModels(false)
-            
-          }}
-          style={{
-            background: 'none',
-            border: 'none',
-            fontSize: '18px',
-            cursor: 'pointer',
-            position: "relative", 
-            zIndex: 10,          
-          }}
-        >
-          ×
-        </button>
-      </div>
-      
-      <div style={{ 
-        display: 'grid', 
-        gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
-        gap: '16px'
-      }}>
-        {commonMotorcycleModels.map((model, index) => (
-          <div 
-            key={index}
-            onClick={() => handleSelectCommonModel(model)}
-            style={{
-              border: '1px solid #eee',
-              borderRadius: '12px',
-              padding: '16px',
-              textAlign: 'center',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              backgroundColor: '#f9faff',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-3px)'}
-            onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
-          >
-            <div style={{ marginBottom: '12px' }}>
-              <div 
-                style={{ 
-                  width: '100%', 
-                  height: '60px',
-                  borderRadius: '8px',
-                  border: '1px solid #eee',
-                  backgroundColor: '#E3F2FD',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
-              >
-                <FontAwesomeIcon icon={faMotorcycle} size="2x" color="#1976D2" />
-              </div>
-            </div>
-            <div style={{ fontWeight: '600', fontSize: '16px', color: '#333' }}>
-              {model.model}
-            </div>
-            <div style={{ fontSize: '13px', color: '#666', marginTop: '4px' }}>
-              {model.year}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+
+  
 
   return (
     <div
@@ -914,29 +807,7 @@ const VehiclesPage = () => {
                 </div>
               </div>
 
-              <div style={{ position: 'relative' }}>
-                <button
-                  onClick={() => setShowCommonModels(!showCommonModels)}
-                  style={{
-                    padding: '8px 15px',
-                    backgroundColor: '#F9FBFF',
-                    color: '#333',
-                    border: 'none',
-                    borderRadius: '10px',
-                    cursor: 'pointer',
-                    transition: 'background-color 0.3s ease',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    fontSize: '14px',
-                    height: '35px',
-                  }}
-                >
-                  <FontAwesomeIcon icon={faStar} style={{ color: '#5932EA' }} />
-                  <span>Popular Models</span>
-                </button>
-                {showCommonModels && <CommonModelsPanel />}
-              </div>
+              
 
               <button
                 onClick={handleOpenNewModal}
@@ -1324,21 +1195,7 @@ const VehiclesPage = () => {
             </div>
           )}
 
-          {/* Create Job Sheet Modal */}
-          {showJobsheetModal && currentVehicle && (
-  <CreateJobsheetModal 
-    isOpen={showJobsheetModal}
-    onClose={() => setShowJobsheetModal(false)}
-    currentJobsheet={completeJobsheet || {
-      vehicle_id: currentVehicle.id,
-      customer_id: currentVehicle.customer_id,
-      customer_name: currentVehicle.customer_name
-    }}
-    onSave={() => {
-      fetchVehicles();
-    }}
-  />
-)}
+         
 
           {/* Service History Modal */}
           {showServiceModal && currentVehicle && (

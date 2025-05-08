@@ -45,7 +45,7 @@ const Sidebar = () => {
         <button 
           className="sidebar-button" 
           id="btn1"
-          onClick={() => handleNavigation('/')}
+          onClick={() => handleNavigation('/dashboard')}
         >
           <svg className="icon-interior" id="dashboard-icon"></svg>
           Dashboard

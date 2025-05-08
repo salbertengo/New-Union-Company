@@ -1,6 +1,7 @@
 const JobsheetModel = require('../models/jobsheet');
 const JobsheetItemModel = require('../models/jobsheetItem');
 const PaymentModel = require('../models/payment');
+const LaborModel = require('../models/labor'); // Asegúrate de que la ruta sea correcta y LaborModel exista
 
 class JobsheetService {
   static async getAllJobsheets(search, state) {
@@ -18,23 +19,37 @@ class JobsheetService {
         throw new Error('Jobsheet not found');
       }
 
-      // Obtener items y pagos relacionados
+      // Obtener items, labors y pagos relacionados
       const items = await JobsheetItemModel.getByJobsheetId(id);
+      const labors = await LaborModel.getByJobsheetId(id); // Asume que LaborModel.getByJobsheetId existe
       const payments = await PaymentModel.getByJobsheetId(id);
       
       // Calcular totales
-      const totalItems = items.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+      const itemsSubtotal = items.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+      const gstOnItems = itemsSubtotal * 0.09; // GST del 9% sobre el subtotal de items
+
+      // Sumar solo labors completados y facturados
+      const laborsSubtotal = labors
+        .filter(labor => labor.is_completed === 1 && labor.is_billed === 1)
+        .reduce((sum, labor) => sum + parseFloat(labor.price || 0), 0);
+
+      const grandTotal = itemsSubtotal + gstOnItems + laborsSubtotal;
       const totalPayments = payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
 
       return {
         ...jobsheet,
         items,
+        labors, // Incluir labors en la respuesta para el detalle
         payments,
-        totalItems,
+        itemsSubtotal,
+        gstOnItems,
+        laborsSubtotal,
+        grandTotal, // Este es el total general incluyendo GST en items y labors
         totalPayments,
-        balance: totalItems - totalPayments
+        balance: grandTotal - totalPayments
       };
     } catch (error) {
+      console.error('Error in JobsheetService.getJobsheetById:', error);
       throw error;
     }
   }
@@ -46,6 +61,7 @@ class JobsheetService {
       throw error;
     }
   }
+
   static async getJobsheetsByVehicleId(vehicleId) {
     try {
       return await JobsheetModel.getByVehicleId(vehicleId);
@@ -53,6 +69,7 @@ class JobsheetService {
       throw error;
     }
   }
+
   static async createJobsheet(jobsheetData) {
     try {
       return await JobsheetModel.create(jobsheetData);
@@ -87,8 +104,14 @@ class JobsheetService {
 
   static async addJobsheetItem(itemData) {
     try {
-      return await JobsheetItemModel.addItem(itemData);
+      const newItem = await JobsheetItemModel.addItem(itemData);
+      // Después de añadir un item, recalcular y actualizar el total del jobsheet si está almacenado
+      if (newItem && itemData.jobsheet_id) {
+        await LaborModel.updateJobsheetTotal(itemData.jobsheet_id); // Reutilizamos la lógica de LaborModel o creamos una en JobsheetModel
+      }
+      return newItem;
     } catch (error) {
+      console.error('Error in JobsheetService.addJobsheetItem:', error);
       throw error;
     }
   }
@@ -99,20 +122,39 @@ class JobsheetService {
       if (!success) {
         throw new Error('Item not found');
       }
+      // Después de actualizar un item, recalcular y actualizar el total del jobsheet
+      // Necesitaríamos el jobsheet_id. JobsheetItemModel.updateItem debería devolverlo o JobsheetItemModel.getById
+      const updatedItem = await JobsheetItemModel.getById(id); // Asume que JobsheetItemModel.getById existe
+      if (updatedItem && updatedItem.jobsheet_id) {
+         await LaborModel.updateJobsheetTotal(updatedItem.jobsheet_id);
+      }
       return success;
     } catch (error) {
+      console.error('Error in JobsheetService.updateJobsheetItem:', error);
       throw error;
     }
   }
 
   static async deleteJobsheetItem(id) {
     try {
+      // Obtener jobsheet_id ANTES de borrar el item
+      const itemToDelete = await JobsheetItemModel.getById(id); // Asume que JobsheetItemModel.getById existe
+      let jobsheetId = null;
+      if (itemToDelete && itemToDelete.jobsheet_id) {
+        jobsheetId = itemToDelete.jobsheet_id;
+      }
+
       const success = await JobsheetItemModel.deleteItem(id);
       if (!success) {
         throw new Error('Item not found');
       }
+      // Después de eliminar un item, recalcular y actualizar el total del jobsheet
+      if (jobsheetId) {
+        await LaborModel.updateJobsheetTotal(jobsheetId);
+      }
       return success;
     } catch (error) {
+      console.error('Error in JobsheetService.deleteJobsheetItem:', error);
       throw error;
     }
   }

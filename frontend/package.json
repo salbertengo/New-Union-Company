@@ -15,12 +15,14 @@
     "axios": "^1.8.4",
     "cors": "^2.8.5",
     "cra-template": "1.2.0",
+    "date-fns": "^4.1.0",
     "framer-motion": "^12.6.5",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.1.5",
     "react-scripts": "^5.0.1",
-    "web-vitals": "^4.2.4"
+    "web-vitals": "^4.2.4",
+    "xlsx": "^0.18.5"
   },
   "scripts": {
     "start": "react-scripts start",

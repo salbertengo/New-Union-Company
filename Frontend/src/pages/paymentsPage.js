@@ -16,7 +16,8 @@ import {
   faIdCard,
   faExchangeAlt,
   faFileInvoiceDollar,
-  faWallet
+  faWallet,
+  faMobile // Add this import
 } from "@fortawesome/free-solid-svg-icons";
 import "@fortawesome/fontawesome-svg-core/styles.css";
 import SideBar from './Sidebar';
@@ -47,7 +48,7 @@ const PaymentsPage = () => {
     payment_date: new Date().toISOString().split('T')[0]
   });
 
-  const paymentMethods = ["cash", "credit_card", "debit_card", "transfer", "check", "other"];
+  const paymentMethods = ["cash", "paynow", "nets"];
   const API_URL = process.env.REACT_APP_API_URL;
   const columnDefs = useMemo(() => [
     {
@@ -91,37 +92,35 @@ const PaymentsPage = () => {
       field: 'method',
       suppressMenu: true,
       headerClass: 'custom-header-sumary',
-      width: 100, // Added fixed width
+      width: 100,
       cellRenderer: (params) => {
-        const method = params.value || 'cash';
+        // Use default method if value is undefined or not in our color map
+        let method = params.value || 'cash';
+        
         const colors = {
           cash: { bg: "#E3F2FD", text: "#0D47A1", icon: "#2196F3" },
-          credit_card: { bg: "#F3E5F5", text: "#4A148C", icon: "#9C27B0" },
-          debit_card: { bg: "#E8F5E9", text: "#1B5E20", icon: "#4CAF50" },
-          transfer: { bg: "#FFF8E1", text: "#F57F17", icon: "#FFC107" },
-          check: { bg: "#FFEBEE", text: "#B71C1C", icon: "#F44336" },
-          other: { bg: "#ECEFF1", text: "#263238", icon: "#607D8B" }
+          paynow: { bg: "#F3E5F5", text: "#4A148C", icon: "#9C27B0" },
+          nets: { bg: "#E8F5E9", text: "#1B5E20", icon: "#4CAF50" }
         };
+        
+        // Check if method exists in our colors object, if not use 'cash'
+        if (!colors[method]) {
+          method = 'cash';
+        }
         
         let icon;
         switch(method) {
           case 'cash':
             icon = <FontAwesomeIcon icon={faMoneyBill} />;
             break;
-          case 'credit_card':
+          case 'paynow':
+            icon = <FontAwesomeIcon icon={faMobile} />; // Add import for faMobile
+            break;
+          case 'nets':
             icon = <FontAwesomeIcon icon={faCreditCard} />;
             break;
-          case 'debit_card':
-            icon = <FontAwesomeIcon icon={faIdCard} />;
-            break;
-          case 'transfer':
-            icon = <FontAwesomeIcon icon={faExchangeAlt} />;
-            break;
-          case 'check':
-            icon = <FontAwesomeIcon icon={faFileInvoiceDollar} />;
-            break;
           default:
-            icon = <FontAwesomeIcon icon={faWallet} />;
+            icon = <FontAwesomeIcon icon={faMoneyBill} />;
         }
         
         return (
@@ -228,6 +227,7 @@ const PaymentsPage = () => {
         return;
       }
   
+      // First get all payments
       const response = await fetch(`${API_URL}/jobsheets/payments`, {
         headers: {
           "Content-Type": "application/json",
@@ -236,49 +236,91 @@ const PaymentsPage = () => {
       });
   
       if (response.ok) {
-        const text = await response.text();
-        try {
-          const data = JSON.parse(text);
-          
-          // Add this code to fetch customer names for each payment
-          const enhancedPayments = await Promise.all(data.map(async (payment) => {
-            try {
-              // Get the jobsheet to find the customer
-              const jobsheetResponse = await fetch(`${API_URL}/jobsheets/${payment.jobsheet_id}`, {
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${token}`,
-                },
-              });
-              
-              if (jobsheetResponse.ok) {
-                const jobsheet = await jobsheetResponse.json();
-                return {
-                  ...payment,
-                  customer_name: jobsheet.customer_name || 'Unknown Customer'
-                };
+        const data = await response.json();
+        
+        // Get all unique jobsheet IDs from payments
+        const jobsheetIds = [...new Set(data.map(payment => payment.jobsheet_id))];
+        
+        // Create a map of jobsheet data
+        const jobsheetMap = {};
+        
+        // Fetch details for each jobsheet
+        await Promise.all(jobsheetIds.map(async (id) => {
+          try {
+            const jobsheetResponse = await fetch(`${API_URL}/jobsheets/${id}`, {
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+            });
+            
+            if (jobsheetResponse.ok) {
+              const jobsheet = await jobsheetResponse.json();
+              let determinedCustomerName = jobsheet.customer_name;
+
+              if (!determinedCustomerName && jobsheet.customer && typeof jobsheet.customer === 'object') {
+                determinedCustomerName = jobsheet.customer.name || `${jobsheet.customer.first_name || ''} ${jobsheet.customer.last_name || ''}`.trim();
               }
-              return payment;
-            } catch (error) {
-              console.error(`Error fetching details for payment ${payment.id}:`, error);
-              return payment;
+
+              if (!determinedCustomerName && jobsheet.customer_id) {
+                try {
+                  const customerApiUrl = `${API_URL}/customers/${jobsheet.customer_id}`;
+                  const customerResponse = await fetch(customerApiUrl, {
+                    headers: {
+                      "Content-Type": "application/json",
+                      Authorization: `Bearer ${token}`,
+                    },
+                  });
+                  if (customerResponse.ok) {
+                    const customerData = await customerResponse.json();
+                    if (customerData.name) {
+                      determinedCustomerName = customerData.name;
+                    } else if (customerData.first_name || customerData.last_name) {
+                      determinedCustomerName = `${customerData.first_name || ''} ${customerData.last_name || ''}`.trim();
+                    } else {
+                      determinedCustomerName = `Customer #${jobsheet.customer_id}`;
+                    }
+                  } else {
+                    console.error(`Failed to fetch customer ${jobsheet.customer_id} for jobsheet ${id}. Status: ${customerResponse.status}`);
+                    determinedCustomerName = `Customer #${jobsheet.customer_id}`; // Fallback if customer fetch fails
+                  }
+                } catch (custError) {
+                  console.error(`Error fetching customer ${jobsheet.customer_id} for jobsheet ${id}:`, custError);
+                  determinedCustomerName = `Customer #${jobsheet.customer_id}`; // Fallback on error
+                }
+              }
+              
+              jobsheetMap[id] = {
+                customer_name: determinedCustomerName || 'Unknown Customer',
+                vehicle_model: jobsheet.vehicle_model || jobsheet.vehicle?.model || 'Unknown Vehicle',
+                plate_number: jobsheet.plate_number || jobsheet.vehicle?.plate_number || 'Unknown Plate'
+              };
             }
-          }));
-          
-          setPayments(enhancedPayments || []);
-        } catch (e) {
-          console.error("Error parsing JSON:", e);
-        }
+          } catch (error) {
+            console.error(`Error fetching jobsheet ${id}:`, error);
+          }
+        }));
+        
+        // Enhance each payment with customer info from jobsheet map
+        const enhancedPayments = data.map(payment => ({
+          ...payment,
+          customer_name: jobsheetMap[payment.jobsheet_id]?.customer_name || 'Unknown Customer',
+          vehicle_model: jobsheetMap[payment.jobsheet_id]?.vehicle_model,
+          plate_number: jobsheetMap[payment.jobsheet_id]?.plate_number
+        }));
+        
+        setPayments(enhancedPayments);
       } else {
-        const errorText = await response.text();
-        console.error("Error response:", errorText);
+        console.error("Failed to fetch payments");
+        setPayments([]);
       }
     } catch (error) {
       console.error("Network error fetching payments:", error);
+      setPayments([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [API_URL]);
 
   const fetchJobsheets = async () => {
     try {
@@ -798,7 +840,7 @@ const PaymentsPage = () => {
                         gridTemplateColumns: "repeat(3, 1fr)",
                         gap: "10px"
                       }}>
-                        {paymentMethods.map((method) => (
+                  {paymentMethods.map((method) => (
                           <div 
                             key={method}
                             onClick={() => setFormData({...formData, method})}
@@ -830,7 +872,7 @@ const PaymentsPage = () => {
                               color: formData.method === method ? "#5932EA" : "#555",
                               textTransform: "capitalize"
                             }}>
-                              {method.replace('_', ' ')}
+                              {method}
                             </div>
                           </div>
                         ))}

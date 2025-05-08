@@ -66,10 +66,56 @@ class JobsheetController {
   static async getJobsheetById(req, res) {
     try {
       const { id } = req.params;
-      const jobsheet = await JobsheetService.getJobsheetById(id);
-      res.json(jobsheet);
+      const jobsheetData = await JobsheetService.getJobsheetById(id);
+
+      if (!jobsheetData) {
+        return res.status(404).json({ error: 'Jobsheet not found' });
+      }
+
+      // Enrich the single jobsheet with customer and vehicle details
+      let customer = null;
+      let vehicle = null;
+      const isWalkin = !jobsheetData.vehicle_id && !jobsheetData.customer_id;
+
+      try {
+        if (jobsheetData.customer_id) {
+          customer = await CustomerService.getCustomerById(jobsheetData.customer_id);
+        }
+      } catch (error) {
+        console.error(`Error fetching customer ${jobsheetData.customer_id} for jobsheet ${id}:`, error.message);
+        // Do not throw, allow fallback in enrichment
+      }
+
+      try {
+        if (jobsheetData.vehicle_id) {
+          vehicle = await VehicleService.getVehicleById(jobsheetData.vehicle_id);
+        }
+      } catch (error) {
+        console.error(`Error fetching vehicle ${jobsheetData.vehicle_id} for jobsheet ${id}:`, error.message);
+        // Do not throw, allow fallback in enrichment
+      }
+
+      const enrichedJobsheet = {
+        ...jobsheetData,
+        customer_name: isWalkin
+          ? "Walk-in"
+          : (customer
+              ? (customer.name || `${customer.first_name || ''} ${customer.last_name || ''}`.trim() || (jobsheetData.customer_id ? `Customer #${jobsheetData.customer_id}` : 'Customer data incomplete'))
+              : (jobsheetData.customer_id ? `Customer #${jobsheetData.customer_id}` : 'Customer unknown')),
+        vehicle_model: isWalkin
+          ? "N/A"
+          : (vehicle
+              ? `${vehicle.make || ''} ${vehicle.model || ''}`.trim()
+              : 'No vehicle'),
+        // Ensure you use the correct field name for plate number, consistent with getAllJobsheets
+        license_plate: isWalkin 
+          ? "N/A" 
+          : (vehicle ? vehicle.plate : 'No plate') 
+      };
+      
+      res.json(enrichedJobsheet);
     } catch (err) {
-      console.error('Error in getJobsheetById:', err);
+      console.error('Error in getJobsheetById:', err.message);
       if (err.message === 'Jobsheet not found') {
         res.status(404).json({ error: err.message });
       } else {

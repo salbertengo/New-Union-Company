@@ -9,6 +9,7 @@ import JobsheetPage from './pages/jobsheetPage';
 import PaymentsPage from './pages/paymentsPage';
 import VehiclesPage from './pages/vehiclesPage';
 import UserManagement from './pages/userManagementPage';
+import DashboardPage from './pages/dashboardPage';
 // Protected route component for admin-only routes
 const AdminRoute = ({ children }) => {
   const { isLoggedIn, isAdmin, loading } = useAuth();
@@ -60,6 +61,14 @@ function AppContent() {
           element={
             <AdminRoute>
               <Inventory />
+            </AdminRoute>
+          }
+        />
+                <Route
+          path="/dashboard"
+          element={
+            <AdminRoute>
+              <DashboardPage />
             </AdminRoute>
           }
         />

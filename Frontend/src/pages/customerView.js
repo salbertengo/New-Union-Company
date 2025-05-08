@@ -132,7 +132,8 @@ const CustomersView = () => {
     { 
       headerName: 'Name', 
       field: 'name', 
-      flex: 2, 
+      flex: 2,
+      width: 180,
       sortable: true,
       headerClass: 'custom-header-inventory',
       cellRenderer: params => (
@@ -150,7 +151,8 @@ const CustomersView = () => {
     { 
       headerName: 'Phone', 
       field: 'phone', 
-      flex: 1, 
+      flex: 1,
+      width: 120,
       sortable: true,
       headerClass: 'custom-header-inventory',
       cellRenderer: params => (
@@ -162,7 +164,8 @@ const CustomersView = () => {
     { 
       headerName: 'Email', 
       field: 'email', 
-      flex: 2, 
+      flex: 2,
+      width: 180,
       sortable: true,
       headerClass: 'custom-header-inventory',
       cellRenderer: params => (
@@ -174,7 +177,8 @@ const CustomersView = () => {
     { 
       headerName: 'Address', 
       field: 'address', 
-      flex: 2, 
+      flex: 2,
+      width: 220,
       sortable: true,
       headerClass: 'custom-header-inventory',
       cellRenderer: params => (
@@ -185,7 +189,7 @@ const CustomersView = () => {
     },
     {
       headerName: 'Actions',
-      field: 'actions', // Add this field property
+      field: 'actions',
       width: 120,
       sortable: false,
       filter: false,
@@ -214,6 +218,7 @@ const CustomersView = () => {
       headerName: 'License Plate', 
       field: 'plate', 
       flex: 1,
+      width: 120,
       sortable: true,
       cellRenderer: params => (
         <div style={{ 
@@ -228,11 +233,12 @@ const CustomersView = () => {
       headerName: 'Model', 
       field: 'model', 
       flex: 2,
+      width: 200,
       sortable: true
     },
     {
       headerName: 'Actions',
-      field: 'actions', // Add this field property
+      field: 'actions',
       width: 120,
       sortable: false,
       cellRenderer: params => (
@@ -435,54 +441,53 @@ const CustomersView = () => {
     }
   };
 
-  // Fix the handleSaveVehicle function
-const handleSaveVehicle = async (vehicle) => {
-  try {
-    if (!vehicle.customer_id) {
-      console.error("Missing customer_id in vehicle data");
-      showNotification("Error: Missing customer association", "error");
-      return;
+  const handleSaveVehicle = async (vehicle) => {
+    try {
+      if (!vehicle.customer_id) {
+        console.error("Missing customer_id in vehicle data");
+        showNotification("Error: Missing customer association", "error");
+        return;
+      }
+      
+      const token = localStorage.getItem('token');
+      const method = vehicle.id ? 'PUT' : 'POST';
+      const url = vehicle.id ? `${API_URL}/vehicles/${vehicle.id}` : `${API_URL}/vehicles`;
+      
+      // Use the customer_id from the form data directly
+      const vehicleData = {
+        plate: vehicle.plate,
+        model: vehicle.model,
+        customer_id: vehicle.customer_id // Use from the form data
+      };
+      
+      console.log("Sending vehicle data:", vehicleData);
+      
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(vehicleData)
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error("Server error details:", errorData);
+        throw new Error(`Server error: ${errorData.message || response.status}`);
+      }
+      
+      setShowVehicleModal(false);
+      await fetchVehicles(vehicle.customer_id);
+      showNotification(
+        vehicle.id ? 'Vehicle updated successfully' : 'Vehicle created successfully', 
+        'success'
+      );
+    } catch (error) {
+      console.error('Error saving vehicle:', error);
+      showNotification(`Error saving vehicle: ${error.message}`, 'error');
     }
-    
-    const token = localStorage.getItem('token');
-    const method = vehicle.id ? 'PUT' : 'POST';
-    const url = vehicle.id ? `${API_URL}/vehicles/${vehicle.id}` : `${API_URL}/vehicles`;
-    
-    // Use the customer_id from the form data directly
-    const vehicleData = {
-      plate: vehicle.plate,
-      model: vehicle.model,
-      customer_id: vehicle.customer_id // Use from the form data
-    };
-    
-    console.log("Sending vehicle data:", vehicleData);
-    
-    const response = await fetch(url, {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify(vehicleData)
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error("Server error details:", errorData);
-      throw new Error(`Server error: ${errorData.message || response.status}`);
-    }
-    
-    setShowVehicleModal(false);
-    await fetchVehicles(vehicle.customer_id);
-    showNotification(
-      vehicle.id ? 'Vehicle updated successfully' : 'Vehicle created successfully', 
-      'success'
-    );
-  } catch (error) {
-    console.error('Error saving vehicle:', error);
-    showNotification(`Error saving vehicle: ${error.message}`, 'error');
-  }
-};
+  };
 
   // Helper functions
   const showNotification = (message, type) => {
@@ -501,7 +506,6 @@ const handleSaveVehicle = async (vehicle) => {
     };
   }, [fetchCustomers]);
 
-  // Render
   return (
     <div
       style={{
@@ -524,19 +528,19 @@ const handleSaveVehicle = async (vehicle) => {
           marginBottom: '20px'
         }}
       >
-        <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '600' }}>Customers</h2>
+        <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '600' }}>Customers</h2>
         <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
           <div style={{ position: 'relative' }}>
             <input
               type="text"
               placeholder="Search customers..."
               style={{
-                padding: '10px 15px 10px 40px',
-                width: '250px',
+                padding: '5px 30px 5px 10px',
+                width: '216px',
                 borderRadius: '10px',
                 border: '1px solid #e0e0e0',
                 backgroundColor: '#F9FBFF',
-                height: '40px',
+                height: '25px',
                 fontSize: '14px'
               }}
               value={searchTerm}
@@ -546,7 +550,7 @@ const handleSaveVehicle = async (vehicle) => {
               icon={faSearch} 
               style={{
                 position: 'absolute',
-                left: '15px',
+                right: '10px',
                 top: '50%',
                 transform: 'translateY(-50%)',
                 color: loading ? '#4321C9' : '#6E6E6E',
@@ -563,7 +567,7 @@ const handleSaveVehicle = async (vehicle) => {
               backgroundColor: '#5932EA',
               color: 'white',
               border: 'none',
-              borderRadius: '10px',
+              borderRadius: '5px',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
@@ -605,11 +609,12 @@ const handleSaveVehicle = async (vehicle) => {
             modules={[ClientSideRowModelModule]}
             pagination={true}
             paginationPageSize={12}
-            headerHeight={40}
-            rowHeight={60}
+            headerHeight={30}
+            rowHeight={50}
             domLayout={'autoHeight'}
             onGridReady={(params) => {
               gridRef.current = params.api;
+              gridRef.current.sizeColumnsToFit();
             }}
             suppressRowClickSelection={true}
             rowSelection="single"

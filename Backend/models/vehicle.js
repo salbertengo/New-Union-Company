@@ -5,7 +5,7 @@ class VehicleModel {
     const [rows] = await pool.query(`
       SELECT v.*, c.name as customer_name 
       FROM vehicles v
-      JOIN customers c ON v.customer_id = c.id
+      LEFT JOIN customers c ON v.customer_id = c.id 
       ORDER BY v.plate
     `);
     return rows;

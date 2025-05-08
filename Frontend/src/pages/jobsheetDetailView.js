@@ -16,6 +16,36 @@ const WORKFLOW_KEYWORDS = {
   "hp payment 2": { id: "6", defaultDescription: "HP Payment 2" }
 };
 
+const SearchResultItem = ({ item, onSelect }) => (
+  <div
+    onClick={() => onSelect(item)}
+    style={{
+      padding: "8px 12px",
+      borderBottom: "1px solid #f0f0f0",
+      cursor: "pointer",
+      backgroundColor: "white"
+    }}
+    onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#f9f9f9"}
+    onMouseOut={(e) => e.currentTarget.style.backgroundColor = "white"}
+  >
+    <div style={{ fontWeight: "500", fontSize: "14px" }}>{item.name}</div>
+    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", marginTop: "2px" }}>
+      <span style={{
+        color: parseInt(item.stock) > 0 ? "#2e7d32" : "#c62828",
+        fontWeight: "500"
+      }}>
+        Stock: {item.stock ? Number(item.stock).toFixed(0) : '0'}
+      </span>
+      {!item.isLabourItem && (
+        <span style={{ display: 'flex', gap: '10px' }}>
+          <span>Cost: ${parseFloat(item.cost || 0).toFixed(2)}</span>
+          <span>Sale: ${parseFloat(item.sale || 0).toFixed(2)}</span>
+        </span>
+      )}
+    </div>
+  </div>
+);
+
 const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobsheets, isModal = false, isNew: propIsNew = false }) => {
   const [internalJobsheetId, setInternalJobsheetId] = useState(propJobsheetId);
   const [internalIsNew, setInternalIsNew] = useState(propIsNew);
@@ -54,6 +84,11 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
 
   const [activeInputMode, setActiveInputMode] = useState("search"); // 'search', 'labor', 'workflowSpecific'
   const [currentWorkflowKeywordInfo, setCurrentWorkflowKeywordInfo] = useState(null);
+  
+  const [selectedProductForAdding, setSelectedProductForAdding] = useState(null);
+  const [editingCell, setEditingCell] = useState({ itemId: null, field: null });
+  const [editValue, setEditValue] = useState("");
+  const quantityInputRef = useRef(null);
   
   const printableContentRef = useRef(null);
   const API_URL = process.env.REACT_APP_API_URL;
@@ -547,13 +582,10 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
   };
 
   const getLaborCategoryName = (workflowType) => {
-    // Añadir log para ver qué tipo de workflow está procesando
-    
     if (workflowType === "1" || workflowType === 1 || !workflowType) {
       return "General Labor";
     }
     
-    // Mejorar esta búsqueda para considerar valores numéricos o strings
     const keywordEntry = Object.values(WORKFLOW_KEYWORDS).find(entry => 
       entry.id === workflowType || entry.id === String(workflowType)
     );
@@ -618,6 +650,7 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
   const handleSearch = (e) => {
     const term = e.target.value;
     setInventorySearchTerm(term);
+    setSelectedProductForAdding(null);
     const lowerTerm = term.toLowerCase().trim();
 
     if (lowerTerm === "labor") {
@@ -673,7 +706,23 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
     }
   };
 
-  const handleSelectItem = async (selectedItem) => {
+  const handleProductSelectedFromSearch = (product) => {
+    setSelectedProductForAdding(product);
+    setInventorySearchTerm(product.name);
+    setSearchResults([]);
+    setNewItemQuantity(1);
+    if (quantityInputRef.current) {
+      quantityInputRef.current.focus();
+      quantityInputRef.current.select();
+    }
+    setActiveInputMode("search");
+  };
+  
+  const handleAddItemToJobsheet = async () => {
+    if (!selectedProductForAdding) {
+      showNotification("Please select a product first", "error");
+      return;
+    }
     if (isReadOnly) {
       showNotification(`This order is ${jobsheet?.state} and cannot be modified`, "error");
       return;
@@ -688,13 +737,17 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
       }
       
       const quantity = parseInt(newItemQuantity) || 1;
+      if (quantity <= 0) {
+        showNotification("Quantity must be at least 1", "error");
+        return;
+      }
   
       const itemData = {
         jobsheet_id: effectiveJobsheetId,
-        product_id: selectedItem.id,
+        product_id: selectedProductForAdding.id,
         quantity: quantity,
-        price: selectedItem.sale,
-        description: selectedItem.description || ""
+        price: selectedProductForAdding.sale,
+        description: selectedProductForAdding.description || selectedProductForAdding.name
       };
   
       const response = await fetch(`${API_URL}/jobsheets/items`, {
@@ -711,26 +764,80 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
         setInventorySearchTerm("");
         setSearchResults([]);
         setNewItemQuantity(1);
+        setSelectedProductForAdding(null);
         showNotification("Item added successfully", "success");
       } else {
-        console.error("Failed to add item:", response.status);
         const errorText = await response.text();
-        console.error("Error details:", errorText);
-        showNotification(`Failed to add item: ${response.status}`, "error");
+        handleApiError(errorText, "Failed to add item");
       }
     } catch (error) {
-      console.error("Error adding item:", error);
-      showNotification("Error adding item", "error");
+      handleApiError(error, "Error adding item");
+    }
+  };
+
+  const handleUpdateItemQuantity = async (itemToUpdate) => {
+    if (isReadOnly || itemToUpdate.isLabor) return;
+
+    const newQuantity = parseInt(editValue);
+
+    if (isNaN(newQuantity) || newQuantity <= 0) {
+      showNotification("Invalid quantity. Must be a number greater than 0.", "error");
+      setEditingCell({ itemId: null, field: null });
+      setEditValue("");
+      return;
+    }
+
+    if (newQuantity === itemToUpdate.quantity) {
+      setEditingCell({ itemId: null, field: null });
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+
+      const response = await fetch(`${API_URL}/jobsheets/items/${itemToUpdate.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ 
+          quantity: newQuantity,
+          price: itemToUpdate.price
+        }),
+      });
+
+      if (response.ok) {
+        await fetchItems(token);
+        showNotification("Quantity updated successfully", "success");
+      } else {
+        const errorText = await response.text();
+        handleApiError(errorText, "Failed to update quantity");
+      }
+    } catch (error) {
+      handleApiError(error, "Error updating quantity");
+    } finally {
+      setEditingCell({ itemId: null, field: null });
+      setEditValue("");
     }
   };
 
   const handleAddLabor = async (description, price, workflowTypeId = "1") => {
     if (isReadOnly) {
-      showNotification(`This order is ${jobsheet?.state} and cannot be modified`, "error");
+      showNotification(`This order is ${jobsheet?.state} and cannot be modified.`, "error");
       return;
     }
-    if (!description || !price) {
-      showNotification("Please provide a description and price", "error");
+    if (!description && workflowTypeId === "1") { // Solo requerir descripción para labor genérico
+      showNotification("Labor description is required.", "error");
+      return;
+    }
+    if (!price || parseFloat(price) <= 0) {
+      showNotification("A valid price is required.", "error");
+      return;
+    }
+    if (!effectiveJobsheetId) {
+      showNotification("Cannot add: No active jobsheet.", "error");
       return;
     }
 
@@ -740,11 +847,11 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
 
       const laborData = {
         jobsheet_id: effectiveJobsheetId,
-        description: description,
+        description: description || WORKFLOW_KEYWORDS[Object.keys(WORKFLOW_KEYWORDS).find(key => WORKFLOW_KEYWORDS[key].id === workflowTypeId)]?.defaultDescription || "Service Charge",
         price: parseFloat(price),
-        is_completed: 1,
+        is_completed: 1, // Por defecto se marca como completado y facturable
         is_billed: 1,
-        workflow_type: workflowTypeId
+        workflow_type: workflowTypeId,
       };
 
       const response = await fetch(`${API_URL}/labor`, {
@@ -757,22 +864,24 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
       });
 
       if (response.ok) {
-        await fetchLabors(token);
+        await fetchLabors(token); // Asumiendo que tienes fetchLabors para refrescar
+        showNotification(`${laborData.description} added successfully.`, "success");
+        // Resetear campos específicos del modo
+        setInventorySearchTerm(""); // Limpiar búsqueda para salir del modo labor/workflow
+        setActiveInputMode("search"); // Volver al modo búsqueda
         setNewMiscName("");
         setNewMiscPrice("");
-        setInventorySearchTerm("");
-        setActiveInputMode("search");
         setCurrentWorkflowKeywordInfo(null);
-        showNotification(`${getWorkflowTypeName(workflowTypeId)} added successfully`, "success");
       } else {
-        console.error("Failed to add labor/charge:", response.status);
-        showNotification("Failed to add service/charge", "error");
+        const errorData = await response.json();
+        showNotification(errorData.error || "Failed to add labor/service.", "error");
       }
     } catch (error) {
-      console.error("Error adding labor/charge:", error);
-      showNotification("Error adding service/charge", "error");
+      console.error("Error adding labor/service:", error);
+      showNotification("Error adding labor/service.", "error");
     }
   };
+
 
   const handleDeleteItem = async (itemId) => {
     if (isReadOnly) {
@@ -1663,182 +1772,201 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
         flex: 1
       }} ref={printableContentRef}>
         <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-          <div style={{ 
-            backgroundColor: "white",
-            padding: "15px",
-            borderRadius: "8px",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-            opacity: isReadOnly ? 0.6 : 1,
-            pointerEvents: isReadOnly ? "none" : "auto"
-          }}>
-            <h3 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 600 }}>
-              {isReadOnly && <span style={{color: "#2e7d32", marginRight: "8px"}}>✓</span>}
-              Add Products/Services/Charges
-              {isReadOnly && <span style={{fontSize: "12px", color: "#666", marginLeft: "10px"}}>
-                ({jobsheet?.state === "cancelled" ? "Cancelled" : "Completed"} - No Changes Allowed)
-              </span>}
-            </h3>
-            
-            {isReadOnly ? (
-              <div style={{
-                padding: "15px",
-                backgroundColor: "#f9f9f9",
-                borderRadius: "4px",
-                textAlign: "center",
-                color: "#666"
-              }}>
-                This order has been {jobsheet?.state === "cancelled" ? "cancelled" : "completed"} and cannot be modified.
-              </div>
-            ) : (
-              <>
-                <div style={{ 
-                  display: "grid", 
-                  gridTemplateColumns: "1fr auto", 
-                  gap: "8px", 
-                  marginBottom: "10px" 
-                }}>
-                  <input
-                    type="text"
-                    value={inventorySearchTerm}
-                    onChange={handleSearch}
-                    placeholder="Search product or type 'labor', 'insurance', etc."
-                    style={{ 
-                      padding: "8px", 
-                      borderRadius: "4px",
-                      border: "1px solid #ddd" 
-                    }}
-                  />
-                  <input
-                    type="number"
-                    value={newItemQuantity}
-                    onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)}
-                    min="1"
-                    placeholder="Qty"
-                    style={{ 
-                      padding: "8px", 
-                      borderRadius: "4px",
-                      border: "1px solid #ddd",
-                      backgroundColor: activeInputMode === 'search' ? 'white' : '#f0f0f0',
-                      pointerEvents: activeInputMode === 'search' ? "auto" : "none"
-                    }}
-                    disabled={activeInputMode !== 'search'}
-                  />
-                </div>
+
+<div style={{ 
+  backgroundColor: "white",
+  padding: "15px",
+  borderRadius: "8px",
+  boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+
+}}>
+  <h3 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 600 }}>
+    {isReadOnly && <span style={{color: "#2e7d32", marginRight: "8px"}}>✓</span>}
+    Add Products/Services/Charges
+    {isReadOnly && <span style={{fontSize: "12px", color: "#666", marginLeft: "10px"}}>
+      ({jobsheet?.state === "cancelled" ? "Cancelled" : "Completed"} - No Changes Allowed)
+    </span>}
+  </h3>
   
-                {activeInputMode === 'search' && searchResults.length > 0 && (
-                  <div style={{
-                    border: "1px solid #eee",
-                    borderRadius: "4px",
-                    marginBottom: "10px",
-                    maxHeight: "200px",
-                    overflowY: "auto"
-                  }}>
-                    {searchResults.map(item => (
-                      <div 
-                        key={item.id}
-                        onClick={() => handleSelectItem(item)}
-                        style={{
-                          padding: "8px 12px",
-                          borderBottom: "1px solid #f0f0f0",
-                          cursor: "pointer",
-                          backgroundColor: "white"
-                        }}
-                        onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#f9f9f9"}
-                        onMouseOut={(e) => e.currentTarget.style.backgroundColor = "white"}
-                      >
-                        <div style={{ fontWeight: "500", fontSize: "14px" }}>{item.name}</div>
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", marginTop: "2px" }}>
-                          <span style={{ 
-                            color: parseInt(item.stock) > 0 ? "#2e7d32" : "#c62828",
-                            fontWeight: "500"
-                          }}>
-                            Stock: {item.stock ? Number(item.stock).toFixed(0) : '0'}
-                          </span>
-                          {!item.isLabourItem && (
-                            <span style={{ display: 'flex', gap: '10px' }}>
-                              <span>Cost: ${parseFloat(item.cost || 0).toFixed(2)}</span>
-                              <span>Sale: ${parseFloat(item.sale || 0).toFixed(2)}</span>
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+  {isReadOnly ? (
+    <div style={{
+      padding: "15px",
+      backgroundColor: "#f9f9f9",
+      borderRadius: "4px",
+      textAlign: "center",
+      color: "#666"
+    }}>
+      This order has been {jobsheet?.state === "cancelled" ? "cancelled" : "completed"} and cannot be modified.
+    </div>
+  ) : (
+    <>
+      {/* Sección de búsqueda de productos y cantidad (modo 'search') */}
+      {activeInputMode === 'search' && (
+        <div style={{ 
+          display: "grid", 
+          gridTemplateColumns: selectedProductForAdding ? "1fr auto auto" : "1fr auto", 
+          gap: "8px", 
+          marginBottom: "10px",
+          alignItems: "center"
+        }}>
+          <input
+            type="text"
+            value={inventorySearchTerm}
+            onChange={handleSearch}
+            placeholder={selectedProductForAdding ? `Selected: ${selectedProductForAdding.name}` : "Search product or type 'labor', 'insurance', etc."}
+            style={{ 
+              padding: "8px", 
+              borderRadius: "4px",
+              border: selectedProductForAdding ? "1px solid #5932EA" : "1px solid #ddd",
+              backgroundColor: selectedProductForAdding ? "#f0f7ff" : "white",
+            }}
+          />
+          <input
+            ref={quantityInputRef}
+            type="number"
+            value={newItemQuantity}
+            onChange={(e) => setNewItemQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+            min="1"
+            placeholder="Qty"
+            style={{ 
+              padding: "8px", 
+              borderRadius: "4px",
+              border: selectedProductForAdding ? "1px solid #5932EA" : "1px solid #ddd",
+              width: "70px",
+              textAlign: "center",
+              backgroundColor: 'white',
+            }}
+          />
+          {selectedProductForAdding && (
+            <button
+              onClick={handleAddItemToJobsheet}
+              style={{
+                padding: "8px 12px",
+                backgroundColor: "#5932EA",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                cursor: "pointer",
+                fontSize: "13px",
+                display: "flex",
+                alignItems: "center",
+                gap: "5px"
+              }}
+            >
+              <FontAwesomeIcon icon={faPlus} size="sm" />
+              Add
+            </button>
+          )}
+        </div>
+      )}
 
-                {(activeInputMode === 'labor' || activeInputMode === 'workflowSpecific') && (
-                  <div style={{
-                    padding: "10px",
-                    backgroundColor: activeInputMode === 'labor' ? "#f5f5f5" : 
-                                     (currentWorkflowKeywordInfo ? "#E0F7FA" : "#f5f5f5"),
-                    borderRadius: "4px",
-                    marginTop: "10px",
-                    border: `1px solid ${activeInputMode === 'labor' ? "#e0e0e0" : 
-                                        (currentWorkflowKeywordInfo ? "#B2EBF2" : "#e0e0e0")}`
-                  }}>
-                    <div style={{ marginBottom: "10px" }}>
-                      <label style={{ display: "block", marginBottom: "5px", fontSize: "13px", fontWeight: "500" }}>
-                        {activeInputMode === 'labor' ? "Labor Description" : 
-                         (currentWorkflowKeywordInfo ? currentWorkflowKeywordInfo.defaultDescription : "Description")
-                        }
-                      </label>
-                      <input
-                        type="text"
-                        value={newMiscName}
-                        onChange={e => setNewMiscName(e.target.value)}
-                        placeholder={activeInputMode === 'labor' ? "e.g. Oil change, Brake service" : "Enter description"}
-                        style={{ width: "100%", padding: "8px", borderRadius: "4px", border: "1px solid #ddd" }}
-                      />
-                    </div>
+      {activeInputMode === 'search' && searchResults.length > 0 && !selectedProductForAdding && (
+        <div style={{
+          border: "1px solid #eee",
+          borderRadius: "4px",
+          marginBottom: "10px",
+          maxHeight: "200px",
+          overflowY: "auto"
+        }}>
+          {searchResults.map(item => (
+            <SearchResultItem 
+              key={item.id} 
+              item={item} 
+              onSelect={handleProductSelectedFromSearch} 
+            />
+          ))}
+        </div>
+      )}
 
-                    <div style={{ marginBottom: "10px" }}>
-                      <label style={{ display: "block", marginBottom: "5px", fontSize: "13px", fontWeight: "500" }}>
-                        Price ($)
-                      </label>
-                      <input
-                        type="number"
-                        value={newMiscPrice}
-                        onChange={e => setNewMiscPrice(e.target.value)}
-                        placeholder="0.00"
-                        step="0.01"
-                        min="0"
-                        style={{ width: "100%", padding: "8px", borderRadius: "4px", border: "1px solid #ddd" }}
-                      />
-                    </div>
+      {/* Sección para añadir Labor (modo 'labor') */}
+      {activeInputMode === 'labor' && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: "8px", marginBottom: "10px", alignItems: "center" }}>
+          <input
+            type="text"
+            placeholder="Labor Description"
+            value={newMiscName}
+            onChange={(e) => setNewMiscName(e.target.value)}
+            style={{ padding: "8px", borderRadius: "4px", border: "1px solid #ddd" }}
+          />
+          <input
+            type="number"
+            placeholder="Price"
+            value={newMiscPrice}
+            onChange={(e) => setNewMiscPrice(e.target.value)}
+            min="0"
+            step="0.01"
+            style={{ padding: "8px", borderRadius: "4px", border: "1px solid #ddd", width: "100px" }}
+          />
+          <button
+            onClick={() => handleAddLabor(newMiscName, newMiscPrice, "1")}
+            style={{ padding: "8px 12px", backgroundColor: "#5932EA", color: "white", border: "none", borderRadius: "4px", cursor: "pointer" }}
+          >
+            Add Labor
+          </button>
+        </div>
+      )}
 
-                    <button
-                      onClick={() => handleAddLabor(
-                        newMiscName, 
-                        newMiscPrice, 
-                        activeInputMode === 'workflowSpecific' && currentWorkflowKeywordInfo ? currentWorkflowKeywordInfo.id : "1"
-                      )}
-                      style={{
-                        width: "100%",
-                        padding: "8px",
-                        backgroundColor: activeInputMode === 'labor' 
-                                         ? getWorkflowButtonColor("1") 
-                                         : (currentWorkflowKeywordInfo ? getWorkflowButtonColor(currentWorkflowKeywordInfo.id) : getWorkflowButtonColor("1")),
-                        color: "white",
-                        border: "none",
-                        borderRadius: "4px",
-                        cursor: "pointer",
-                        fontSize: "13px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: "6px"
-                      }}
-                    >
-                      <FontAwesomeIcon icon={faPlus} size="sm" />
-                      {activeInputMode === 'labor' ? "Add Labor Service" : 
-                       (currentWorkflowKeywordInfo ? `Add ${getWorkflowTypeName(currentWorkflowKeywordInfo.id)}` : "Add Charge")
-                      }
-                    </button>
-                  </div>
-                )}
-              </>
-            )}
+      {/* Sección para añadir Workflow Específico (modo 'workflowSpecific') */}
+      {activeInputMode === 'workflowSpecific' && currentWorkflowKeywordInfo && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: "8px", marginBottom: "10px", alignItems: "center" }}>
+          <input
+            type="text"
+            placeholder="Description"
+            value={newMiscName} // Ya está pre-llenado con currentWorkflowKeywordInfo.defaultDescription
+            onChange={(e) => setNewMiscName(e.target.value)} // Permitir edición si es necesario
+            style={{ padding: "8px", borderRadius: "4px", border: "1px solid #ddd" }}
+          />
+          <input
+            type="number"
+            placeholder="Amount"
+            value={newMiscPrice}
+            onChange={(e) => setNewMiscPrice(e.target.value)}
+            min="0"
+            step="0.01"
+            style={{ padding: "8px", borderRadius: "4px", border: "1px solid #ddd", width: "100px" }}
+          />
+          <button
+            onClick={() => handleAddLabor(newMiscName, newMiscPrice, currentWorkflowKeywordInfo.id)}
+            style={{ padding: "8px 12px", backgroundColor: "#5932EA", color: "white", border: "none", borderRadius: "4px", cursor: "pointer" }}
+          >
+            Add {currentWorkflowKeywordInfo.defaultDescription.split(" ")[0]} {/* Ej: "Add Deposit" */}
+          </button>
+        </div>
+      )}
+      
+      {/* Input de búsqueda principal, solo visible si no estamos en modo labor/workflow */}
+      {(activeInputMode !== 'labor' && activeInputMode !== 'workflowSpecific') && inventorySearchTerm && !selectedProductForAdding && searchResults.length === 0 && (
+         <div style={{ padding: "8px", textAlign: "center", color: "#777", backgroundColor:"#f9f9f9", borderRadius:"4px", marginBottom:"10px" }}>
+              Type 'labor', 'deposit', 'insurance', 'hp payment', 'road tax' for specific charges, or search products.
+         </div>
+      )}
+       {/* Mensaje para limpiar la búsqueda y volver al modo normal */}
+       {(activeInputMode === 'labor' || activeInputMode === 'workflowSpecific') && (
+          <div style={{textAlign: "right", marginBottom:"10px"}}>
+              <button 
+                  onClick={() => {
+                      setInventorySearchTerm("");
+                      setActiveInputMode("search");
+                      setNewMiscName("");
+                      setNewMiscPrice("");
+                      setCurrentWorkflowKeywordInfo(null);
+                  }}
+                  style={{
+                      background: "none", 
+                      border: "none", 
+                      color: "#5932EA", 
+                      cursor: "pointer", 
+                      fontSize: "12px"
+                  }}
+              >
+                  Clear and search products
+              </button>
           </div>
+      )}
+    </>
+  )}
+</div>
+
 
           <div style={{ 
             backgroundColor: "white",
@@ -1868,12 +1996,48 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
                       <tr key={item.id} style={{ borderBottom: "1px solid #f8f8f8" }}>
                         <td style={{ padding: "8px 6px" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                            {/* La lógica para mostrar el tag de workflowName ha sido eliminada.
-                                Solo se mostrará item.name (que es labor.description) */}
                             {item.name}
                           </div>
                         </td>
-                        <td style={{ textAlign: "center", padding: "8px 6px" }}>{item.quantity}</td>
+                        <td 
+                          style={{ 
+                            textAlign: "center", 
+                            padding: "8px 6px", 
+                            cursor: (!item.isLabor && !isReadOnly) ? "pointer" : "default",
+                            backgroundColor: editingCell.itemId === item.id ? "#e3f2fd" : "transparent"
+                          }}
+                          onClick={() => {
+                            if (!item.isLabor && !isReadOnly) {
+                              setEditingCell({ itemId: item.id, field: 'quantity' });
+                              setEditValue(item.quantity.toString());
+                            }
+                          }}
+                        >
+                          {editingCell.itemId === item.id && editingCell.field === 'quantity' ? (
+                            <input
+                              type="number"
+                              value={editValue}
+                              onChange={(e) => setEditValue(e.target.value)}
+                              onBlur={() => handleUpdateItemQuantity(item)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleUpdateItemQuantity(item);
+                                if (e.key === 'Escape') setEditingCell({ itemId: null, field: null });
+                              }}
+                              style={{ 
+                                width: "50px", 
+                                textAlign: "center", 
+                                padding: "4px", 
+                                border: "1px solid #5932EA", 
+                                borderRadius: "3px",
+                                boxSizing: "border-box"
+                              }}
+                              autoFocus
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          ) : (
+                            item.quantity
+                          )}
+                        </td>
                         <td style={{ textAlign: "right", padding: "8px 6px" }}>${parseFloat(item.price).toFixed(2)}</td>
                         <td style={{ textAlign: "right", padding: "8px 6px", fontWeight: "500" }}>
                           ${(parseFloat(item.price) * item.quantity).toFixed(2)}
@@ -2140,8 +2304,8 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
                     style={{ padding: "8px", borderRadius: "4px", border: "1px solid #ddd" }}
                   >
                     <option value="cash">Cash</option>
-                    <option value="credit_card">Paynow</option>
-                    <option value="debit_card">Other</option>
+                    <option value="paynow">Paynow</option>
+                    <option value="nets">Nets</option>
                   </select>
                 </div>
                 

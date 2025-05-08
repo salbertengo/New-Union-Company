@@ -13,6 +13,19 @@ class LaborModel {
       throw error;
     }
   }
+  
+  async getById(id) {
+    try {
+      const [rows] = await pool.query('SELECT * FROM labor WHERE id = ?', [id]);
+      if (rows.length === 0) {
+        return null;
+      }
+      return rows[0]; 
+    } catch (error) {
+      console.error(`Error in LaborModel.getById for id ${id}:`, error);
+      throw error;
+    }
+  }
 
   async add(data) {
     try {
@@ -57,7 +70,6 @@ class LaborModel {
         [result.insertId]
       );
       
-      console.log("Labor insertado en BD:", insertedRow[0]);
       
       return {
         id: result.insertId,
