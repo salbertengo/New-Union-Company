@@ -15,8 +15,9 @@ import {
   faMobileAlt,
   faFileExcel,
   faDownload,
-      faTimes,
-  faSearch
+  faTimes,
+  faSearch,
+  faTable
 } from "@fortawesome/free-solid-svg-icons";
 import * as XLSX from 'xlsx';
 import { format } from 'date-fns';
@@ -26,9 +27,21 @@ import "@fortawesome/fontawesome-svg-core/styles.css";
 
 const DashboardView = () => {
   // State
-  const today = new Date().toISOString().split("T")[0];
-  const [startDate, setStartDate] = useState(today);
-  const [endDate, setEndDate] = useState(today);
+  const getTodayDates = () => {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayStartStr = todayStart.toISOString().split('T')[0];
+    
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+    const todayEndStr = todayEnd.toISOString().split('T')[0];
+    
+    return { start: todayStartStr, end: todayEndStr };
+  };
+
+  const todayDates = getTodayDates();
+  const [startDate, setStartDate] = useState(todayDates.start);
+  const [endDate, setEndDate] = useState(todayDates.end);
   const [summaryData, setSummaryData] = useState({});
   const [exportData, setExportData] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -36,6 +49,7 @@ const DashboardView = () => {
   const [error, setError] = useState(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [paymentBreakdownData, setPaymentBreakdownData] = useState([]);
   const datePickerRef = useRef(null);
   const API_URL = process.env.REACT_APP_API_URL;
 
@@ -140,7 +154,7 @@ const DashboardView = () => {
       }
     };
     
-    const isToday = start === today && end === today;
+    const isToday = start === todayDates.start && end === todayDates.end;
     if (isToday) {
       return "Today";
     }
@@ -153,6 +167,7 @@ const DashboardView = () => {
 
   const handleApplyDates = () => {
     fetchDashboardData();
+    fetchPaymentBreakdownData();
     setShowDatePicker(false);
   };
 
@@ -164,12 +179,23 @@ const DashboardView = () => {
       if (!token) {
         throw new Error("No authentication token found");
       }
-
+  
+      // Ajustar la fecha de fin para incluir todo el día
+      let adjustedEndDate = endDate;
+      if (startDate === endDate) {
+        // Si estamos viendo un solo día, asegúrate de incluir todo el día
+        const endDateTime = new Date(endDate);
+        endDateTime.setHours(23, 59, 59, 999);
+        // No es necesario cambiar el formato para la API, solo asegúrate que la API
+        // interprete correctamente la fecha sin hora como día completo
+      }
+  
       const queryParams = new URLSearchParams({
         start_date: startDate,
-        end_date: endDate,
+        end_date: adjustedEndDate,
+        include_full_day: "true"  // Flag adicional para indicar al backend que incluya todo el día
       }).toString();
-
+  
       const summaryResponse = await fetch(
         `${API_URL}/reports/workflow-summary?${queryParams}`,
         {
@@ -260,6 +286,39 @@ const DashboardView = () => {
     }
   }, [API_URL, startDate, endDate]);
 
+  const fetchPaymentBreakdownData = useCallback(async () => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("No authentication token found");
+      }
+
+      const queryParams = new URLSearchParams({
+        start_date: startDate,
+        end_date: endDate,
+      }).toString();
+
+      const response = await fetch(
+        `${API_URL}/reports/workflow-payment-breakdown?${queryParams}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch payment breakdown data: ${response.status}`);
+      }
+
+      const result = await response.json();
+      setPaymentBreakdownData(result.data || []);
+    } catch (err) {
+      console.error("Payment breakdown data fetch error:", err);
+      setError((prev) => prev || "Failed to load payment breakdown data");
+    }
+  }, [API_URL, startDate, endDate]);
+
   const handleExport = () => {
     const workbookData = exportData.map(item => ({
       'Date': format(new Date(item.date), 'dd-MMM-yyyy'),
@@ -296,7 +355,8 @@ const DashboardView = () => {
 
   useEffect(() => {
     fetchDashboardData();
-  }, [fetchDashboardData]);
+    fetchPaymentBreakdownData();
+  }, [fetchDashboardData, fetchPaymentBreakdownData]);
 
   const totalRevenue = useMemo(() => {
     if (!summaryData || !summaryData.workflows) return 0;
@@ -442,24 +502,32 @@ const DashboardView = () => {
                 </div>
 
                 <div style={{ display: "flex", justifyContent: "space-between", marginTop: "16px" }}>
-                  <button
-                    onClick={() => {
-                      setStartDate(today);
-                      setEndDate(today);
-                      handleApplyDates();
-                    }}
-                    style={{
-                      padding: "8px 12px",
-                      fontSize: "13px",
-                      backgroundColor: "#f0f0f0",
-                      border: "none",
-                      borderRadius: "6px",
-                      cursor: "pointer",
-                      color: "#333",
-                    }}
-                  >
-                    Today
-                  </button>
+                <button
+  onClick={() => {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayStartStr = todayStart.toISOString().split('T')[0];
+    
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+    const todayEndStr = todayEnd.toISOString().split('T')[0];
+    
+    setStartDate(todayStartStr);
+    setEndDate(todayEndStr);
+    handleApplyDates();
+  }}
+  style={{
+    padding: "8px 12px",
+    fontSize: "13px",
+    backgroundColor: "#f0f0f0",
+    border: "none",
+    borderRadius: "6px",
+    cursor: "pointer",
+    color: "#333",
+  }}
+>
+  Today
+</button>
 
                   <button
                     onClick={handleApplyDates}
@@ -650,11 +718,7 @@ const DashboardView = () => {
         </div>
       </div>
 
-      <div
-        style={{
-          marginBottom: "30px",
-        }}
-      >
+      <div style={{ marginBottom: "30px" }}>
         <h3
           style={{
             margin: "0 0 20px 0",
@@ -663,223 +727,165 @@ const DashboardView = () => {
             color: "#333",
           }}
         >
-          Revenue by Payment Method
+          <FontAwesomeIcon 
+            icon={faTable} 
+            style={{ marginRight: "10px", color: "#5932EA" }} 
+          />
+          Daily Sale Collection Breakdown
         </h3>
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
-            gap: "16px",
+            backgroundColor: "white",
+            borderRadius: "12px",
+            boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
+            overflow: "hidden",
+            border: "1px solid #f0f0f0",
           }}
         >
-          {paymentMethods.map((payment) => {
-            const amount = parseFloat(
-              summaryData?.payment_methods?.[payment.id] || 0
-            );
-            const totalRevenueWithTax = totalRevenue + totalGst;
-            const percentage =
-              totalRevenueWithTax > 0 ? (amount / totalRevenueWithTax) * 100 : 0;
-            const barWidth = maxPaymentAmount > 0 ? (amount / maxPaymentAmount) * 100 : 0;
-
-            return (
-              <div
-                key={payment.id}
-                style={{
-                  borderRadius: "12px",
-                  padding: "16px",
-                  boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
-                  backgroundColor: "white",
-                  border: "1px solid #f0f0f0",
-                }}
-              >
-                <div
+          <table
+            style={{
+              width: "100%",
+              borderCollapse: "collapse",
+              fontSize: "14px",
+            }}
+          >
+            <thead>
+              <tr>
+                <th
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    marginBottom: "12px",
+                    padding: "14px 20px",
+                    textAlign: "left",
+                    borderBottom: "1px solid #eaeaea",
+                    backgroundColor: "#f9fafb",
                   }}
                 >
-                  <div
+                  Category
+                </th>
+                <th
+                  style={{
+                    padding: "14px 20px",
+                    textAlign: "right",
+                    borderBottom: "1px solid #eaeaea",
+                    backgroundColor: "#f9fafb",
+                    width: "20%",
+                  }}
+                >
+                  Cash
+                </th>
+                <th
+                  style={{
+                    padding: "14px 20px",
+                    textAlign: "right",
+                    borderBottom: "1px solid #eaeaea",
+                    backgroundColor: "#f9fafb",
+                    width: "20%",
+                  }}
+                >
+                  Paynow
+                </th>
+                <th
+                  style={{
+                    padding: "14px 20px",
+                    textAlign: "right",
+                    borderBottom: "1px solid #eaeaea",
+                    backgroundColor: "#f9fafb",
+                    width: "20%",
+                  }}
+                >
+                  Nets
+                </th>
+                <th
+                  style={{
+                    padding: "14px 20px",
+                    textAlign: "right",
+                    borderBottom: "1px solid #eaeaea",
+                    backgroundColor: "#f9fafb",
+                    width: "20%",
+                  }}
+                >
+                  Total
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {paymentBreakdownData.map((row, index) => (
+                <tr
+                  key={row.workflow_type}
+                  style={{
+                    backgroundColor: row.workflow_type === 'total' ? "#f9fafb" : "white",
+                    fontWeight: row.workflow_type === 'total' ? "600" : "normal",
+                  }}
+                >
+                  <td
                     style={{
-                      backgroundColor: payment.backgroundColor,
-                      color: payment.color,
-                      width: "36px",
-                      height: "36px",
-                      borderRadius: "8px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      marginRight: "12px",
-                      fontSize: "16px",
+                      padding: "12px 20px",
+                      borderBottom: "1px solid #eaeaea",
+                      borderTop: row.workflow_type === 'total' ? "2px solid #eaeaea" : "none",
                     }}
                   >
-                    <FontAwesomeIcon icon={payment.icon} />
-                  </div>
-                  <div>
-                    <h4
-                      style={{
-                        margin: "0 0 2px 0",
-                        fontSize: "16px",
-                        fontWeight: "600",
-                      }}
-                    >
-                      {payment.name}
-                    </h4>
-                    <div style={{ fontSize: "13px", color: "#666" }}>
-                      {payment.name} payments received
-                    </div>
-                  </div>
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    marginBottom: "8px",
-                  }}
-                >
-                  <div style={{ fontSize: "18px", fontWeight: "600" }}>
-                    ${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </div>
-                  <div style={{ fontSize: "14px", color: "#666" }}>
-                    {percentage.toFixed(1)}%
-                  </div>
-                </div>
-                <div
-                  style={{
-                    height: "6px",
-                    backgroundColor: "#f0f0f0",
-                    borderRadius: "3px",
-                    overflow: "hidden",
-                  }}
-                >
-                  <div
+                    {row.workflow_name}
+                  </td>
+                  <td
                     style={{
-                      width: `${barWidth}%`,
-                      height: "100%",
-                      backgroundColor: payment.color,
-                      borderRadius: "3px",
-                      transition: "width 1s ease-in-out",
+                      padding: "12px 20px",
+                      textAlign: "right",
+                      borderBottom: "1px solid #eaeaea",
+                      borderTop: row.workflow_type === 'total' ? "2px solid #eaeaea" : "none",
                     }}
-                  ></div>
-                </div>
-              </div>
-            );
-          })}
+                  >
+                    ${row.cash_amount.toLocaleString("en-US", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </td>
+                  <td
+                    style={{
+                      padding: "12px 20px",
+                      textAlign: "right",
+                      borderBottom: "1px solid #eaeaea",
+                      borderTop: row.workflow_type === 'total' ? "2px solid #eaeaea" : "none",
+                    }}
+                  >
+                    ${row.paynow_amount.toLocaleString("en-US", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </td>
+                  <td
+                    style={{
+                      padding: "12px 20px",
+                      textAlign: "right",
+                      borderBottom: "1px solid #eaeaea",
+                      borderTop: row.workflow_type === 'total' ? "2px solid #eaeaea" : "none",
+                    }}
+                  >
+                    ${row.nets_amount.toLocaleString("en-US", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </td>
+                  <td
+                    style={{
+                      padding: "12px 20px",
+                      textAlign: "right",
+                      borderBottom: "1px solid #eaeaea",
+                      borderTop: row.workflow_type === 'total' ? "2px solid #eaeaea" : "none",
+                      fontWeight: "600",
+                    }}
+                  >
+                    ${row.row_total.toLocaleString("en-US", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
 
-      <div>
-        <h3
-          style={{
-            margin: "0 0 20px 0",
-            fontSize: "18px",
-            fontWeight: "600",
-            color: "#333",
-          }}
-        >
-          Revenue by Category
-        </h3>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
-            gap: "16px",
-          }}
-        >
-          {workflowTypes.map((workflow) => {
-            const amount = parseFloat(
-              summaryData?.workflows?.[workflow.id] || 0
-            );
-            const percentage =
-              totalRevenue > 0 ? (amount / totalRevenue) * 100 : 0;
-            const barWidth = maxAmount > 0 ? (amount / maxAmount) * 100 : 0;
-
-            return (
-              <div
-                key={workflow.id}
-                style={{
-                  borderRadius: "12px",
-                  padding: "16px",
-                  boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
-                  backgroundColor: "white",
-                  border: "1px solid #f0f0f0",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    marginBottom: "12px",
-                  }}
-                >
-                  <div
-                    style={{
-                      backgroundColor: workflow.backgroundColor,
-                      color: workflow.color,
-                      width: "36px",
-                      height: "36px",
-                      borderRadius: "8px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      marginRight: "12px",
-                      fontSize: "16px",
-                    }}
-                  >
-                    <FontAwesomeIcon icon={workflow.icon} />
-                  </div>
-                  <div>
-                    <h4
-                      style={{
-                        margin: "0 0 2px 0",
-                        fontSize: "16px",
-                        fontWeight: "600",
-                      }}
-                    >
-                      {workflow.name}
-                    </h4>
-                    <div style={{ fontSize: "13px", color: "#666" }}>
-                      {workflow.description}
-                    </div>
-                  </div>
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    marginBottom: "8px",
-                  }}
-                >
-                  <div style={{ fontSize: "18px", fontWeight: "600" }}>
-                    ${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </div>
-                  <div style={{ fontSize: "14px", color: "#666" }}>
-                    {percentage.toFixed(1)}%
-                  </div>
-                </div>
-                <div
-                  style={{
-                    height: "6px",
-                    backgroundColor: "#f0f0f0",
-                    borderRadius: "3px",
-                    overflow: "hidden",
-                  }}
-                >
-                  <div
-                    style={{
-                      width: `${barWidth}%`,
-                      height: "100%",
-                      backgroundColor: workflow.color,
-                      borderRadius: "3px",
-                      transition: "width 1s ease-in-out",
-                    }}
-                  ></div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      
 
       {showExportModal && (
         <div

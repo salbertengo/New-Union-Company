@@ -7,7 +7,8 @@ import 'ag-grid-community/styles/ag-theme-alpine.css';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faEdit, faCog, faSearch } from '@fortawesome/free-solid-svg-icons';
 import '@fortawesome/fontawesome-svg-core/styles.css';
-import { FocusTrap } from 'focus-trap-react';import { 
+import { FocusTrap } from 'focus-trap-react';
+import { 
   ActionButton, 
   ActionButtonsContainer 
 } from '../components/common/ActionButtons';
@@ -32,6 +33,32 @@ const InventoryView = () => {
   const searchTimeout = useRef(null);
   const [gridReady, setGridReady] = useState(false);
   const API_URL = process.env.REACT_APP_API_URL;
+
+  const [showGoodsReceiveModal, setShowGoodsReceiveModal] = useState(false);
+  const [suppliers, setSuppliers] = useState([]);
+  const [jobsheets, setJobsheets] = useState([]);
+  const [goodsReceiveData, setGoodsReceiveData] = useState({
+    supplier_name: '',
+    invoice_number: '',
+    invoice_date: new Date().toISOString().split('T')[0],
+    items: []
+  });
+  const [newReceiveItem, setNewReceiveItem] = useState({
+    product_id: '',
+    product_name: '',
+    quantity: 1,
+    cost_price: 0,
+    sale_price: 0,
+    jobsheet_id: '',
+    license_plate: ''
+  });
+  const [notification, setNotification] = useState({
+    show: false,
+    message: '',
+    type: 'success' // or 'error'
+  });
+  const modalInitialFocusRef = useRef(null);
+
   const fetchInventoryData = useCallback(async (search = '', category = '') => {
     setLoading(true);
     const token = localStorage.getItem('token');
@@ -75,6 +102,62 @@ const InventoryView = () => {
       setLoading(false);
     }
   }, []);
+
+  const fetchSuppliers = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_URL}/suppliers/names`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setSuppliers(data);
+      }
+    } catch (error) {
+      console.error('Error fetching suppliers:', error);
+    }
+  }, [API_URL]);
+
+  const fetchJobsheets = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('token');
+      
+      const response = await fetch(`${API_URL}/jobsheets?state=pending,in progress`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        
+        const processedJobsheets = data.map(job => ({
+          ...job,
+          hasVehicleIdButNoPlate: job.vehicle_id && (!job.license_plate || job.license_plate === "No plate")
+        }));
+        
+        const validJobsheets = processedJobsheets.filter(j => 
+          (j.license_plate && j.license_plate !== "No plate") || j.vehicle_id
+        );
+        setJobsheets(validJobsheets);
+      } else {
+        setNotification({
+          show: true,
+          type: 'error',
+          message: `Error loading jobsheets: ${response.status} ${response.statusText}`
+        });
+      }
+    } catch (error) {
+      setNotification({
+        show: true,
+        type: 'error',
+        message: 'Network error when loading jobsheets'
+      });
+    }
+  }, [API_URL]);
 
   const handleSearchChange = (e) => {
     const value = e.target.value;
@@ -130,6 +213,155 @@ const InventoryView = () => {
       await fetchCompatibilities(clonedProduct.id);
       setShowCompatibilityModal(true);
     }, 50);
+  };
+
+  const handleOpenGoodsReceiveModal = () => {
+    fetchSuppliers();
+    fetchJobsheets();
+    setGoodsReceiveData({
+      supplier_name: '',
+      invoice_number: '',
+      invoice_date: new Date().toISOString().split('T')[0],
+      items: []
+    });
+    setShowGoodsReceiveModal(true);
+    
+    // Set focus after modal opens
+    setTimeout(() => {
+      if (modalInitialFocusRef.current) {
+        modalInitialFocusRef.current.focus();
+      }
+    }, 100);
+  };
+
+  const handleGoodsReceiveInputChange = (e) => {
+    const { name, value } = e.target;
+    setGoodsReceiveData({
+      ...goodsReceiveData,
+      [name]: value
+    });
+  };
+
+  const handleNewReceiveItemChange = (e) => {
+    const { name, value } = e.target;
+    setNewReceiveItem({
+      ...newReceiveItem,
+      [name]: value
+    });
+    
+    if (name === 'product_id' && value) {
+      const product = rowData.find(p => p.id === parseInt(value));
+      if (product) {
+        setNewReceiveItem({
+          ...newReceiveItem,
+          product_id: value,
+          product_name: product.name,
+          cost_price: product.cost || 0
+        });
+      }
+    }
+  };
+
+  const addItemToReceive = () => {
+    if (!newReceiveItem.product_name || !newReceiveItem.quantity || 
+        !newReceiveItem.cost_price || !newReceiveItem.sale_price) {
+      setNotification({
+        show: true,
+        type: 'error',
+        message: 'Please complete all required fields'
+      });
+      return;
+    }
+
+    setGoodsReceiveData({
+      ...goodsReceiveData,
+      items: [...goodsReceiveData.items, { ...newReceiveItem }]
+    });
+    
+    setNotification({
+      show: true,
+      type: 'success',
+      message: 'Item added successfully'
+    });
+    
+    setNewReceiveItem({
+      product_id: '',
+      product_name: '',
+      quantity: 1,
+      cost_price: 0,
+      sale_price: 0,
+      jobsheet_id: '',
+      license_plate: ''
+    });
+    
+    // Focus back on product field for fast entry
+    const productField = document.querySelector('input[name="product_name"]');
+    if (productField) productField.focus();
+  };
+
+  const removeReceiveItem = (index) => {
+    const newItems = [...goodsReceiveData.items];
+    newItems.splice(index, 1);
+    
+    setGoodsReceiveData({
+      ...goodsReceiveData,
+      items: newItems
+    });
+  };
+
+  const handleSubmitGoodsReceive = async () => {
+    if (!goodsReceiveData.supplier_name || !goodsReceiveData.items.length) {
+      setNotification({
+        show: true,
+        type: 'error',
+        message: 'Please enter supplier name and add at least one item'
+      });
+      return;
+    }
+    
+    try {
+      const token = localStorage.getItem('token');
+      // Update to the correct endpoint
+      const response = await fetch(`${API_URL}/suppliers`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(goodsReceiveData)
+      });
+      
+      if (response.ok) {
+        setNotification({
+          show: true,
+          type: 'success',
+          message: 'Goods receipt successfully registered'
+        });
+        setShowGoodsReceiveModal(false);
+        setRefreshInventory(!refreshInventory);
+      } else {
+        try {
+          const errorData = await response.json();
+          setNotification({
+            show: true,
+            type: 'error',
+            message: `Error: ${errorData.error || 'Could not register receipt'}`
+          });
+        } catch (parseError) {
+          setNotification({
+            show: true,
+            type: 'error',
+            message: `Error ${response.status}: Request could not be processed`
+          });
+        }
+      }
+    } catch (error) {
+      setNotification({
+        show: true,
+        type: 'error',
+        message: 'Connection error when registering receipt'
+      });
+    }
   };
 
   const defaultColDef = {
@@ -228,13 +460,11 @@ const InventoryView = () => {
       headerName: 'Name', 
       field: 'name', 
       width: 400,
-      // Añadimos estos parámetros
       autoHeight: true,
       wrapText: true,
       cellClass: 'cell-name',
       headerClass: 'custom-header-inventory', 
       suppressMenu: true,
-      // Mantenemos el renderizador para el tooltip, pero simplificamos el estilo interno
       cellRenderer: params => {
         const cellValue = params.value || '';
         return (
@@ -243,7 +473,8 @@ const InventoryView = () => {
           </div>
         );
       },
-    },   { headerName: 'Category', field: 'category', width: 80, headerClass: 'custom-header-inventory', suppressMenu: true },
+    },   
+    { headerName: 'Category', field: 'category', width: 80, headerClass: 'custom-header-inventory', suppressMenu: true },
     { headerName: 'Brand', field: 'brand', width: 120, headerClass: 'custom-header-inventory', suppressMenu: true },
     { headerName: 'Stock', field: 'stock', width: 80, headerClass: 'custom-header-inventory', suppressMenu: true },
     { headerName: 'Min', field: 'min', width: 80, headerClass: 'custom-header-inventory', suppressMenu: true },
@@ -319,10 +550,7 @@ const InventoryView = () => {
       });
   
       if (response.ok) {
-        // Actualizar la lista pero mantener el modal abierto
         fetchInventoryData(searchTerm, categoryTerm);
-        
-        // Limpiar el formulario para un nuevo producto
         setEditItem({
           sku: '',
           name: '',
@@ -333,11 +561,8 @@ const InventoryView = () => {
           cost: 0,
           sale: 0
         });
-        
-        // Mensaje de éxito
         alert("Product created successfully. You can now add another one.");
       } else {
-        // Manejar los errores específicos
         const errorData = await response.json();
         if (errorData.error === 'duplicate_sku' || 
             (errorData.message && errorData.message.includes('SKU already exists'))) {
@@ -353,7 +578,6 @@ const InventoryView = () => {
     }
   };
   
-  // Función para verificar si el SKU ya existe
   const handleSave = async () => {
     if (!editItem) return;
     const { sku, name, cost, sale } = editItem;
@@ -389,7 +613,6 @@ const InventoryView = () => {
         fetchInventoryData(searchTerm, categoryTerm);
         setShowModal(false);
       } else {
-        // Manejar el error según el tipo
         const errorData = await response.json();
         if (errorData.error === 'duplicate_sku') {
           alert("This SKU already exists. Please enter a unique SKU.");
@@ -439,6 +662,83 @@ const InventoryView = () => {
         setGridReady(true);
       }
     }, 100);
+  };
+
+  const Notification = ({ show, message, type, onClose }) => {
+    useEffect(() => {
+      if (show) {
+        const timer = setTimeout(() => {
+          onClose();
+        }, 5000);
+        return () => clearTimeout(timer);
+      }
+    }, [show, onClose]);
+  
+    if (!show) return null;
+  
+    return (
+      <div
+        style={{
+          position: 'fixed',
+          bottom: '20px',
+          right: '20px',
+          backgroundColor: type === 'success' ? '#34A853' : '#D32F2F',
+          color: 'white',
+          padding: '12px 24px',
+          borderRadius: '8px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          zIndex: 1100,
+          maxWidth: '400px',
+          animation: 'slideIn 0.3s ease'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ 
+            width: '24px', 
+            height: '24px', 
+            borderRadius: '50%',
+            backgroundColor: 'rgba(255,255,255,0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            {type === 'success' ? (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M20 6L9 17L4 12" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 8V12M12 16H12.01" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            )}
+          </div>
+          <span style={{ fontSize: '14px', fontWeight: '500' }}>{message}</span>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'white',
+              marginLeft: 'auto',
+              cursor: 'pointer',
+              fontSize: '18px',
+              opacity: 0.7,
+              transition: 'opacity 0.2s'
+            }}
+            onMouseOver={(e) => e.currentTarget.style.opacity = 1}
+            onMouseOut={(e) => e.currentTarget.style.opacity = 0.7}
+          >
+            ×
+          </button>
+        </div>
+        <style jsx="true">{`
+          @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+          }
+        `}</style>
+      </div>
+    );
   };
 
   return (
@@ -511,6 +811,32 @@ const InventoryView = () => {
               </option>
             ))}
           </select>
+          <button
+  onClick={handleOpenGoodsReceiveModal}
+  style={{
+    padding: '10px 20px',
+    backgroundColor: '#34A853',
+    color: 'white',
+    border: 'none',
+    borderRadius: '5px',
+    cursor: 'pointer',
+    transition: 'background-color 0.3s ease',
+    fontWeight: 600,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px'
+  }}
+  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2D9249'}
+  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#34A853'}
+>
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M14 10V12.6667C14 13.0203 13.8595 13.3594 13.6095 13.6095C13.3594 13.8595 13.0203 14 12.6667 14H3.33333C2.97971 14 2.64057 13.8595 2.39052 13.6095C2.14048 13.3594 2 13.0203 2 12.6667V10" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M4.66667 6.66669L8.00001 10L11.3333 6.66669" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M8 10V2" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+  Goods Receive
+</button>
+
           <button
             onClick={handleAddProduct}
             style={{
@@ -1232,7 +1558,7 @@ const InventoryView = () => {
         </div>
       )}
 
-      {/* Improved Compatibility Modal */}
+      {/* Compatibility Modal */}
       {showCompatibilityModal && selectedProduct && (
         <div
           style={{
@@ -1528,7 +1854,7 @@ const InventoryView = () => {
                           >
                             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                               <path d="M2 4H3.33333H14" stroke="#D32F2F" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                              <path d="M5.33331 4.00016V2.66683C5.33331 2.31321 5.4738 1.97407 5.72385 1.72402C5.9739 1.47397 6.31304 1.33349 6.66665 1.33349H9.33331C9.68693 1.33349 10.0261 1.47397 10.2761 1.72402C10.5262 1.97407 10.6666 2.31321 10.6666 2.66683V4.00016M12.6666 4.00016V13.3335C12.6666 13.6871 12.5262 14.0263 12.2761 14.2763C12.0261 14.5264 11.6869 14.6668 11.3333 14.6668H4.66665C4.31304 14.6668 3.9739 14.5264 3.72385 14.2763C3.4738 14.0263 3.33331 13.6871 3.33331 13.3335V4.00016H12.6666Z" stroke="#D32F2F" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                              <path d="M5.33331 4.00016V2.66683C5.33331 2.31321 5.4738 1.97407 5.72385 1.72402C5.9739 1.47397 6.31304 1.33349 6.66665 1.33349H9.33331C9.68693 1.33349 10.0261 1.47397 10.2761 1.72402C10.5262 1.97407 10.6666 2.31321 10.6666 2.66683V4.00016M12.6666 4.00016V13.3335C12.6666 13.6871 12.5262 14.0263 12.2761 14.2763C12.0261 14.5264 11.6869 14.6668 11.3333 14.6668H4.66665C4.31304 14.6668 3.9739 14.5264 3.24629 12.5037C3.02124 12.2786 2.89583 11.9787 2.89583 11.6667V4.00016H12.6666Z" stroke="#D32F2F" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                               <path d="M6.66669 7.33349V11.3335" stroke="#D32F2F" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                               <path d="M9.33331 7.33349V11.3335" stroke="#D32F2F" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                             </svg>
@@ -1539,7 +1865,7 @@ const InventoryView = () => {
                   )}
                 </div>
               </div>
-
+ 
               {/* Footer */}
               <div
                 style={{
@@ -1585,6 +1911,624 @@ const InventoryView = () => {
             </div>
         </div>
       )}
+{showGoodsReceiveModal && (
+  <div
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="goods-receive-modal-title"
+    style={{
+      position: "fixed",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: "rgba(0, 0, 0, 0.6)",
+      backdropFilter: "blur(5px)",
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+      zIndex: 1000,
+      animation: "fadeIn 0.2s ease",
+    }}
+    onClick={(e) => {
+      if (e.target === e.currentTarget) setShowGoodsReceiveModal(false);
+    }}
+  >
+    <div
+      style={{
+        backgroundColor: "white",
+        borderRadius: "16px",
+        width: "95%",
+        maxWidth: "800px",
+        maxHeight: "90vh",
+        boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        animation: "modalFadeIn 0.3s ease",
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {/* Header */}
+      <div
+        style={{
+          background: "linear-gradient(135deg, #34A853 0%, #2D9249 100%)",
+          padding: "24px 30px",
+          color: "white",
+          position: "relative",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            right: 0,
+            width: "200px",
+            height: "100%",
+            background: "linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.1) 100%)",
+            transform: "skewX(-20deg) translateX(30%)",
+          }}
+        ></div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div>
+            <h2 id="goods-receive-modal-title" style={{ margin: 0, fontSize: "22px", fontWeight: "600" }}>
+              Goods Receipt
+            </h2>
+            <p style={{ margin: "4px 0 0 0", opacity: "0.8", fontSize: "14px" }}>
+              Register received items and update inventory
+            </p>
+          </div>
+          <button
+            onClick={() => setShowGoodsReceiveModal(false)}
+            style={{
+              background: "rgba(255,255,255,0.2)",
+              border: "none",
+              color: "white",
+              width: "32px",
+              height: "32px",
+              borderRadius: "50%",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: "18px",
+              transition: "background-color 0.2s",
+              userSelect: "none",
+              zIndex: 10
+            }}
+            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.3)")}
+            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.2)")}
+          >
+            ×
+          </button>
+        </div>
+      </div>
+
+      {/* Content Area */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "24px 30px" }}>
+        {/* Supplier & Invoice Details */}
+        <div style={{ 
+          padding: "20px", 
+          backgroundColor: "#f9fafc", 
+          borderRadius: "12px", 
+          marginBottom: "24px",
+          border: "1px solid #e0e0e0" 
+        }}>
+          <h3 style={{ margin: "0 0 16px 0", fontSize: "16px", fontWeight: "600", color: "#333" }}>
+            Supplier & Invoice Details
+          </h3>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+            <div>
+              <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
+                Supplier *
+              </label>
+              <input
+                type="text"
+                list="suppliers-list"
+                name="supplier_name"
+                ref={modalInitialFocusRef}
+                value={goodsReceiveData.supplier_name || ""}
+                onChange={(e) => {
+                  setGoodsReceiveData({
+                    ...goodsReceiveData,
+                    supplier_name: e.target.value
+                  });
+                }}
+                style={{
+                  width: "100%",
+                  padding: "12px",
+                  borderRadius: "8px",
+                  border: "1px solid #e0e0e0",
+                  backgroundColor: "#fff",
+                  fontSize: "14px",
+                  outline: "none",
+                  boxSizing: "border-box"
+                }}
+                placeholder="Enter supplier name"
+                required
+              />
+              <datalist id="suppliers-list">
+                {suppliers.map((supplier, index) => (
+                  <option key={index} value={supplier.name || supplier} />
+                ))}
+              </datalist>
+            </div>
+            
+            <div>
+              <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
+                Invoice Number
+              </label>
+              <input
+                type="text"
+                name="invoice_number"
+                value={goodsReceiveData.invoice_number}
+                onChange={handleGoodsReceiveInputChange}
+                style={{
+                  width: "100%",
+                  padding: "12px",
+                  borderRadius: "8px",
+                  border: "1px solid #e0e0e0",
+                  backgroundColor: "#fff",
+                  fontSize: "14px",
+                  outline: "none",
+                  boxSizing: "border-box"
+                }}
+                placeholder="Enter invoice number"
+              />
+            </div>
+            
+            <div>
+              <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
+                Invoice Date *
+              </label>
+              <input
+                type="date"
+                name="invoice_date"
+                value={goodsReceiveData.invoice_date}
+                onChange={handleGoodsReceiveInputChange}
+                style={{
+                  width: "100%",
+                  padding: "12px",
+                  borderRadius: "8px",
+                  border: "1px solid #e0e0e0",
+                  backgroundColor: "#fff",
+                  fontSize: "14px",
+                  outline: "none",
+                  boxSizing: "border-box"
+                }}
+                required
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Add New Item */}
+        <div style={{ 
+          padding: "20px", 
+          backgroundColor: "#f9fafc", 
+          borderRadius: "12px", 
+          marginBottom: "24px",
+          border: "1px solid #e0e0e0" 
+        }}>
+          <h3 style={{ margin: "0 0 16px 0", fontSize: "16px", fontWeight: "600", color: "#333" }}>
+            Add New Item
+          </h3>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
+            <div>
+              <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
+                Product *
+              </label>
+              <input
+                type="text"
+                list="products-list"
+                name="product_name"
+                value={newReceiveItem.product_name || ""}
+                onChange={(e) => {
+                  const product = rowData.find(p => 
+                    p.name === e.target.value || 
+                    `${p.sku} - ${p.name}` === e.target.value
+                  );
+                  setNewReceiveItem({
+                    ...newReceiveItem,
+                    product_id: product ? product.id : '',
+                    product_name: e.target.value,
+                    cost_price: product ? product.cost : newReceiveItem.cost_price,
+                    sale_price: product ? product.sale : newReceiveItem.sale_price
+                  });
+                }}
+                style={{
+                  width: "100%",
+                  padding: "12px",
+                  borderRadius: "8px",
+                  border: "1px solid #e0e0e0",
+                  backgroundColor: "#fff",
+                  fontSize: "14px",
+                  outline: "none",
+                  boxSizing: "border-box"
+                }}
+                placeholder="Type product name or SKU"
+                required
+              />
+              <datalist id="products-list">
+                {rowData.map(product => (
+                  <option key={product.id} value={`${product.sku} - ${product.name}`} />
+                ))}
+              </datalist>
+            </div>
+            
+            <div>
+              <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
+                Quantity *
+              </label>
+              <input
+                type="number"
+                name="quantity"
+                value={newReceiveItem.quantity}
+                onChange={handleNewReceiveItemChange}
+                min="1"
+                style={{
+                  width: "100%",
+                  padding: "12px",
+                  borderRadius: "8px",
+                  border: "1px solid #e0e0e0",
+                  backgroundColor: "#fff",
+                  fontSize: "14px",
+                  outline: "none",
+                  boxSizing: "border-box"
+                }}
+                required
+              />
+            </div>
+            
+            <div>
+              <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
+                Cost Price *
+              </label>
+              <div style={{ position: "relative" }}>
+                <span style={{ 
+                  position: "absolute", 
+                  left: "12px", 
+                  top: "50%", 
+                  transform: "translateY(-50%)",
+                  color: "#666",
+                  fontSize: "14px",
+                  pointerEvents: "none"
+                }}>$</span>
+                <input
+                  type="number"
+                  name="cost_price"
+                  value={newReceiveItem.cost_price}
+                  onChange={handleNewReceiveItemChange}
+                  min="0"
+                  step="0.01"
+                  style={{
+                    width: "100%",
+                    padding: "12px 12px 12px 30px",
+                    borderRadius: "8px",
+                    border: "1px solid #e0e0e0",
+                    backgroundColor: "#fff",
+                    fontSize: "14px",
+                    outline: "none",
+                    boxSizing: "border-box"
+                  }}
+                  required
+                />
+              </div>
+            </div>
+            
+            <div>
+              <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
+                Sale Price *
+              </label>
+              <div style={{ position: "relative" }}>
+                <span style={{ 
+                  position: "absolute", 
+                  left: "12px", 
+                  top: "50%", 
+                  transform: "translateY(-50%)",
+                  color: "#666",
+                  fontSize: "14px",
+                  pointerEvents: "none"
+                }}>$</span>
+                <input
+                  type="number"
+                  name="sale_price"
+                  value={newReceiveItem.sale_price || 0}
+                  onChange={(e) => setNewReceiveItem({
+                    ...newReceiveItem,
+                    sale_price: e.target.value
+                  })}
+                  min="0"
+                  step="0.01"
+                  style={{
+                    width: "100%",
+                    padding: "12px 12px 12px 30px",
+                    borderRadius: "8px",
+                    border: "1px solid #e0e0e0",
+                    backgroundColor: "#fff",
+                    fontSize: "14px",
+                    outline: "none",
+                    boxSizing: "border-box"
+                  }}
+                  required
+                />
+              </div>
+            </div>
+            
+            <div>
+  <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
+  Assign to Job
+  </label>
+  <input
+    type="text"
+    list="jobs-list"
+    name="license_plate"
+    value={newReceiveItem.license_plate || ""}
+    onChange={(e) => {
+      const value = e.target.value;
+      // Buscar el jobsheet que corresponde a esta placa
+      const job = jobsheets.find(j => j.license_plate === value);
+      
+      setNewReceiveItem({
+        ...newReceiveItem,
+        license_plate: value,
+        // Si se encuentra un jobsheet, guardar su ID
+        jobsheet_id: job ? job.id : ''
+      });
+    }}
+    style={{
+      width: "100%",
+      padding: "12px",
+      borderRadius: "8px",
+      border: "1px solid #e0e0e0",
+      backgroundColor: "#fff",
+      fontSize: "14px",
+      outline: "none",
+      boxSizing: "border-box"
+    }}
+    placeholder="Type license plate number"
+  />
+  <datalist id="jobs-list">
+    {jobsheets.map(job => (
+      <option key={job.id} value={job.license_plate || ''} />
+    ))}
+  </datalist>
+  
+  {/* Mostrar información del jobsheet seleccionado si existe */}
+  {newReceiveItem.jobsheet_id && (
+    <div style={{ 
+      fontSize: "12px", 
+      color: "#2E7D32", 
+      marginTop: "4px",
+      backgroundColor: "#E8F5E9",
+      padding: "4px 8px",
+      borderRadius: "4px"
+    }}>
+      Job #{newReceiveItem.jobsheet_id} selected - Plate: {newReceiveItem.license_plate}
+    </div>
+  )}
+</div>
+          </div>
+          
+          {/* Add Item Button */}
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <button
+              onClick={addItemToReceive}
+              style={{
+                padding: "10px 20px",
+                backgroundColor: "#34A853",
+                color: "white",
+                border: "none",
+                borderRadius: "6px",
+                cursor: "pointer",
+                fontSize: "14px",
+                fontWeight: "600",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                transition: "background-color 0.2s",
+              }}
+              onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#2D9249"}
+              onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#34A853"}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M8 3.33331V12.6666" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M3.33337 8H12.6667" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Add Item
+            </button>
+          </div>
+        </div>
+
+        {/* Items List */}
+        <div style={{ 
+          padding: "20px", 
+          backgroundColor: "#f9fafc", 
+          borderRadius: "12px",
+          border: "1px solid #e0e0e0" 
+        }}>
+          <h3 style={{ margin: "0 0 16px 0", fontSize: "16px", fontWeight: "600", color: "#333", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span>Items to Receive</span>
+            <span style={{ fontSize: "14px", color: "#666", fontWeight: "normal" }}>
+              {goodsReceiveData.items.length} items
+            </span>
+          </h3>
+          
+          {goodsReceiveData.items.length === 0 ? (
+            <div 
+              style={{ 
+                padding: "24px", 
+                backgroundColor: "#fff",
+                borderRadius: "8px",
+                border: "1px dashed #e0e0e0",
+                textAlign: "center",
+                color: "#666"
+              }}
+            >
+              <p style={{ margin: "0", fontSize: "14px" }}>No items added yet. Use the form above to add items.</p>
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "8px" }}>
+              <div style={{ 
+                display: "grid",
+                gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 80px",
+                gap: "12px",
+                padding: "8px 16px",
+                borderBottom: "1px solid #e0e0e0",
+                fontSize: "13px",
+                fontWeight: "600",
+                color: "#666"
+              }}>
+                <div>Product</div>
+                <div>Quantity</div>
+                <div>Cost</div>
+                <div>Sale</div>
+                <div>Total</div>
+                <div></div>
+              </div>
+              
+              {goodsReceiveData.items.map((item, index) => (
+                <div
+                  key={index}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 80px",
+                    gap: "12px",
+                    alignItems: "center",
+                    padding: "12px 16px",
+                    backgroundColor: "#fff",
+                    borderRadius: "8px",
+                    border: "1px solid #e0e0e0",
+                  }}
+                >
+                  <div style={{ fontSize: "14px", fontWeight: "500" }}>{item.product_name}</div>
+                  <div>{item.quantity}</div>
+                  <div>${Number(item.cost_price).toFixed(2)}</div>
+                  <div>${Number(item.sale_price).toFixed(2)}</div>
+                  <div>${(item.quantity * item.cost_price).toFixed(2)}</div>
+                  <button
+                    onClick={() => removeReceiveItem(index)}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "#D32F2F",
+                      borderRadius: "4px",
+                      padding: "4px 8px",
+                      cursor: "pointer",
+                      fontSize: "14px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#FFF5F5"}
+                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M2 4H3.33333H14" stroke="#D32F2F" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M5.33331 4.00016V2.66683C5.33331 2.31321 5.4738 1.97407 5.72385 1.72402C5.9739 1.47397 6.31304 1.33349 6.66665 1.33349H9.33331C9.68693 1.33349 10.0261 1.47397 10.2761 1.72402C10.5262 1.97407 10.6666 2.31321 10.6666 2.66683V4.00016M12.6666 4.00016V13.3335C12.6666 13.6871 12.5262 14.0263 12.2761 14.2763C12.0261 14.5264 11.6869 14.6668 11.3333 14.6668H4.66665C4.31304 14.6668 3.9739 14.5264 3.72385 14.2763C3.4738 14.0263 3.33331 13.6871 3.33331 13.3335V4.00016H12.6666Z" stroke="#D32F2F" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          
+          {goodsReceiveData.items.length > 0 && (
+            <div style={{ 
+              display: "flex", 
+              justifyContent: "flex-end", 
+              marginTop: "16px",
+              paddingTop: "16px", 
+              borderTop: "1px solid #e0e0e0" 
+            }}>
+              <div style={{ 
+                padding: "12px 24px", 
+                backgroundColor: "#EDE7F6",
+                borderRadius: "8px",
+                fontWeight: "600"
+              }}>
+                Total: ${goodsReceiveData.items.reduce((sum, item) => sum + (item.quantity * item.cost_price), 0).toFixed(2)}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div
+        style={{
+          borderTop: "1px solid #e0e0e0",
+          padding: "16px 24px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          backgroundColor: "#f9fafc",
+        }}
+      >
+        <button
+          onClick={() => setShowGoodsReceiveModal(false)}
+          style={{
+            padding: "12px 20px",
+            backgroundColor: "transparent",
+            color: "#666",
+            border: "1px solid #d0d0d0",
+            borderRadius: "8px",
+            cursor: "pointer",
+            fontSize: "14px",
+            fontWeight: "500",
+            transition: "all 0.2s",
+          }}
+          onMouseOver={(e) => {
+            e.currentTarget.style.backgroundColor = "#f5f5f5";
+            e.currentTarget.style.color = "#555";
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.backgroundColor = "transparent";
+            e.currentTarget.style.color = "#666";
+          }}
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleSubmitGoodsReceive}
+          disabled={goodsReceiveData.items.length === 0 || !goodsReceiveData.supplier_name}
+          style={{
+            padding: "12px 24px",
+            backgroundColor: goodsReceiveData.items.length === 0 || !goodsReceiveData.supplier_name ? "#e0e0e0" : "#34A853",
+            color: goodsReceiveData.items.length === 0 || !goodsReceiveData.supplier_name ? "#999" : "white",
+            border: "none",
+            borderRadius: "8px",
+            cursor: goodsReceiveData.items.length === 0 || !goodsReceiveData.supplier_name ? "not-allowed" : "pointer",
+            fontSize: "14px",
+            fontWeight: "600",
+            transition: "all 0.2s",
+          }}
+          onMouseOver={(e) => {
+            if (goodsReceiveData.items.length > 0 && goodsReceiveData.supplier_name) {
+              e.currentTarget.style.backgroundColor = "#2D9249";
+            }
+          }}
+          onMouseOut={(e) => {
+            if (goodsReceiveData.items.length > 0 && goodsReceiveData.supplier_name) {
+              e.currentTarget.style.backgroundColor = "#34A853";
+            }
+          }}
+        >
+          Submit Receipt
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+{notification.show && (
+  <Notification
+    show={notification.show}
+    message={notification.message}
+    type={notification.type}
+    onClose={() => setNotification({ ...notification, show: false })}
+  />
+)}
     </div>
   );
 };

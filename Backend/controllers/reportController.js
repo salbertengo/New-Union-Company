@@ -438,6 +438,258 @@ class ReportController {
       res.status(500).json({ error: 'Internal server error' });
     }
   }
+  static async getWorkflowByPaymentMethod(req, res) {
+    try {
+      const { start_date, end_date } = req.query;
+      
+      if (!start_date || !end_date) {
+        return res.status(400).json({ error: 'Start date and end date are required' });
+      }
+  
+      // Format dates to SQL format
+      const startDateFormatted = new Date(start_date).toISOString().split('T')[0];
+      const endDateFormatted = new Date(end_date).toISOString().split('T')[0];
+      
+      // Query to get the correlation between workflow types and payment methods
+      const [results] = await pool.query(`
+        WITH JobTotals AS (
+          -- Get total amount for each completed jobsheet
+          SELECT 
+            j.id AS jobsheet_id,
+            COALESCE(
+              (SELECT SUM(l.price) FROM labor l 
+               WHERE l.jobsheet_id = j.id AND l.workflow_type = '1' 
+               AND l.is_completed = 1 AND l.is_billed = 1),
+              0
+            ) + 
+            COALESCE(
+              (SELECT SUM(ji.price * ji.quantity) FROM jobsheet_items ji 
+               WHERE ji.jobsheet_id = j.id),
+              0
+            ) AS repair_total,
+            COALESCE(
+              (SELECT SUM(l.price) FROM labor l 
+               WHERE l.jobsheet_id = j.id AND l.workflow_type = '2' 
+               AND l.is_completed = 1 AND l.is_billed = 1),
+              0
+            ) AS bikesale_total,
+            COALESCE(
+              (SELECT SUM(l.price) FROM labor l 
+               WHERE l.jobsheet_id = j.id AND l.workflow_type = '3' 
+               AND l.is_completed = 1 AND l.is_billed = 1),
+              0
+            ) AS insurance_total,
+            COALESCE(
+              (SELECT SUM(l.price) FROM labor l 
+               WHERE l.jobsheet_id = j.id AND l.workflow_type = '4' 
+               AND l.is_completed = 1 AND l.is_billed = 1),
+              0
+            ) AS hp_bq_total,
+            COALESCE(
+              (SELECT SUM(l.price) FROM labor l 
+               WHERE l.jobsheet_id = j.id AND l.workflow_type = '5' 
+               AND l.is_completed = 1 AND l.is_billed = 1),
+              0
+            ) AS roadtax_total,
+            COALESCE(
+              (SELECT SUM(l.price) FROM labor l 
+               WHERE l.jobsheet_id = j.id AND l.workflow_type = '6' 
+               AND l.is_completed = 1 AND l.is_billed = 1),
+              0
+            ) AS hp_nu_total
+          FROM jobsheets j
+          WHERE j.created_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)
+          AND j.state = 'completed'
+        ),
+        PaymentBreakdown AS (
+          -- Get payment breakdown for each jobsheet
+          SELECT
+            p.jobsheet_id,
+            CASE WHEN LOWER(p.method) = 'cash' THEN p.amount ELSE 0 END AS cash_amount,
+            CASE WHEN LOWER(p.method) = 'paynow' THEN p.amount ELSE 0 END AS paynow_amount,
+            CASE WHEN LOWER(p.method) NOT IN ('cash', 'paynow') THEN p.amount ELSE 0 END AS nets_amount
+          FROM payments p
+          JOIN jobsheets j ON p.jobsheet_id = j.id
+          WHERE j.created_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)
+          AND j.state = 'completed'
+        ),
+        JobPaymentTotals AS (
+          -- Sum payments by method for each jobsheet
+          SELECT
+            jobsheet_id,
+            SUM(cash_amount) AS cash_total,
+            SUM(paynow_amount) AS paynow_total,
+            SUM(nets_amount) AS nets_total,
+            SUM(cash_amount) + SUM(paynow_amount) + SUM(nets_amount) AS total_payments
+          FROM PaymentBreakdown
+          GROUP BY jobsheet_id
+        )
+        -- Calculate the proportion of each workflow paid by each method
+        SELECT
+          '1' AS workflow_type,
+          'Repairs' AS workflow_name,
+          SUM(CASE WHEN jt.repair_total > 0 AND jpt.total_payments > 0 
+              THEN (jt.repair_total / NULLIF((jt.repair_total + jt.bikesale_total + jt.insurance_total + 
+                   jt.hp_bq_total + jt.roadtax_total + jt.hp_nu_total), 0)) * jpt.cash_total 
+              ELSE 0 END) AS cash_amount,
+          SUM(CASE WHEN jt.repair_total > 0 AND jpt.total_payments > 0 
+              THEN (jt.repair_total / NULLIF((jt.repair_total + jt.bikesale_total + jt.insurance_total + 
+                   jt.hp_bq_total + jt.roadtax_total + jt.hp_nu_total), 0)) * jpt.paynow_total 
+              ELSE 0 END) AS paynow_amount,
+          SUM(CASE WHEN jt.repair_total > 0 AND jpt.total_payments > 0 
+              THEN (jt.repair_total / NULLIF((jt.repair_total + jt.bikesale_total + jt.insurance_total + 
+                   jt.hp_bq_total + jt.roadtax_total + jt.hp_nu_total), 0)) * jpt.nets_total 
+              ELSE 0 END) AS nets_amount
+        FROM JobTotals jt
+        JOIN JobPaymentTotals jpt ON jt.jobsheet_id = jpt.jobsheet_id
+        
+        UNION ALL
+        
+        SELECT
+          '2' AS workflow_type,
+          'Sale Deposit(bikesale)' AS workflow_name,
+          SUM(CASE WHEN jt.bikesale_total > 0 AND jpt.total_payments > 0 
+              THEN (jt.bikesale_total / NULLIF((jt.repair_total + jt.bikesale_total + jt.insurance_total + 
+                   jt.hp_bq_total + jt.roadtax_total + jt.hp_nu_total), 0)) * jpt.cash_total 
+              ELSE 0 END) AS cash_amount,
+          SUM(CASE WHEN jt.bikesale_total > 0 AND jpt.total_payments > 0 
+              THEN (jt.bikesale_total / NULLIF((jt.repair_total + jt.bikesale_total + jt.insurance_total + 
+                   jt.hp_bq_total + jt.roadtax_total + jt.hp_nu_total), 0)) * jpt.paynow_total 
+              ELSE 0 END) AS paynow_amount,
+          SUM(CASE WHEN jt.bikesale_total > 0 AND jpt.total_payments > 0 
+              THEN (jt.bikesale_total / NULLIF((jt.repair_total + jt.bikesale_total + jt.insurance_total + 
+                   jt.hp_bq_total + jt.roadtax_total + jt.hp_nu_total), 0)) * jpt.nets_total 
+              ELSE 0 END) AS nets_amount
+        FROM JobTotals jt
+        JOIN JobPaymentTotals jpt ON jt.jobsheet_id = jpt.jobsheet_id
+        
+        UNION ALL
+        
+        SELECT
+          '3' AS workflow_type,
+          'Insurance' AS workflow_name,
+          SUM(CASE WHEN jt.insurance_total > 0 AND jpt.total_payments > 0 
+              THEN (jt.insurance_total / NULLIF((jt.repair_total + jt.bikesale_total + jt.insurance_total + 
+                   jt.hp_bq_total + jt.roadtax_total + jt.hp_nu_total), 0)) * jpt.cash_total 
+              ELSE 0 END) AS cash_amount,
+          SUM(CASE WHEN jt.insurance_total > 0 AND jpt.total_payments > 0 
+              THEN (jt.insurance_total / NULLIF((jt.repair_total + jt.bikesale_total + jt.insurance_total + 
+                   jt.hp_bq_total + jt.roadtax_total + jt.hp_nu_total), 0)) * jpt.paynow_total 
+              ELSE 0 END) AS paynow_amount,
+          SUM(CASE WHEN jt.insurance_total > 0 AND jpt.total_payments > 0 
+              THEN (jt.insurance_total / NULLIF((jt.repair_total + jt.bikesale_total + jt.insurance_total + 
+                   jt.hp_bq_total + jt.roadtax_total + jt.hp_nu_total), 0)) * jpt.nets_total 
+              ELSE 0 END) AS nets_amount
+        FROM JobTotals jt
+        JOIN JobPaymentTotals jpt ON jt.jobsheet_id = jpt.jobsheet_id
+        
+        UNION ALL
+        
+        SELECT
+          '5' AS workflow_type,
+          'Road tax/COE' AS workflow_name,
+          SUM(CASE WHEN jt.roadtax_total > 0 AND jpt.total_payments > 0 
+              THEN (jt.roadtax_total / NULLIF((jt.repair_total + jt.bikesale_total + jt.insurance_total + 
+                   jt.hp_bq_total + jt.roadtax_total + jt.hp_nu_total), 0)) * jpt.cash_total 
+              ELSE 0 END) AS cash_amount,
+          SUM(CASE WHEN jt.roadtax_total > 0 AND jpt.total_payments > 0 
+              THEN (jt.roadtax_total / NULLIF((jt.repair_total + jt.bikesale_total + jt.insurance_total + 
+                   jt.hp_bq_total + jt.roadtax_total + jt.hp_nu_total), 0)) * jpt.paynow_total 
+              ELSE 0 END) AS paynow_amount,
+          SUM(CASE WHEN jt.roadtax_total > 0 AND jpt.total_payments > 0 
+              THEN (jt.roadtax_total / NULLIF((jt.repair_total + jt.bikesale_total + jt.insurance_total + 
+                   jt.hp_bq_total + jt.roadtax_total + jt.hp_nu_total), 0)) * jpt.nets_total 
+              ELSE 0 END) AS nets_amount
+        FROM JobTotals jt
+        JOIN JobPaymentTotals jpt ON jt.jobsheet_id = jpt.jobsheet_id
+        
+        UNION ALL
+        
+        SELECT
+          '4' AS workflow_type,
+          'BQ HP' AS workflow_name,
+          SUM(CASE WHEN jt.hp_bq_total > 0 AND jpt.total_payments > 0 
+              THEN (jt.hp_bq_total / NULLIF((jt.repair_total + jt.bikesale_total + jt.insurance_total + 
+                   jt.hp_bq_total + jt.roadtax_total + jt.hp_nu_total), 0)) * jpt.cash_total 
+              ELSE 0 END) AS cash_amount,
+          SUM(CASE WHEN jt.hp_bq_total > 0 AND jpt.total_payments > 0 
+              THEN (jt.hp_bq_total / NULLIF((jt.repair_total + jt.bikesale_total + jt.insurance_total + 
+                   jt.hp_bq_total + jt.roadtax_total + jt.hp_nu_total), 0)) * jpt.paynow_total 
+              ELSE 0 END) AS paynow_amount,
+          SUM(CASE WHEN jt.hp_bq_total > 0 AND jpt.total_payments > 0 
+              THEN (jt.hp_bq_total / NULLIF((jt.repair_total + jt.bikesale_total + jt.insurance_total + 
+                   jt.hp_bq_total + jt.roadtax_total + jt.hp_nu_total), 0)) * jpt.nets_total 
+              ELSE 0 END) AS nets_amount
+        FROM JobTotals jt
+        JOIN JobPaymentTotals jpt ON jt.jobsheet_id = jpt.jobsheet_id
+        
+        UNION ALL
+        
+        SELECT
+          '6' AS workflow_type,
+          'NU HP' AS workflow_name,
+          SUM(CASE WHEN jt.hp_nu_total > 0 AND jpt.total_payments > 0 
+              THEN (jt.hp_nu_total / NULLIF((jt.repair_total + jt.bikesale_total + jt.insurance_total + 
+                   jt.hp_bq_total + jt.roadtax_total + jt.hp_nu_total), 0)) * jpt.cash_total 
+              ELSE 0 END) AS cash_amount,
+          SUM(CASE WHEN jt.hp_nu_total > 0 AND jpt.total_payments > 0 
+              THEN (jt.hp_nu_total / NULLIF((jt.repair_total + jt.bikesale_total + jt.insurance_total + 
+                   jt.hp_bq_total + jt.roadtax_total + jt.hp_nu_total), 0)) * jpt.paynow_total 
+              ELSE 0 END) AS paynow_amount,
+          SUM(CASE WHEN jt.hp_nu_total > 0 AND jpt.total_payments > 0 
+              THEN (jt.hp_nu_total / NULLIF((jt.repair_total + jt.bikesale_total + jt.insurance_total + 
+                   jt.hp_bq_total + jt.roadtax_total + jt.hp_nu_total), 0)) * jpt.nets_total 
+              ELSE 0 END) AS nets_amount
+        FROM JobTotals jt
+        JOIN JobPaymentTotals jpt ON jt.jobsheet_id = jpt.jobsheet_id
+      `, [startDateFormatted, endDateFormatted, startDateFormatted, endDateFormatted]);
+      
+      // Process results and calculate totals
+      let totalCash = 0;
+      let totalPaynow = 0;
+      let totalNets = 0;
+      
+      const processedResults = results.map(row => {
+        const cashAmount = parseFloat(row.cash_amount || 0);
+        const paynowAmount = parseFloat(row.paynow_amount || 0);
+        const netsAmount = parseFloat(row.nets_amount || 0);
+        
+        totalCash += cashAmount;
+        totalPaynow += paynowAmount;
+        totalNets += netsAmount;
+        
+        return {
+          workflow_type: row.workflow_type,
+          workflow_name: row.workflow_name,
+          cash_amount: cashAmount,
+          paynow_amount: paynowAmount,
+          nets_amount: netsAmount,
+          row_total: cashAmount + paynowAmount + netsAmount
+        };
+      });
+      
+      // Add a total row
+      processedResults.push({
+        workflow_type: 'total',
+        workflow_name: 'Total',
+        cash_amount: totalCash,
+        paynow_amount: totalPaynow,
+        nets_amount: totalNets,
+        row_total: totalCash + totalPaynow + totalNets
+      });
+      
+      res.json({
+        period: {
+          start_date: startDateFormatted,
+          end_date: endDateFormatted
+        },
+        data: processedResults
+      });
+    } catch (err) {
+      console.error('Error in getWorkflowByPaymentMethod:', err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
 }
 
 module.exports = ReportController;

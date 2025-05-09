@@ -3,15 +3,36 @@ const pool = require('../db');
 class JobsheetModel {
   static async getAll(search, state) {
     try {
-      let query = `SELECT * FROM jobsheets`;
+      // Modificar la consulta para seleccionar explícitamente j.vehicle_id
+      // y no alias v.id como vehicle_id para evitar sobrescribir el vehicle_id original del jobsheet.
+      let query = `
+        SELECT j.id, 
+               j.created_at, 
+               j.state, 
+               j.total_amount, 
+               j.workflow_type,
+               j.user_id, 
+               j.customer_id, 
+               j.vehicle_id, /* Este es el vehicle_id de la tabla jobsheets */
+               c.name AS customer_name, 
+               v.plate AS license_plate, /* Este será null si el vehículo no se encuentra */
+               v.model AS vehicle_model, /* Este será null si el vehículo no se encuentra */
+               u.username AS technician_name
+        FROM jobsheets j
+        LEFT JOIN customers c ON j.customer_id = c.id
+        LEFT JOIN vehicles v ON j.vehicle_id = v.id /* El JOIN usa j.vehicle_id */
+        LEFT JOIN users u ON j.user_id = u.id
+      `;
+      
       const params = [];
       
       if (search || state) {
         query += ` WHERE`;
         
         if (search) {
-          query += ` (id LIKE ? OR description LIKE ?)`;
-          params.push(`%${search}%`, `%${search}%`);
+          // Asegurarse que la búsqueda por v.plate no cause error si v.plate es NULL
+          query += ` (j.id LIKE ? OR c.name LIKE ? OR COALESCE(v.plate, '') LIKE ?)`;
+          params.push(`%${search}%`, `%${search}%`, `%${search}%`);
         }
         
         if (search && state) {
@@ -19,16 +40,23 @@ class JobsheetModel {
         }
         
         if (state) {
-          query += ` state = ?`;
+          query += ` j.state = ?`;
           params.push(state);
         }
       }
       
-      query += ` ORDER BY created_at DESC`;
+      query += ` ORDER BY j.created_at DESC`;
       
       const [rows] = await pool.query(query, params);
-      return rows;
+      
+      // Mapear los resultados. 'vehicle_id' provendrá de j.vehicle_id.
+      // 'license_plate' será v.plate o "No plate" si v.plate es null.
+      return rows.map(row => ({
+        ...row,
+        license_plate: row.license_plate || "No plate"
+      }));
     } catch (error) {
+      console.error('Error in JobsheetModel.getAll:', error);
       throw error;
     }
   }
@@ -36,7 +64,17 @@ class JobsheetModel {
   static async getById(id) {
     try {
       const [rows] = await pool.query(`
-        SELECT j.*, c.name AS customer_name, v.plate, v.model,
+        SELECT j.id, 
+               j.created_at, 
+               j.state, 
+               j.total_amount, 
+               j.workflow_type,
+               j.user_id, 
+               j.customer_id, 
+               j.vehicle_id, /* vehicle_id de la tabla jobsheets */
+               c.name AS customer_name, 
+               v.plate AS license_plate, 
+               v.model AS vehicle_model,
                u.username AS technician_name
         FROM jobsheets j
         LEFT JOIN customers c ON j.customer_id = c.id
@@ -45,8 +83,15 @@ class JobsheetModel {
         WHERE j.id = ?
       `, [id]);
       
-      return rows[0];
+      if (rows.length > 0) {
+        return {
+          ...rows[0],
+          license_plate: rows[0].license_plate || "No plate"
+        };
+      }
+      return null; // O undefined, según prefieras para "no encontrado"
     } catch (error) {
+      console.error('Error in JobsheetModel.getById:', error);
       throw error;
     }
   }
@@ -54,7 +99,17 @@ class JobsheetModel {
   static async getByCustomerId(customerId) {
     try {
       const [rows] = await pool.query(`
-        SELECT j.*, c.name AS customer_name, v.plate, v.model,
+        SELECT j.id, 
+               j.created_at, 
+               j.state, 
+               j.total_amount, 
+               j.workflow_type,
+               j.user_id, 
+               j.customer_id, 
+               j.vehicle_id, /* vehicle_id de la tabla jobsheets */
+               c.name AS customer_name, 
+               v.plate AS license_plate, 
+               v.model AS vehicle_model,
                u.username AS technician_name
         FROM jobsheets j
         LEFT JOIN customers c ON j.customer_id = c.id
@@ -64,8 +119,12 @@ class JobsheetModel {
         ORDER BY j.created_at DESC
       `, [customerId]);
       
-      return rows;
+      return rows.map(row => ({
+        ...row,
+        license_plate: row.license_plate || "No plate"
+      }));
     } catch (error) {
+      console.error('Error in JobsheetModel.getByCustomerId:', error);
       throw error;
     }
   }
@@ -77,14 +136,16 @@ class JobsheetModel {
           state, 
           vehicle_id, 
           customer_id, 
-          user_id
+          user_id,
+          workflow_type /* Asegúrate que este campo se maneja si es necesario */
         )
-        VALUES (?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?)
       `, [
         jobsheetData.state || 'pending',
         jobsheetData.vehicle_id || null,   
         jobsheetData.customer_id || null,    
-        jobsheetData.user_id
+        jobsheetData.user_id,
+        jobsheetData.workflow_type || 1 
       ]);
 
       return { 
@@ -92,6 +153,7 @@ class JobsheetModel {
         ...jobsheetData
       };
     } catch (error) {
+      console.error('Error in JobsheetModel.create:', error);
       throw error;
     }
   }
@@ -126,6 +188,29 @@ class JobsheetModel {
             
             console.log(`Stock restored for product ${item.product_id}: ${item.quantity} units`);
           }
+        }
+      }
+  
+      // NUEVO: Verificar si estamos cambiando el cliente y vehículo al mismo tiempo
+      if (jobsheetData.vehicle_id && jobsheetData.customer_id) {
+        // Obtenemos los datos actuales del jobsheet
+        const [currentJobsheet] = await connection.query(
+          'SELECT vehicle_id, customer_id FROM jobsheets WHERE id = ?',
+          [id]
+        );
+        
+        // Si el vehículo o cliente son diferentes, actualizamos la tabla de vehículos
+        if (currentJobsheet[0] && 
+            (currentJobsheet[0].vehicle_id !== jobsheetData.vehicle_id || 
+             currentJobsheet[0].customer_id !== jobsheetData.customer_id)) {
+          
+          console.log(`Updating vehicle ${jobsheetData.vehicle_id} to customer ${jobsheetData.customer_id}`);
+          
+          // Actualizar el propietario del vehículo en la tabla vehicles
+          await connection.query(
+            'UPDATE vehicles SET customer_id = ? WHERE id = ?',
+            [jobsheetData.customer_id, jobsheetData.vehicle_id]
+          );
         }
       }
   
@@ -178,7 +263,17 @@ class JobsheetModel {
   static async getByVehicleId(vehicleId) {
     try {
       const [rows] = await pool.query(`
-        SELECT j.*, c.name AS customer_name, v.plate, v.model,
+        SELECT j.id, 
+               j.created_at, 
+               j.state, 
+               j.total_amount, 
+               j.workflow_type,
+               j.user_id, 
+               j.customer_id, 
+               j.vehicle_id, /* vehicle_id de la tabla jobsheets */
+               c.name AS customer_name, 
+               v.plate AS license_plate, 
+               v.model AS vehicle_model,
                u.username AS technician_name
         FROM jobsheets j
         LEFT JOIN customers c ON j.customer_id = c.id
@@ -188,24 +283,16 @@ class JobsheetModel {
         ORDER BY j.created_at DESC
       `, [vehicleId]);
       
-      return rows;
+      return rows.map(row => ({
+        ...row,
+        license_plate: row.license_plate || "No plate"
+      }));
     } catch (error) {
+      console.error('Error in JobsheetModel.getByVehicleId:', error);
       throw error;
     }
   }
-  static async getTotalValue(id) {
-    try {
-      const [rows] = await pool.query(`
-        SELECT SUM(quantity * price) as total
-        FROM jobsheet_items
-        WHERE jobsheet_id = ?
-      `, [id]);
-      
-      return rows[0]?.total || 0;
-    } catch (error) {
-      throw error;
-    }
-  }
+
 }
 
 module.exports = JobsheetModel;

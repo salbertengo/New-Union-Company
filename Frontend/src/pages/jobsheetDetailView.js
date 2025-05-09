@@ -11,9 +11,9 @@ import Invoice from "../components/invoice";
 const WORKFLOW_KEYWORDS = {
   "deposit": { id: "2", defaultDescription: "Deposit for Bike Sale" },
   "insurance": { id: "3", defaultDescription: "Insurance Payment" },
-  "hp payment": { id: "4", defaultDescription: "HP Payment" },
+  "bq hp": { id: "4", defaultDescription: "BQ HP" },
   "road tax": { id: "5", defaultDescription: "Road Tax" },
-  "hp payment 2": { id: "6", defaultDescription: "HP Payment 2" }
+  "nu hp": { id: "6", defaultDescription: "NU HP"}
 };
 
 const SearchResultItem = ({ item, onSelect }) => (
@@ -1937,7 +1937,7 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
       {/* Input de búsqueda principal, solo visible si no estamos en modo labor/workflow */}
       {(activeInputMode !== 'labor' && activeInputMode !== 'workflowSpecific') && inventorySearchTerm && !selectedProductForAdding && searchResults.length === 0 && (
          <div style={{ padding: "8px", textAlign: "center", color: "#777", backgroundColor:"#f9f9f9", borderRadius:"4px", marginBottom:"10px" }}>
-              Type 'labor', 'deposit', 'insurance', 'hp payment', 'road tax' for specific charges, or search products.
+              Type 'labor', 'deposit', 'insurance', 'nu hp', 'road tax' for specific charges, or search products.
          </div>
       )}
        {/* Mensaje para limpiar la búsqueda y volver al modo normal */}
