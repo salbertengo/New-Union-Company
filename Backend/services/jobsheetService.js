@@ -4,9 +4,9 @@ const PaymentModel = require('../models/payment');
 const LaborModel = require('../models/labor'); 
 
 class JobsheetService {
-  static async getAllJobsheets(search, state) {
+static async  getAllJobsheets(search, state, start_date, end_date) {
     try {
-      return await JobsheetModel.getAll(search, state);
+  return await JobsheetModel.getAll(search, state, start_date, end_date);
     } catch (error) {
       throw error;
     }

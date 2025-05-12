@@ -7,6 +7,8 @@ import "ag-grid-community/styles/ag-theme-alpine.css";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faEdit,
+  faCalendarAlt,
+  faTimes,  
   faTrash,
   faSearch,
   faMoneyBillWave,
@@ -23,8 +25,7 @@ const JobsheetView = () => {
   const [jobsheets, setJobsheets] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [customers, setCustomers] = useState([]);
-  const [setVehicles] = useState([]);
-  const [currentJobsheet, setCurrentJobsheet] = useState(null);
+const [vehicles, setVehicles] = useState([]);  const [currentJobsheet, setCurrentJobsheet] = useState(null);
   const [isHovered, setIsHovered] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -65,50 +66,51 @@ const JobsheetView = () => {
       setRunTour(false);
     }
   };
+const [startDate, setStartDate] = useState(new Date());
+const [endDate, setEndDate] = useState(new Date());
+const [showDatePicker, setShowDatePicker] = useState(false);
 
   const columnDefs = [
-    {
-      headerName: "ID",
-      field: "id",
-      width: 0,
-      suppressMenu: true,
-      headerClass: "custom-header-sumary",
+  { 
+    headerName: "ID",
+    field: "id",
+    width: 0,
+    suppressMenu: true,
+    headerClass: "custom-header-sumary", 
+  },
+  { 
+    // Moved to position 2
+    headerName: "Created",
+    field: "created_at",
+    suppressMenu: true,
+    headerClass: "custom-header-sumary",
+    cellRenderer: (params) => {
+      if (!params.data.created_at) return "—";
+      const date = new Date(params.data.created_at);
+      // Format as DD/MM/YYYY (using en-GB locale)
+      return date.toLocaleDateString('en-GB');
     },
-    {
-      headerName: "Customer",
-      field: "customer_name",
-      width: 140,
-      suppressMenu: true,
-      headerClass: "custom-header-sumary",
+  },
+    { 
+    headerName: "Plate",
+    field: "license_plate",
+    suppressMenu: true,
+    headerClass: "custom-header-sumary",
+    width: 120,
+    cellRenderer: (params) => {
+      if (!params.data) return null;
+      return <div>{params.value || ""}</div>;
     },
-    {
-      headerName: "Model",
-      field: "vehicle_model",
-      suppressMenu: true,
-      headerClass: "custom-header-sumary",
-    },
-    {
-      headerName: "Plate",
-      field: "license_plate",
-      suppressMenu: true,
-      headerClass: "custom-header-sumary",
-      width: 120,
-      cellRenderer: (params) => {
-        if (!params.data) return null;
-        return <div>{params.value || ""}</div>;
-      },
-    },
-    {
-      headerName: "Created",
-      field: "created_at",
-      suppressMenu: true,
-      headerClass: "custom-header-sumary",
-      cellRenderer: (params) => {
-        if (!params.data.created_at) return "—";
-        const date = new Date(params.data.created_at);
-        return date.toLocaleDateString();
-      },
-    },
+  },
+  {
+    headerName: "Customer",
+    field: "customer_name",
+    width: 140,
+    suppressMenu: true,
+    headerClass: "custom-header-sumary",
+  },
+
+
     {
       headerName: "State",
       field: "state",
@@ -259,104 +261,239 @@ const JobsheetView = () => {
   const handleRefreshJobsheets = () => {
     fetchJobsheets(searchTerm, statusFilter);
   };
+const DateRangeSelector = () => {
+  // Format date as DD/MM/YYYY for display
+  const formatDate = (date) => {
+    return date.toLocaleDateString('en-GB');
+  };
 
-  const fetchJobsheets = useCallback(async (search = "", status = "all") => {
-    setLoading(true);
-    const token = localStorage.getItem("token");
-    if (!token) {
-      console.error("No token found");
-      setLoading(false);
+  return (
+    <div style={{ position: "relative" }}>
+      <button
+        onClick={() => setShowDatePicker(!showDatePicker)}
+        style={{
+          padding: "5px 15px",
+          backgroundColor: "#F9FBFF",
+          border: "1px solid #e0e0e0",
+          borderRadius: "10px",
+          display: "flex",
+          alignItems: "center",
+          gap: "5px",
+          height: "35px",
+          fontSize: "14px",
+          color: "#333"
+        }}
+      >
+        <FontAwesomeIcon icon={faCalendarAlt} style={{ color: "#5932EA" }} />
+        {formatDate(startDate)} - {formatDate(endDate)}
+      </button>
+
+      {showDatePicker && (
+        <div style={{
+          position: "absolute",
+          top: "40px",
+          right: "0",
+          zIndex: 1000,
+          backgroundColor: "white",
+          borderRadius: "8px",
+          boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
+          padding: "15px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "10px",
+          width: "280px"
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <h4 style={{ margin: 0 }}>Date Range</h4>
+            <button 
+              onClick={() => setShowDatePicker(false)}
+              style={{ 
+                background: "none", 
+                border: "none",
+                cursor: "pointer",
+                fontSize: "16px"
+              }}
+            >
+              <FontAwesomeIcon icon={faTimes} />
+            </button>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            <div>
+              <label style={{ display: "block", marginBottom: "5px", fontSize: "14px" }}>Start Date</label>
+              <input
+                type="date"
+                value={startDate.toISOString().split('T')[0]}
+                onChange={(e) => setStartDate(new Date(e.target.value))}
+                style={{ 
+                  padding: "8px", 
+                  borderRadius: "4px", 
+                  border: "1px solid #ddd",
+                  width: "100%" 
+                }}
+              />
+            </div>
+            <div>
+              <label style={{ display: "block", marginBottom: "5px", fontSize: "14px" }}>End Date</label>
+              <input
+                type="date"
+                value={endDate.toISOString().split('T')[0]}
+                onChange={(e) => setEndDate(new Date(e.target.value))}
+                style={{ 
+                  padding: "8px", 
+                  borderRadius: "4px", 
+                  border: "1px solid #ddd",
+                  width: "100%" 
+                }}
+              />
+            </div>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: "10px" }}>
+            <button
+              onClick={() => {
+                setStartDate(new Date());
+                setEndDate(new Date());
+              }}
+              style={{
+                padding: "8px 15px",
+                backgroundColor: "#f1f1f1",
+                border: "none",
+                borderRadius: "4px",
+                cursor: "pointer"
+              }}
+            >
+              Today Only
+            </button>
+            <button
+              onClick={() => {
+                fetchJobsheets(searchTerm, statusFilter);
+                setShowDatePicker(false);
+              }}
+              style={{
+                padding: "8px 15px",
+                backgroundColor: "#5932EA",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                cursor: "pointer"
+              }}
+            >
+              Apply Filter
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+ const fetchJobsheets = useCallback(async (search = "", status = "all") => {
+  setLoading(true);
+  const token = localStorage.getItem("token");
+  if (!token) {
+    console.error("No token found");
+    setLoading(false);
+    return;
+  }
+
+  try {
+    // If there's a search term, try loading all for local filtering
+    if (search && search.trim() !== "") {
+      await fetchJobsheetsForLocalSearch(status, search);
       return;
     }
 
-    try {
-      // If there's a search term, try loading all for local filtering
-      if (search && search.trim() !== "") {
-        await fetchJobsheetsForLocalSearch(status, search);
-        return;
-      }
+    // Format dates for API query
+    const startDateFormatted = startDate.toISOString().split('T')[0];
+    const endDateFormatted = endDate.toISOString().split('T')[0];
 
-      // For requests without search, use the normal endpoint
-      let url = `${API_URL}/jobsheets`;
-      if (status && status !== "all") {
-        url += `?state=${encodeURIComponent(status)}`;
-      }
-
-      console.log("Requesting URL:", url);
-
-      const response = await fetch(url, {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const jobsheetData = await response.json();
-        console.log("Data received:", jobsheetData);
-        setJobsheets(jobsheetData);
-      } else {
-        console.error("Server error:", response.status);
-        setJobsheets([]);
-      }
-    } catch (error) {
-      console.error("Error in fetchJobsheets:", error);
-      setJobsheets([]);
-    } finally {
-      setLoading(false);
+    // For requests without search, use the normal endpoint with date range
+    let url = `${API_URL}/jobsheets?start_date=${startDateFormatted}&end_date=${endDateFormatted}`;
+    
+    if (status && status !== "all") {
+      url += `&state=${encodeURIComponent(status)}`;
     }
-  }, [API_URL]);
+
+    console.log("Requesting URL:", url);
+
+    const response = await fetch(url, {
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (response.ok) {
+      const jobsheetData = await response.json();
+      console.log("Data received:", jobsheetData);
+      setJobsheets(jobsheetData);
+    } else {
+      console.error("Server error:", response.status);
+      setJobsheets([]);
+    }
+  } catch (error) {
+    console.error("Error in fetchJobsheets:", error);
+    setJobsheets([]);
+  } finally {
+    setLoading(false);
+  }
+}, [API_URL, startDate, endDate]); // Add dependencies
 
   // Function to load jobsheets and perform local search
   const fetchJobsheetsForLocalSearch = async (status, searchTerm) => {
-    const token = localStorage.getItem("token");
-    if (!token) return;
+  const token = localStorage.getItem("token");
+  if (!token) return;
 
-    try {
-      // Load all jobsheets, optionally filtered by state
-      let url = `${API_URL}/jobsheets`;
-      if (status && status !== "all") {
-        url += `?state=${encodeURIComponent(status)}`;
-      }
+  try {
+    // Format dates for API query
+    const startDateFormatted = startDate.toISOString().split('T')[0];
+    const endDateFormatted = endDate.toISOString().split('T')[0];
+    
+    // Load jobsheets with date range and optional state filter
+    let url = `${API_URL}/jobsheets?start_date=${startDateFormatted}&end_date=${endDateFormatted}`;
+    
+    if (status && status !== "all") {
+      url += `&state=${encodeURIComponent(status)}`;
+    }
 
-      const response = await fetch(url, {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+    const response = await fetch(url, {
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (response.ok) {
+      const allJobsheets = await response.json();
+
+      // Filter locally by search term
+      const searchTermLower = searchTerm.toLowerCase();
+      const filtered = allJobsheets.filter((js) => {
+        // Search in ID
+        if (js.id.toString().includes(searchTermLower)) return true;
+
+        // Search in customer name
+        if (js.customer_name?.toLowerCase().includes(searchTermLower))
+          return true;
+
+        // Search in vehicle model or plate
+        if (js.vehicle_model?.toLowerCase().includes(searchTermLower))
+          return true;
+        if (js.license_plate?.toLowerCase().includes(searchTermLower))
+          return true;
+
+        return false;
       });
 
-      if (response.ok) {
-        const allJobsheets = await response.json();
-
-        // Filter locally by search term
-        const searchTermLower = searchTerm.toLowerCase();
-        const filtered = allJobsheets.filter((js) => {
-          // Search in ID
-          if (js.id.toString().includes(searchTermLower)) return true;
-
-          // Search in customer name
-          if (js.customer_name?.toLowerCase().includes(searchTermLower))
-            return true;
-
-          // Search in vehicle model or plate
-          if (js.vehicle_model?.toLowerCase().includes(searchTermLower))
-            return true;
-          if (js.license_plate?.toLowerCase().includes(searchTermLower))
-            return true;
-
-          return false;
-        });
-
-        console.log(
-          `Local search: found ${filtered.length} of ${allJobsheets.length} jobsheets`
-        );
-        setJobsheets(filtered);
-      }
-    } catch (error) {
-      console.error("Error in local search:", error);
+      console.log(
+        `Local search: found ${filtered.length} of ${allJobsheets.length} jobsheets`
+      );
+      setJobsheets(filtered);
     }
-  };
+  } catch (error) {
+    console.error("Error in local search:", error);
+  }
+};
 
   const StatusFilterButton = () => {
     const statuses = [
@@ -539,11 +676,21 @@ const JobsheetView = () => {
     }
   };
 
-  useEffect(() => {
-    fetchJobsheets(searchTerm, statusFilter);
+useEffect(() => {
+  // Set default to today's date
+  const today = new Date();
+  setStartDate(today);
+  setEndDate(today);
+  
+  // Llamar a las funciones iniciales
+  const initialFetch = async () => {
+    await fetchJobsheets(searchTerm, statusFilter);
     fetchCustomers();
     fetchVehicles();
-  }, [fetchJobsheets, searchTerm, statusFilter]);
+  };
+  
+  initialFetch();
+}, []); 
 
   const handleSearch = (e) => {
     const value = e.target.value;
@@ -775,35 +922,37 @@ const JobsheetView = () => {
             marginBottom: "10px",
           }}
         >
-          <h2 style={{ margin: 0, fontSize: "18px" }}>Job Sheets</h2>
-          <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-            <div style={{ position: "relative" }}>
-              <input
-                type="text"
-                placeholder="Search jobsheets..."
-                value={searchTerm}
-                onChange={handleSearch}
-                style={{
-                  padding: "5px 30px 5px 10px",
-                  width: "216px",
-                  borderRadius: "10px",
-                  border: "1px solid white",
-                  backgroundColor: "#F9FBFF",
-                  height: "25px",
-                }}
-              />
-              <FontAwesomeIcon
-                icon={faSearch}
-                style={{
-                  position: "absolute",
-                  right: "10px",
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  color: loading ? "#4321C9" : "gray",
-                  cursor: "pointer",
-                }}
-              />
-            </div>
+         <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+  <div style={{ position: "relative" }}>
+    <input
+      type="text"
+      placeholder="Search jobsheets..."
+      value={searchTerm}
+      onChange={handleSearch}
+      style={{
+        padding: "5px 30px 5px 10px",
+        width: "216px",
+        borderRadius: "10px",
+        border: "1px solid white",
+        backgroundColor: "#F9FBFF",
+        height: "25px",
+      }}
+    />
+    <FontAwesomeIcon
+      icon={faSearch}
+      style={{
+        position: "absolute",
+        right: "10px",
+        top: "50%",
+        transform: "translateY(-50%)",
+        color: loading ? "#4321C9" : "gray",
+        cursor: "pointer",
+      }}
+    />
+  </div>
+
+  {/* Add DateRangeSelector here */}
+  <DateRangeSelector />
 
             <StatusFilterButton />
 

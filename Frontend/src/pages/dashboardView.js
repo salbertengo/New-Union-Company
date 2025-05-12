@@ -144,26 +144,28 @@ const DashboardView = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const formatDateRangeDisplay = (start, end) => {
-    const formatDate = (dateString) => {
-      if (!dateString) return "";
-      try {
-        return new Date(dateString).toLocaleDateString();
-      } catch (e) {
-        return "Invalid date";
-      }
-    };
-    
-    const isToday = start === todayDates.start && end === todayDates.end;
-    if (isToday) {
-      return "Today";
+const formatDateRangeDisplay = (start, end) => {
+  const formatDate = (dateString) => {
+    if (!dateString) return "";
+    try {
+      // Formato DD/MM/YYYY usando localización en-GB
+      return new Date(dateString).toLocaleDateString('en-GB');
+    } catch (e) {
+      return "Invalid date";
     }
-    
-    if (start === end) {
-      return formatDate(start);
-    }
-    return `${formatDate(start)} - ${formatDate(end)}`;
   };
+  
+  const isToday = start === todayDates.start && end === todayDates.end;
+  if (isToday) {
+    return "Today";
+  }
+  
+  if (start === end) {
+    return formatDate(start);
+  }
+  return `${formatDate(start)} - ${formatDate(end)}`;
+};
+
 
   const handleApplyDates = () => {
     fetchDashboardData();
@@ -320,16 +322,16 @@ const DashboardView = () => {
   }, [API_URL, startDate, endDate]);
 
   const handleExport = () => {
-    const workbookData = exportData.map(item => ({
-      'Date': format(new Date(item.date), 'dd-MMM-yyyy'),
-      'Customer': item.customer,
-      'Jobsheet Number': item.jobsheet_number,
-      'Code': item.code || '',
-      'Cash Amount': item.cash_amount.toFixed(2),
-      'PayNow Amount': item.paynow_amount.toFixed(2),
-      'Other Amount': item.other_amount.toFixed(2),
-      'GST Value': item.gst_value.toFixed(2)
-    }));
+  const workbookData = exportData.map(item => ({
+    'Date': format(new Date(item.date), 'dd/MM/yyyy'), 
+    'Customer': item.customer,
+    'Jobsheet Number': item.jobsheet_number,
+    'Code': item.code || '',
+    'Cash Amount': item.cash_amount.toFixed(2),
+    'PayNow Amount': item.paynow_amount.toFixed(2),
+    'Other Amount': item.other_amount.toFixed(2),
+    'GST Value': item.gst_value.toFixed(2)
+  }));
 
     const worksheet = XLSX.utils.json_to_sheet(workbookData);
     const workbook = XLSX.utils.book_new();
@@ -347,10 +349,10 @@ const DashboardView = () => {
     ];
     worksheet["!cols"] = colWidths;
     
-    const filename = `Revenue_Report_${format(new Date(startDate), 'yyyyMMdd')}_to_${format(new Date(endDate), 'yyyyMMdd')}.xlsx`;
+  const filename = `Revenue_Report_${format(new Date(startDate), 'dd-MM-yyyy')}_to_${format(new Date(endDate), 'dd-MM-yyyy')}.xlsx`;
     
-    XLSX.writeFile(workbook, filename);
-    setShowExportModal(false);
+  XLSX.writeFile(workbook, filename);
+  setShowExportModal(false);
   };
 
   useEffect(() => {
@@ -935,10 +937,10 @@ const DashboardView = () => {
             </div>
             
             <div style={{ marginBottom: "20px" }}>
-              <p>Your report for {formatDateRangeDisplay(startDate, endDate)} is ready to export.</p>
+  <p>Your report for {formatDateRangeDisplay(startDate, endDate)} is ready to export.</p>
               <p>The Excel file will include:</p>
               <ul style={{ paddingLeft: "20px", margin: "10px 0" }}>
-                <li>Date (DD-MMM-YYYY format)</li>
+    <li>Date (DD/MM/YYYY format)</li> 
                 <li>Customer (License Plate)</li>
                 <li>Jobsheet Number</li>
                 <li>Code (Workflow Type)</li>

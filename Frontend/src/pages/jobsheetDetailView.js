@@ -1075,7 +1075,7 @@ const calculateTotals = () => {
             <h1>INVOICE</h1>
             <p>New Union Company</p>
             <p>Invoice #${jobsheet?.id || ''}</p>
-            <p>Date: ${jobsheet?.created_at ? new Date(jobsheet.created_at).toLocaleDateString() : new Date().toLocaleDateString()}</p>
+<p>Date: ${jobsheet?.created_at ? new Date(jobsheet.created_at).toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB')}</p>
           </div>
           
           <div class="invoice-info">
@@ -1149,7 +1149,7 @@ const calculateTotals = () => {
               <tbody>
                 ${payments.map(payment => `
                   <tr>
-                    <td>${new Date(payment.payment_date).toLocaleDateString()}</td>
+<td>${new Date(payment.payment_date).toLocaleDateString('en-GB')}</td>
                     <td>${payment.method.replace('_', ' ')}</td>
                     <td class="text-right">$${parseFloat(payment.amount).toFixed(2)}</td>
                   </tr>
@@ -1645,7 +1645,7 @@ const calculateTotals = () => {
               {effectiveJobsheetId ? `Jobsheet #${jobsheet?.id || ''}` : 'New Jobsheet'}
             </h2>
             <div style={{ fontSize: "12px", marginTop: "4px", display: "flex", gap: "15px", alignItems: "center" }}>
-              <span>Date: {jobsheet?.created_at ? new Date(jobsheet.created_at).toLocaleDateString() : new Date().toLocaleDateString()}</span>
+  <span>Date: {jobsheet?.created_at ? new Date(jobsheet.created_at).toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB')}</span>
               <span>Vehicle: {jobsheet?.license_plate || jobsheet?.plate || "No plate"}</span>
             </div>
           </div>
@@ -2450,26 +2450,56 @@ const calculateTotals = () => {
               </div>
             </div>
             
-            <button 
-              onClick={handlePrint}
-              style={{
-                width: "100%",
-                padding: "8px",
-                backgroundColor: "#5932EA",
-                color: "white",
-                border: "none",
-                borderRadius: "4px",
-                fontSize: "13px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "6px",
-                cursor: "pointer"
-              }}
-            >
-              <FontAwesomeIcon icon={faPrint} size="sm" />
-              Print Invoice
-            </button>
+            <div style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "8px"
+            }}>
+              <button 
+                onClick={handlePrint}
+                style={{
+                  width: "100%",
+                  padding: "8px",
+                  backgroundColor: "#5932EA",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "4px",
+                  fontSize: "13px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "6px",
+                  cursor: "pointer"
+                }}
+              >
+                <FontAwesomeIcon icon={faPrint} size="sm" />
+                Print Invoice
+              </button>
+              
+              {jobsheet?.state === "completed" && (
+                <button 
+                  onClick={onClose}
+                  style={{
+                    width: "100%",
+                    padding: "8px",
+                    backgroundColor: "#757575",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "4px",
+                    fontSize: "13px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "6px",
+                    cursor: "pointer",
+                    marginTop: "5px"
+                  }}
+                >
+                  <FontAwesomeIcon icon={faArrowLeft} size="sm" />
+                  Exit
+                </button>
+              )}
+            </div>
           </div>
           
           <div style={{ 
@@ -2618,7 +2648,7 @@ const calculateTotals = () => {
                     {payments.map(payment => (
                       <tr key={payment.id} style={{ borderBottom: "1px solid #f8f8f8" }}>
                         <td style={{ padding: "6px" }}>
-                          {new Date(payment.payment_date).toLocaleDateString()}
+  {new Date(payment.payment_date).toLocaleDateString('en-GB')}
                         </td>
                         <td style={{ padding: "6px", textTransform: "capitalize" }}>
                           {payment.method.replace('_', ' ')}

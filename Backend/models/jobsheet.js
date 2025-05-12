@@ -1,7 +1,7 @@
 const pool = require('../db');
 
 class JobsheetModel {
-  static async getAll(search, state) {
+  static async getAll(search, state, start_date, end_date) {
     try {
       // Modificar la consulta para seleccionar explícitamente j.vehicle_id
       // y no alias v.id como vehicle_id para evitar sobrescribir el vehicle_id original del jobsheet.
@@ -25,23 +25,45 @@ class JobsheetModel {
       `;
       
       const params = [];
+      let whereClauseAdded = false;
       
-      if (search || state) {
+      // Comienza con WHERE solo si hay algún filtro
+      if (search || state || start_date || end_date) {
         query += ` WHERE`;
+        whereClauseAdded = true;
         
         if (search) {
           // Asegurarse que la búsqueda por v.plate no cause error si v.plate es NULL
           query += ` (j.id LIKE ? OR c.name LIKE ? OR COALESCE(v.plate, '') LIKE ?)`;
           params.push(`%${search}%`, `%${search}%`, `%${search}%`);
-        }
-        
-        if (search && state) {
-          query += ` AND`;
+          
+          if (state || start_date || end_date) {
+            query += ` AND`;
+          }
         }
         
         if (state) {
           query += ` j.state = ?`;
           params.push(state);
+          
+          if (start_date || end_date) {
+            query += ` AND`;
+          }
+        }
+        
+        // Agregar filtro de fecha
+        if (start_date && end_date) {
+          // Si tenemos ambas fechas, filtramos por rango
+          query += ` DATE(j.created_at) BETWEEN ? AND ?`;
+          params.push(start_date, end_date);
+        } else if (start_date) {
+          // Solo fecha de inicio
+          query += ` DATE(j.created_at) >= ?`;
+          params.push(start_date);
+        } else if (end_date) {
+          // Solo fecha de fin
+          query += ` DATE(j.created_at) <= ?`;
+          params.push(end_date);
         }
       }
       

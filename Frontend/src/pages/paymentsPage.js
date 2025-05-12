@@ -67,17 +67,18 @@ const PaymentsPage = () => {
         return `#${params.value}`;
       }
     },
-    {
-      headerName: 'Date',
-      field: 'payment_date',
-      suppressMenu: true,
-      headerClass: 'custom-header-sumary',
-      cellRenderer: (params) => {
-        if (!params.value) return '';
-        const date = new Date(params.value);
-        return date.toLocaleDateString();
-      }
-    },
+{
+  headerName: 'Date',
+  field: 'payment_date',
+  suppressMenu: true,
+  headerClass: 'custom-header-sumary',
+  cellRenderer: (params) => {
+    if (!params.value) return '';
+    const date = new Date(params.value);
+    // Cambiar al formato DD/MM/YYYY usando la localización en-GB
+    return date.toLocaleDateString('en-GB');
+  }
+},
     {
       headerName: 'Amount',
       field: 'amount',

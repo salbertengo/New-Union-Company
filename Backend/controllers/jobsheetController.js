@@ -6,11 +6,11 @@ class JobsheetController {
   // En el servidor - jobsheetController.js
   static async getAllJobsheets(req, res) {
     try {
-      const { search, state, vehicle_id } = req.query;
+    const { search, state, vehicle_id, start_date, end_date } = req.query;
       
-      const jobsheets = await JobsheetService.getAllJobsheets(search, state);
+    const jobsheets = await JobsheetService.getAllJobsheets(search, state, start_date, end_date);
       
-      const enrichedJobsheets = await Promise.all(jobsheets.map(async (js) => {
+    const enrichedJobsheets = await Promise.all(jobsheets.map(async (js) => {
         let customer = null;
         let vehicle = null;
         
