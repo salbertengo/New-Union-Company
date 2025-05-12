@@ -201,37 +201,37 @@ class LaborModel {
     }
   }
 
-  async updateJobsheetTotal(jobsheetId) {
-    try {
-      // 1. Get sum of inventory items
-      const [itemsResult] = await pool.execute(
-        'SELECT SUM(price * quantity) as items_total FROM jobsheet_items WHERE jobsheet_id = ?',
-        [jobsheetId]
-      );
-      
-      // 2. Get sum of COMPLETED labors only
-      const [laborResult] = await pool.execute(
-        'SELECT SUM(price) as labor_total FROM labor WHERE jobsheet_id = ? AND is_billed = 1 AND is_completed = 1',
-        [jobsheetId]
-      );
-      
-      // 3. Calculate total
-      const itemsTotal = itemsResult[0].items_total || 0;
-      const laborTotal = laborResult[0].labor_total || 0;
-      const total = parseFloat(itemsTotal) + parseFloat(laborTotal);
-      
-      // 4. Update total in jobsheets
-      await pool.execute(
-        'UPDATE jobsheets SET total_amount = ? WHERE id = ?',
-        [total, jobsheetId]
-      );
-      
-      return total;
-    } catch (error) {
-      console.error('Error updating jobsheet total:', error);
-      throw error;
-    }
+ async updateJobsheetTotal(jobsheetId) {
+  try {
+    // 1. Get sum of inventory items
+    const [itemsResult] = await pool.execute(
+      'SELECT SUM(price * quantity) as items_total FROM jobsheet_items WHERE jobsheet_id = ?',
+      [jobsheetId]
+    );
+    
+    // 2. Get sum of COMPLETED labors only
+    const [laborResult] = await pool.execute(
+      'SELECT SUM(price) as labor_total FROM labor WHERE jobsheet_id = ? AND is_billed = 1 AND is_completed = 1',
+      [jobsheetId]
+    );
+    
+    // 3. Calculate total - no GST adicional
+    const itemsTotal = itemsResult[0].items_total || 0;
+    const laborTotal = laborResult[0].labor_total || 0;
+    const total = parseFloat(itemsTotal) + parseFloat(laborTotal);
+    
+    // 4. Update total in jobsheets
+    await pool.execute(
+      'UPDATE jobsheets SET total_amount = ? WHERE id = ?',
+      [total, jobsheetId]
+    );
+    
+    return total;
+  } catch (error) {
+    console.error('Error updating jobsheet total:', error);
+    throw error;
   }
+}
 }
 
 module.exports = new LaborModel();

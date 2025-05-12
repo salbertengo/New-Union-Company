@@ -1,7 +1,7 @@
 const JobsheetModel = require('../models/jobsheet');
 const JobsheetItemModel = require('../models/jobsheetItem');
 const PaymentModel = require('../models/payment');
-const LaborModel = require('../models/labor'); // Asegúrate de que la ruta sea correcta y LaborModel exista
+const LaborModel = require('../models/labor'); 
 
 class JobsheetService {
   static async getAllJobsheets(search, state) {
@@ -12,47 +12,50 @@ class JobsheetService {
     }
   }
 
-  static async getJobsheetById(id) {
-    try {
-      const jobsheet = await JobsheetModel.getById(id);
-      if (!jobsheet) {
-        throw new Error('Jobsheet not found');
-      }
-
-      // Obtener items, labors y pagos relacionados
-      const items = await JobsheetItemModel.getByJobsheetId(id);
-      const labors = await LaborModel.getByJobsheetId(id); // Asume que LaborModel.getByJobsheetId existe
-      const payments = await PaymentModel.getByJobsheetId(id);
-      
-      // Calcular totales
-      const itemsSubtotal = items.reduce((sum, item) => sum + (item.quantity * item.price), 0);
-      const gstOnItems = itemsSubtotal * 0.09; // GST del 9% sobre el subtotal de items
-
-      // Sumar solo labors completados y facturados
-      const laborsSubtotal = labors
-        .filter(labor => labor.is_completed === 1 && labor.is_billed === 1)
-        .reduce((sum, labor) => sum + parseFloat(labor.price || 0), 0);
-
-      const grandTotal = itemsSubtotal + gstOnItems + laborsSubtotal;
-      const totalPayments = payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
-
-      return {
-        ...jobsheet,
-        items,
-        labors, // Incluir labors en la respuesta para el detalle
-        payments,
-        itemsSubtotal,
-        gstOnItems,
-        laborsSubtotal,
-        grandTotal, // Este es el total general incluyendo GST en items y labors
-        totalPayments,
-        balance: grandTotal - totalPayments
-      };
-    } catch (error) {
-      console.error('Error in JobsheetService.getJobsheetById:', error);
-      throw error;
+ static async getJobsheetById(id) {
+  try {
+    const jobsheet = await JobsheetModel.getById(id);
+    if (!jobsheet) {
+      throw new Error('Jobsheet not found');
     }
+
+    // Obtener items, labors y pagos relacionados
+    const items = await JobsheetItemModel.getByJobsheetId(id);
+    const labors = await LaborModel.getByJobsheetId(id);
+    const payments = await PaymentModel.getByJobsheetId(id);
+    
+    // Calcular totales
+    const itemsSubtotal = items.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+    
+    // Sumar solo labors completados y facturados
+    const laborsSubtotal = labors
+      .filter(labor => labor.is_completed === 1 && labor.is_billed === 1)
+      .reduce((sum, labor) => sum + parseFloat(labor.price || 0), 0);
+
+    // Calcular el GST incluido (solo para mostrar información)
+    const gstIncluded = (itemsSubtotal + laborsSubtotal) * 0.09 / 1.09; // 9% GST incluido
+    
+    // El total es simplemente la suma de items y labores (sin añadir GST adicional)
+    const grandTotal = itemsSubtotal + laborsSubtotal;
+    const totalPayments = payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
+
+    return {
+      ...jobsheet,
+      items,
+      labors,
+      payments,
+      itemsSubtotal,
+      laborsSubtotal,
+      gstIncluded, // Mostramos el GST que está incluido en los precios para información
+      grandTotal, // Este es el total sin añadir GST adicional
+      totalPayments,
+      balance: grandTotal - totalPayments
+    };
+  } catch (error) {
+    console.error('Error in JobsheetService.getJobsheetById:', error);
+    throw error;
   }
+}
 
   static async getJobsheetsByCustomerId(customerId) {
     try {

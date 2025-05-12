@@ -211,6 +211,23 @@ class JobsheetItemModel {
       connection.release();
     }
   }
+  static async getById(id) {
+    try {
+      const [rows] = await pool.execute(
+        `SELECT * FROM jobsheet_items WHERE id = ?`,
+        [id]
+      );
+      
+      if (rows.length === 0) {
+        return null;
+      }
+      
+      return rows[0];
+    } catch (error) {
+      console.error('Error in JobsheetItemModel.getById:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = JobsheetItemModel;

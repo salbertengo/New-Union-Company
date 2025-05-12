@@ -1182,30 +1182,32 @@ const InventoryView = () => {
     fontSize: "14px",
     pointerEvents: "none"
   }}>$</span>
-  <input
-    type="text"
-    value={editItem.cost === 0 ? '' : editItem.cost}
-    onChange={(e) => {
-      const val = e.target.value;
-      if (val === '' || /^\d*\.?\d*$/.test(val)) {
-        setEditItem({ ...editItem, cost: val === '' ? 0 : Number(val) });
-      }
-    }}
-    style={{
-      width: "100%",
-      padding: "12px 12px 12px 30px", /* Aumentado el padding izquierdo para el símbolo $ */
-      borderRadius: "8px",
-      border: "1px solid #e0e0e0",
-      backgroundColor: "#fff",
-      fontSize: "14px",
-      transition: "border-color 0.2s",
-      outline: "none",
-      boxSizing: "border-box"
-    }}
-    onFocus={(e) => e.target.style.borderColor = "#5932EA"}
-    onBlur={(e) => e.target.style.borderColor = "#e0e0e0"}
-    placeholder="0.00"
-  />
+ <input
+  type="text"
+  value={editItem.cost === 0 ? '' : editItem.cost}
+  onChange={(e) => {
+    const val = e.target.value;
+    if (val === '' || /^\d*\.?\d*$/.test(val)) {
+      setEditItem({ ...editItem, cost: val === '' ? 0 : val });
+    }
+  }}
+  onBlur={(e) => {
+    setEditItem({ ...editItem, cost: parseFloat(editItem.cost) || 0 });
+  }}
+  style={{
+    width: "100%",
+    padding: "12px 12px 12px 30px",
+    borderRadius: "8px",
+    border: "1px solid #e0e0e0",
+    backgroundColor: "#fff",
+    fontSize: "14px",
+    transition: "border-color 0.2s",
+    outline: "none",
+    boxSizing: "border-box"
+  }}
+  placeholder="0.00"
+/>
+
 </div>
                     </div>
                     <div>
@@ -1222,30 +1224,32 @@ const InventoryView = () => {
     fontSize: "14px",
     pointerEvents: "none"
   }}>$</span>
-  <input
-    type="text"
-    value={editItem.sale === 0 ? '' : editItem.sale}
-    onChange={(e) => {
-      const val = e.target.value;
-      if (val === '' || /^\d*\.?\d*$/.test(val)) {
-        setEditItem({ ...editItem, sale: val === '' ? 0 : Number(val) });
-      }
-    }}
-    style={{
-      width: "100%",
-      padding: "12px 12px 12px 30px", /* Ajustado el padding para mantener consistencia */
-      borderRadius: "8px",
-      border: "1px solid #e0e0e0",
-      backgroundColor: "#fff",
-      fontSize: "14px",
-      transition: "border-color 0.2s",
-      outline: "none",
-      boxSizing: "border-box" /* Asegurarse que tiene box-sizing */
-    }}
-    onFocus={(e) => e.target.style.borderColor = "#5932EA"}
-    onBlur={(e) => e.target.style.borderColor = "#e0e0e0"}
-    placeholder="0.00"
-  />
+ <input
+  type="text"
+  value={editItem.sale === 0 ? '' : editItem.sale}
+  onChange={(e) => {
+    const val = e.target.value;
+    // Expresión regular simplificada
+    if (val === '' || /^\d*\.?\d*$/.test(val)) {
+      setEditItem({ ...editItem, sale: val === '' ? 0 : val });
+    }
+  }}
+  onBlur={(e) => {
+    setEditItem({ ...editItem, sale: parseFloat(editItem.sale) || 0 });
+  }}
+  style={{
+    width: "100%",
+    padding: "12px 12px 12px 30px",
+    borderRadius: "8px",
+    border: "1px solid #e0e0e0",
+    backgroundColor: "#fff",
+    fontSize: "14px",
+    transition: "border-color 0.2s",
+    outline: "none",
+    boxSizing: "border-box"
+  }}
+  placeholder="0.00"
+/>
 </div>
                       {editItem.cost > 0 && editItem.sale > 0 && (
                         <div style={{ 

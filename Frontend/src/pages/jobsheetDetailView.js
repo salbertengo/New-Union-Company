@@ -596,42 +596,43 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
     return "Other Services/Charges";
   };
 
-  const calculateTotals = () => {
-    const itemsTotal = items.reduce((sum, item) => 
-      sum + (parseFloat(item.price || 0) * parseInt(item.quantity || 1)), 0);
-    
-    const laborBreakdown = {};
-    let taxableAmount = itemsTotal;
-
-    labors
-      .filter(l => l.is_completed === 1 && l.is_billed === 1)
-      .forEach(labor => {
-        const price = parseFloat(labor.price || 0);
-        const categoryName = getLaborCategoryName(labor.workflow_type);
-        laborBreakdown[categoryName] = (laborBreakdown[categoryName] || 0) + price;
-        
-        if (labor.workflow_type === "1") {
-          taxableAmount += price;
-        }
-      });
-    
-    const totalLaborAndWorkflowCosts = Object.values(laborBreakdown).reduce((sum, val) => sum + val, 0);
-    const subtotal = itemsTotal + totalLaborAndWorkflowCosts;
-    const tax = taxableAmount * (taxRate / 100);
-    const total = subtotal + tax;
-    const paid = payments.reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
-    
-    return {
-      items: itemsTotal,
-      laborBreakdown,
-      subtotal,
-      taxableAmount,
-      tax,
-      total,
-      paid,
-      balance: total - paid
-    };
+const calculateTotals = () => {
+  const itemsTotal = items.reduce((sum, item) => 
+    sum + (parseFloat(item.price || 0) * parseInt(item.quantity || 1)), 0);
+  
+  const laborBreakdown = {};
+  
+  labors
+    .filter(l => l.is_completed === 1 && l.is_billed === 1)
+    .forEach(labor => {
+      const price = parseFloat(labor.price || 0);
+      const categoryName = getLaborCategoryName(labor.workflow_type);
+      laborBreakdown[categoryName] = (laborBreakdown[categoryName] || 0) + price;
+    });
+  
+  const totalLaborCosts = Object.values(laborBreakdown).reduce((sum, val) => sum + val, 0);
+  
+  // GST se aplica SOLO a los items (productos), no al labor
+  const gstIncluded = itemsTotal - (itemsTotal / 1.09);
+  
+  // Subtotal es la suma de items (con GST incluido) y labor (sin GST)
+  const subtotal = itemsTotal + totalLaborCosts;
+  
+  // Total es igual al subtotal
+  const total = subtotal;
+  
+  const paid = payments.reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
+  
+  return {
+    items: itemsTotal,
+    laborBreakdown,
+    subtotal,
+    gstIncluded, // GST incluido solo en los productos
+    total,
+    paid,
+    balance: total - paid
   };
+};
 
   const getWorkflowTypeName = (type) => {
     const types = {
@@ -1120,12 +1121,12 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
           <div class="totals">
             <table>
               <tr>
-                <td>Subtotal:</td>
+                <td>Total (incl. GST):</td>
                 <td class="text-right">$${totals.subtotal.toFixed(2)}</td>
               </tr>
               <tr>
-                <td>GST (${taxRate}% on $${totals.taxableAmount.toFixed(2)}):</td>
-                <td class="text-right">$${totals.tax.toFixed(2)}</td>
+                <td>GST (${taxRate}%) included:</td>
+                <td class="text-right">$${totals.gstIncluded.toFixed(2)}</td>
               </tr>
               <tr class="total-row">
                 <td>Total:</td>
@@ -1800,27 +1801,274 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
     </div>
   ) : (
     <>
-      {/* Sección de búsqueda de productos y cantidad (modo 'search') */}
-      {activeInputMode === 'search' && (
-        <div style={{ 
-          display: "grid", 
-          gridTemplateColumns: selectedProductForAdding ? "1fr auto auto" : "1fr auto", 
-          gap: "8px", 
-          marginBottom: "10px",
-          alignItems: "center"
-        }}>
+      {/* Botones para diferentes modos de entrada - Reorganizados en el orden solicitado */}
+      <div style={{ 
+        display: "flex", 
+        flexWrap: "wrap", 
+        gap: "8px", 
+        marginBottom: "15px", 
+        padding: "10px",
+        backgroundColor: "#f9f9f9",
+        borderRadius: "4px"
+      }}>
+        <button
+          onClick={() => {
+            setActiveInputMode("search");
+            setCurrentWorkflowKeywordInfo(null);
+            setInventorySearchTerm("");
+            setNewMiscName("");
+            setNewMiscPrice("");
+            setSearchResults([]);
+          }}
+          style={{
+            padding: "6px 12px",
+            backgroundColor: activeInputMode === "search" ? "#5932EA" : "#ffffff",
+            color: activeInputMode === "search" ? "white" : "#555",
+            border: `1px solid ${activeInputMode === "search" ? "#5932EA" : "#ddd"}`,
+            borderRadius: "4px",
+            cursor: "pointer",
+            fontSize: "13px",
+            display: "flex",
+            alignItems: "center",
+            gap: "5px"
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M11 19C15.4183 19 19 15.4183 19 11C19 6.58172 15.4183 3 11 3C6.58172 3 3 6.58172 3 11C3 15.4183 6.58172 19 11 19Z" stroke={activeInputMode === "search" ? "white" : "#555"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M21 21L16.65 16.65" stroke={activeInputMode === "search" ? "white" : "#555"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          Products
+        </button>
+        
+        {/* 1) Labor */}
+        <button
+          onClick={() => {
+            setActiveInputMode("labor");
+            setCurrentWorkflowKeywordInfo(null);
+            setNewMiscName("");
+            setNewMiscPrice("");
+            setSearchResults([]);
+          }}
+          style={{
+            padding: "6px 12px",
+            backgroundColor: activeInputMode === "labor" ? "#5932EA" : "#ffffff",
+            color: activeInputMode === "labor" ? "white" : "#555",
+            border: `1px solid ${activeInputMode === "labor" ? "#5932EA" : "#ddd"}`,
+            borderRadius: "4px",
+            cursor: "pointer",
+            fontSize: "13px",
+            display: "flex",
+            alignItems: "center",
+            gap: "5px"
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M14 7H16.5L21 11.5V16.5H19M9 5H5V19H9M9 5C11 5 13.5 6.5 13.5 9.5C13.5 12.5 11 14 9 14M9 5V14M3 9H9M3 14H9" stroke={activeInputMode === "labor" ? "white" : "#555"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          Labor
+        </button>
+        
+        {/* 2) Deposit */}
+        <button
+          onClick={() => {
+            setActiveInputMode("workflowSpecific");
+            const depositInfo = WORKFLOW_KEYWORDS["deposit"];
+            setCurrentWorkflowKeywordInfo(depositInfo);
+            setNewMiscName(depositInfo.defaultDescription);
+            setNewMiscPrice("");
+            setSearchResults([]);
+          }}
+          style={{
+            padding: "6px 12px",
+            backgroundColor: (activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["deposit"].id) ? getWorkflowButtonColor("2") : "#ffffff",
+            color: (activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["deposit"].id) ? "white" : "#555",
+            border: `1px solid ${(activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["deposit"].id) ? getWorkflowButtonColor("2") : "#ddd"}`,
+            borderRadius: "4px",
+            cursor: "pointer",
+            fontSize: "13px",
+            display: "flex",
+            alignItems: "center",
+            gap: "5px"
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M4 9V18C4 19.1046 4.89543 20 6 20H18C19.1046 20 20 19.1046 20 18V9" stroke={(activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["deposit"].id) ? "white" : "#555"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M9 6L12 3L15 6" stroke={(activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["deposit"].id) ? "white" : "#555"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M12 3V13" stroke={(activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["deposit"].id) ? "white" : "#555"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M9 13H15" stroke={(activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["deposit"].id) ? "white" : "#555"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          Deposit
+        </button>
+        
+        {/* 3) Insurance */}
+        <button
+          onClick={() => {
+            setActiveInputMode("workflowSpecific");
+            const insuranceInfo = WORKFLOW_KEYWORDS["insurance"];
+            setCurrentWorkflowKeywordInfo(insuranceInfo);
+            setNewMiscName(insuranceInfo.defaultDescription);
+            setNewMiscPrice("");
+            setSearchResults([]);
+          }}
+          style={{
+            padding: "6px 12px",
+            backgroundColor: (activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["insurance"].id) ? getWorkflowButtonColor("3") : "#ffffff",
+            color: (activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["insurance"].id) ? "white" : "#555",
+            border: `1px solid ${(activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["insurance"].id) ? getWorkflowButtonColor("3") : "#ddd"}`,
+            borderRadius: "4px",
+            cursor: "pointer",
+            fontSize: "13px",
+            display: "flex",
+            alignItems: "center",
+            gap: "5px"
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2L3 7L12 12L21 7L12 2Z" stroke={(activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["insurance"].id) ? "white" : "#555"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M3 12L12 17L21 12" stroke={(activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["insurance"].id) ? "white" : "#555"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M3 17L12 22L21 17" stroke={(activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["insurance"].id) ? "white" : "#555"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          Insurance
+        </button>
+        
+        {/* 4) BQ HP */}
+        <button
+          onClick={() => {
+            setActiveInputMode("workflowSpecific");
+            const hpInfo = WORKFLOW_KEYWORDS["bq hp"];
+            setCurrentWorkflowKeywordInfo(hpInfo);
+            setNewMiscName(hpInfo.defaultDescription);
+            setNewMiscPrice("");
+            setSearchResults([]);
+          }}
+          style={{
+            padding: "6px 12px",
+            backgroundColor: (activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["bq hp"].id) ? getWorkflowButtonColor("4") : "#ffffff",
+            color: (activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["bq hp"].id) ? "white" : "#555",
+            border: `1px solid ${(activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["bq hp"].id) ? getWorkflowButtonColor("4") : "#ddd"}`,
+            borderRadius: "4px",
+            cursor: "pointer",
+            fontSize: "13px",
+            display: "flex",
+            alignItems: "center",
+            gap: "5px"
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M3 9H21M7 3V5M17 3V5M6 13H8M10.5 13H12.5M15 13H17M6 17H8M10.5 17H12.5M15 17H17M5 21H19C20.1046 21 21 20.1046 21 19V7C21 5.89543 20.1046 5 19 5H5C3.89543 5 3 5.89543 3 7V19C3 20.1046 3.89543 21 5 21Z" stroke={(activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["bq hp"].id) ? "white" : "#555"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          BQ HP
+        </button>
+        
+        {/* 5) Road Tax/COE */}
+        <button
+          onClick={() => {
+            setActiveInputMode("workflowSpecific");
+            const roadTaxInfo = WORKFLOW_KEYWORDS["road tax"];
+            setCurrentWorkflowKeywordInfo(roadTaxInfo);
+            setNewMiscName(roadTaxInfo.defaultDescription);
+            setNewMiscPrice("");
+            setSearchResults([]);
+          }}
+          style={{
+            padding: "6px 12px",
+            backgroundColor: (activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["road tax"].id) ? getWorkflowButtonColor("5") : "#ffffff",
+            color: (activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["road tax"].id) ? "white" : "#555",
+            border: `1px solid ${(activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["road tax"].id) ? getWorkflowButtonColor("5") : "#ddd"}`,
+            borderRadius: "4px",
+            cursor: "pointer",
+            fontSize: "13px",
+            display: "flex",
+            alignItems: "center",
+            gap: "5px"
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M10 7H14M9 15L6 18H18L15 15M3 3L21 21M17.8 17.8C16.6355 19.1806 14.9352 20 13 20C9.13401 20 6 16.866 6 13C6 11.0648 6.8194 9.36454 8.2 8.2" stroke={(activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["road tax"].id) ? "white" : "#555"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M15.5 9.5C16.4482 10.1268 17 11 17 12C17 13.1045 16.1046 13 15 13C13.8954 13 13 14 13 15" stroke={(activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["road tax"].id) ? "white" : "#555"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          Road Tax/COE
+        </button>
+        
+        {/* 6) NU HP */}
+        <button
+          onClick={() => {
+            setActiveInputMode("workflowSpecific");
+            const nuHpInfo = WORKFLOW_KEYWORDS["nu hp"];
+            setCurrentWorkflowKeywordInfo(nuHpInfo);
+            setNewMiscName(nuHpInfo.defaultDescription);
+            setNewMiscPrice("");
+            setSearchResults([]);
+          }}
+          style={{
+            padding: "6px 12px",
+            backgroundColor: (activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["nu hp"].id) ? getWorkflowButtonColor("6") : "#ffffff",
+            color: (activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["nu hp"].id) ? "white" : "#555",
+            border: `1px solid ${(activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["nu hp"].id) ? getWorkflowButtonColor("6") : "#ddd"}`,
+            borderRadius: "4px",
+            cursor: "pointer",
+            fontSize: "13px",
+            display: "flex",
+            alignItems: "center",
+            gap: "5px"
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M19 10H5C3.89543 10 3 10.8954 3 12V20C3 21.1046 3.89543 22 5 22H19C20.1046 22 21 21.1046 21 20V12C21 10.8954 20.1046 10 19 10Z" stroke={(activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["nu hp"].id) ? "white" : "#555"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M7 10V6C7 4.93913 7.42143 3.92172 8.17157 3.17157C8.92172 2.42143 9.93913 2 11 2H13C14.0609 2 15.0783 2.42143 15.8284 3.17157C16.5786 3.92172 17 4.93913 17 6V10" stroke={(activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["nu hp"].id) ? "white" : "#555"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M12 14V18" stroke={(activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["nu hp"].id) ? "white" : "#555"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          NU HP
+        </button>
+      </div>
+      
+      {/* Campo de entrada unificado para todos los modos - Consistente en posición y estilo */}
+      <div style={{ 
+        display: "grid", 
+        gridTemplateColumns: "1fr auto auto", 
+        gap: "8px", 
+        marginBottom: "15px", 
+        alignItems: "center",
+        padding: "12px",
+        border: "1px solid #e0e0e0",
+        borderRadius: "6px",
+        backgroundColor: activeInputMode === "search" ? "#ffffff" : 
+                         (activeInputMode === "labor" ? "#f9f9f9" : 
+                         `${currentWorkflowKeywordInfo ? getWorkflowButtonColor(currentWorkflowKeywordInfo.id) + '10' : "#f9f9f9"}`)
+      }}>
+        {/* Input principal - Adaptado según el modo activo */}
+        {activeInputMode === "search" ? (
           <input
             type="text"
             value={inventorySearchTerm}
             onChange={handleSearch}
-            placeholder={selectedProductForAdding ? `Selected: ${selectedProductForAdding.name}` : "Search product or type 'labor', 'insurance', etc."}
+            placeholder={selectedProductForAdding ? `Selected: ${selectedProductForAdding.name}` : "Search product..."}
             style={{ 
-              padding: "8px", 
+              padding: "8px 12px", 
               borderRadius: "4px",
               border: selectedProductForAdding ? "1px solid #5932EA" : "1px solid #ddd",
               backgroundColor: selectedProductForAdding ? "#f0f7ff" : "white",
+              fontSize: "14px"
             }}
           />
+        ) : (
+          <input
+            type="text"
+            placeholder={activeInputMode === "labor" ? "Labor Description" : "Description"}
+            value={newMiscName}
+            onChange={(e) => setNewMiscName(e.target.value)}
+            style={{ 
+              padding: "8px 12px", 
+              borderRadius: "4px",
+              border: "1px solid #ddd",
+              backgroundColor: "white",
+              fontSize: "14px"
+            }}
+          />
+        )}
+        
+        {/* Input secundario - Cantidad para productos, precio para otros */}
+        {activeInputMode === "search" ? (
           <input
             ref={quantityInputRef}
             type="number"
@@ -1832,34 +2080,96 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
               padding: "8px", 
               borderRadius: "4px",
               border: selectedProductForAdding ? "1px solid #5932EA" : "1px solid #ddd",
-              width: "70px",
+              width: "80px",
               textAlign: "center",
-              backgroundColor: 'white',
+              backgroundColor: "white",
+              fontSize: "14px"
             }}
           />
-          {selectedProductForAdding && (
-            <button
-              onClick={handleAddItemToJobsheet}
-              style={{
-                padding: "8px 12px",
-                backgroundColor: "#5932EA",
-                color: "white",
-                border: "none",
-                borderRadius: "4px",
-                cursor: "pointer",
-                fontSize: "13px",
-                display: "flex",
-                alignItems: "center",
-                gap: "5px"
-              }}
-            >
-              <FontAwesomeIcon icon={faPlus} size="sm" />
-              Add
-            </button>
-          )}
-        </div>
-      )}
-
+        ) : (
+          <input
+            type="number"
+            placeholder={activeInputMode === "labor" ? "Price" : "Amount"}
+            value={newMiscPrice}
+            onChange={(e) => setNewMiscPrice(e.target.value)}
+            min="0"
+            step="0.01"
+            style={{ 
+              padding: "8px", 
+              borderRadius: "4px",
+              border: "1px solid #ddd",
+              width: "100px",
+              backgroundColor: "white",
+              fontSize: "14px"
+            }}
+          />
+        )}
+        
+        {/* Botón de acción - Adaptado según el modo */}
+        {activeInputMode === "search" && selectedProductForAdding ? (
+          <button
+            onClick={handleAddItemToJobsheet}
+            style={{
+              padding: "8px 12px",
+              backgroundColor: "#5932EA",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+              fontSize: "14px",
+              display: "flex",
+              alignItems: "center",
+              gap: "5px",
+              height: "36px"
+            }}
+          >
+            <FontAwesomeIcon icon={faPlus} size="sm" />
+            Add
+          </button>
+        ) : activeInputMode === "labor" ? (
+          <button
+            onClick={() => handleAddLabor(newMiscName, newMiscPrice, "1")}
+            style={{
+              padding: "8px 12px",
+              backgroundColor: "#5932EA",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+              fontSize: "14px",
+              display: "flex",
+              alignItems: "center",
+              gap: "5px",
+              height: "36px"
+            }}
+          >
+            <FontAwesomeIcon icon={faPlus} size="sm" />
+            Add Labor
+          </button>
+        ) : activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo ? (
+          <button
+            onClick={() => handleAddLabor(newMiscName, newMiscPrice, currentWorkflowKeywordInfo.id)}
+            style={{
+              padding: "8px 12px",
+              backgroundColor: getWorkflowButtonColor(currentWorkflowKeywordInfo.id),
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+              fontSize: "14px",
+              display: "flex",
+              alignItems: "center",
+              gap: "5px",
+              height: "36px"
+            }}
+          >
+            <FontAwesomeIcon icon={faPlus} size="sm" />
+            Add {currentWorkflowKeywordInfo.defaultDescription.split(" ")[0]}
+          </button>
+        ) : null}
+      </div>
+      
+      {/* Sección de resultados de búsqueda - Solo para modo de búsqueda */}
       {activeInputMode === 'search' && searchResults.length > 0 && !selectedProductForAdding && (
         <div style={{
           border: "1px solid #eee",
@@ -1878,90 +2188,11 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
         </div>
       )}
 
-      {/* Sección para añadir Labor (modo 'labor') */}
-      {activeInputMode === 'labor' && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: "8px", marginBottom: "10px", alignItems: "center" }}>
-          <input
-            type="text"
-            placeholder="Labor Description"
-            value={newMiscName}
-            onChange={(e) => setNewMiscName(e.target.value)}
-            style={{ padding: "8px", borderRadius: "4px", border: "1px solid #ddd" }}
-          />
-          <input
-            type="number"
-            placeholder="Price"
-            value={newMiscPrice}
-            onChange={(e) => setNewMiscPrice(e.target.value)}
-            min="0"
-            step="0.01"
-            style={{ padding: "8px", borderRadius: "4px", border: "1px solid #ddd", width: "100px" }}
-          />
-          <button
-            onClick={() => handleAddLabor(newMiscName, newMiscPrice, "1")}
-            style={{ padding: "8px 12px", backgroundColor: "#5932EA", color: "white", border: "none", borderRadius: "4px", cursor: "pointer" }}
-          >
-            Add Labor
-          </button>
+      {/* Mensaje informativo */}
+      {activeInputMode === 'search' && inventorySearchTerm && !selectedProductForAdding && searchResults.length === 0 && (
+        <div style={{ padding: "8px", textAlign: "center", color: "#777", backgroundColor:"#f9f9f9", borderRadius:"4px", marginBottom:"10px" }}>
+          No products found with that name.
         </div>
-      )}
-
-      {/* Sección para añadir Workflow Específico (modo 'workflowSpecific') */}
-      {activeInputMode === 'workflowSpecific' && currentWorkflowKeywordInfo && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: "8px", marginBottom: "10px", alignItems: "center" }}>
-          <input
-            type="text"
-            placeholder="Description"
-            value={newMiscName} // Ya está pre-llenado con currentWorkflowKeywordInfo.defaultDescription
-            onChange={(e) => setNewMiscName(e.target.value)} // Permitir edición si es necesario
-            style={{ padding: "8px", borderRadius: "4px", border: "1px solid #ddd" }}
-          />
-          <input
-            type="number"
-            placeholder="Amount"
-            value={newMiscPrice}
-            onChange={(e) => setNewMiscPrice(e.target.value)}
-            min="0"
-            step="0.01"
-            style={{ padding: "8px", borderRadius: "4px", border: "1px solid #ddd", width: "100px" }}
-          />
-          <button
-            onClick={() => handleAddLabor(newMiscName, newMiscPrice, currentWorkflowKeywordInfo.id)}
-            style={{ padding: "8px 12px", backgroundColor: "#5932EA", color: "white", border: "none", borderRadius: "4px", cursor: "pointer" }}
-          >
-            Add {currentWorkflowKeywordInfo.defaultDescription.split(" ")[0]} {/* Ej: "Add Deposit" */}
-          </button>
-        </div>
-      )}
-      
-      {/* Input de búsqueda principal, solo visible si no estamos en modo labor/workflow */}
-      {(activeInputMode !== 'labor' && activeInputMode !== 'workflowSpecific') && inventorySearchTerm && !selectedProductForAdding && searchResults.length === 0 && (
-         <div style={{ padding: "8px", textAlign: "center", color: "#777", backgroundColor:"#f9f9f9", borderRadius:"4px", marginBottom:"10px" }}>
-              Type 'labor', 'deposit', 'insurance', 'nu hp', 'road tax' for specific charges, or search products.
-         </div>
-      )}
-       {/* Mensaje para limpiar la búsqueda y volver al modo normal */}
-       {(activeInputMode === 'labor' || activeInputMode === 'workflowSpecific') && (
-          <div style={{textAlign: "right", marginBottom:"10px"}}>
-              <button 
-                  onClick={() => {
-                      setInventorySearchTerm("");
-                      setActiveInputMode("search");
-                      setNewMiscName("");
-                      setNewMiscPrice("");
-                      setCurrentWorkflowKeywordInfo(null);
-                  }}
-                  style={{
-                      background: "none", 
-                      border: "none", 
-                      color: "#5932EA", 
-                      cursor: "pointer", 
-                      fontSize: "12px"
-                  }}
-              >
-                  Clear and search products
-              </button>
-          </div>
       )}
     </>
   )}
@@ -2135,8 +2366,8 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
                 <span>${totals.subtotal.toFixed(2)}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px", fontSize: "13px" }}>
-                <span>GST ({taxRate}% on ${totals.taxableAmount.toFixed(2)}):</span>
-                <span>${totals.tax.toFixed(2)}</span>
+                <span>GST:</span>
+                <span>${totals.gstIncluded.toFixed(2)}</span>
               </div>
               <div style={{ 
                 display: "flex", 
