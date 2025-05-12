@@ -199,7 +199,8 @@ class ReportController {
             if (workflowType === '1') {
               hasRepairWorkflow = true;
               rowTotal += itemsTotal;
-              gstValue = itemsTotal * 0.09; // GST is 9% on items only
+              // Cambio en el cálculo del GST - ahora como impuesto incluido
+              gstValue = itemsTotal - (itemsTotal / 1.09); // GST es 9% incluido en el precio de items
             }
             
             // Calculate proportional payment distribution based on workflow amount vs total
@@ -226,7 +227,8 @@ class ReportController {
         
         // If no repair workflow but we have items, add one
         if (!hasRepairWorkflow && itemsTotal > 0) {
-          const gstValue = itemsTotal * 0.09;
+          // Cambio en el cálculo del GST - ahora como impuesto incluido
+          const gstValue = itemsTotal - (itemsTotal / 1.09);
           // Distribute payments if any. If no payments, amounts will be 0.
           const totalJobAmountForProportion = itemsTotal; // This is the only amount for this "virtual" workflow
           const totalPaid = paymentsByMethod.cash + paymentsByMethod.paynow + paymentsByMethod.other;
@@ -365,14 +367,14 @@ class ReportController {
         ) as combined
       `, [startDateFormatted, endDateFormatted, startDateFormatted, endDateFormatted]);
 
-      // Calculate total GST (only on items) from completed jobsheets
+      // Calculate total GST (only on items) from completed jobsheets - Updated calculation
       const [gstResult] = await pool.query(`
-        SELECT SUM(ji.price * ji.quantity * 0.09) as total_gst
+        SELECT SUM(ji.price * ji.quantity - (ji.price * ji.quantity / 1.09)) as total_gst
         FROM jobsheet_items ji
         JOIN jobsheets j ON ji.jobsheet_id = j.id
         WHERE 
           j.created_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)
-          AND j.state = 'completed' -- Added filter for completed state
+          AND j.state = 'completed' 
       `, [startDateFormatted, endDateFormatted]);
 
       // Initialize the result object with all workflow types set to 0
