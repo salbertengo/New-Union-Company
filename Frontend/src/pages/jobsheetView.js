@@ -922,61 +922,62 @@ useEffect(() => {
             marginBottom: "10px",
           }}
         >
-         <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-  <div style={{ position: "relative" }}>
-    <input
-      type="text"
-      placeholder="Search jobsheets..."
-      value={searchTerm}
-      onChange={handleSearch}
-      style={{
-        padding: "5px 30px 5px 10px",
-        width: "216px",
-        borderRadius: "10px",
-        border: "1px solid white",
-        backgroundColor: "#F9FBFF",
-        height: "25px",
-      }}
-    />
-    <FontAwesomeIcon
-      icon={faSearch}
-      style={{
-        position: "absolute",
-        right: "10px",
-        top: "50%",
-        transform: "translateY(-50%)",
-        color: loading ? "#4321C9" : "gray",
-        cursor: "pointer",
-      }}
-    />
-  </div>
+          {/* Elementos de filtro a la izquierda */}
+          <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+            <div style={{ position: "relative" }}>
+              <input
+                type="text"
+                placeholder="Search jobsheets..."
+                value={searchTerm}
+                onChange={handleSearch}
+                style={{
+                  padding: "5px 30px 5px 10px",
+                  width: "216px",
+                  borderRadius: "10px",
+                  border: "1px solid white",
+                  backgroundColor: "#F9FBFF",
+                  height: "25px",
+                }}
+              />
+              <FontAwesomeIcon
+                icon={faSearch}
+                style={{
+                  position: "absolute",
+                  right: "10px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  color: loading ? "#4321C9" : "gray",
+                  cursor: "pointer",
+                }}
+              />
+            </div>
 
-  {/* Add DateRangeSelector here */}
-  <DateRangeSelector />
+            <DateRangeSelector />
 
             <StatusFilterButton />
-
-            <button
-              onClick={handleOpenNewModal}
-              onMouseEnter={() => setIsHovered(true)}
-              onMouseLeave={() => setIsHovered(false)}
-              style={{
-                padding: "10px 20px",
-                backgroundColor: isHovered ? "#4321C9" : "#5932EA",
-                color: "white",
-                border: "none",
-                borderRadius: "5px",
-                cursor: "pointer",
-                transition: "background-color 0.3s ease",
-                display: "flex",
-                alignItems: "center",
-                gap: "8px"
-              }}
-            >
-              <FontAwesomeIcon icon={faPlus} />
-              Add Job Sheet
-            </button>
           </div>
+
+          {/* Botón "Add Job Sheet" */}
+          <button
+            onClick={handleOpenNewModal}
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
+            style={{
+              padding: "10px 20px",
+              backgroundColor: isHovered ? "#4321C9" : "#5932EA",
+              color: "white",
+              border: "none",
+              borderRadius: "5px",
+              cursor: "pointer",
+              transition: "background-color 0.3s ease",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px"
+            }}
+          >
+            <FontAwesomeIcon icon={faPlus} />
+            Add Job Sheet
+          </button>
         </div>
 
         {/* Grid with same style as InventoryView */}

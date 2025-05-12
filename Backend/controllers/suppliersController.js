@@ -67,10 +67,14 @@ class SuppliersController {
         if (!actualJobsheetId && license_plate) {
           console.log(`Looking up jobsheet for license plate: ${license_plate}`); // Debug
           
-          const [jobsheetRows] = await connection.query(
-            'SELECT id FROM jobsheets WHERE license_plate = ? ORDER BY created_at DESC LIMIT 1',
-            [license_plate]
-          );
+          const [jobsheetRows] = await connection.query(`
+            SELECT j.id 
+            FROM jobsheets j
+            JOIN vehicles v ON j.vehicle_id = v.id
+            WHERE v.plate = ?
+            ORDER BY j.created_at DESC 
+            LIMIT 1
+          `, [license_plate]);
           
           console.log(`Found jobsheet rows:`, jobsheetRows); // Debug
           
@@ -104,6 +108,7 @@ class SuppliersController {
           
           // Update jobsheet total
           await connection.query(`
+
             UPDATE jobsheets
 
             SET total_amount = (
