@@ -23,6 +23,8 @@ function UserManagement() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [message, setMessage] = useState({ text: '', type: '' });
+  const [isSaving, setIsSaving] = useState(false);
+  const [formDirty, setFormDirty] = useState(false);
   const gridRef = useRef(null);
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
@@ -110,6 +112,7 @@ function UserManagement() {
     }
 
     setLoading(true);
+    setIsSaving(true);
     try {
       const token = localStorage.getItem('token');
       const url = currentUser 
@@ -150,6 +153,7 @@ function UserManagement() {
       setMessage({ text: error.message, type: 'error' });
     } finally {
       setLoading(false);
+      setIsSaving(false);
     }
   };
 
@@ -205,6 +209,26 @@ function UserManagement() {
       setMessage({ text: 'Failed to update password: ' + error.message, type: 'error' });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleInputChange = (e, field) => {
+    const { value } = e.target;
+    if (field === 'name') setName(value);
+    else if (field === 'username') setUsername(value);
+    else if (field === 'password') setPassword(value);
+    
+    setFormDirty(true);
+  };
+
+  const handleModalClose = () => {
+    if (formDirty) {
+      if (window.confirm("You have unsaved changes. Are you sure you want to close?")) {
+        setShowModal(false);
+        setFormDirty(false);
+      }
+    } else {
+      setShowModal(false);
     }
   };
 
@@ -592,7 +616,7 @@ function UserManagement() {
                       </p>
                     </div>
                     <button
-                      onClick={() => setShowModal(false)}
+                      onClick={handleModalClose}
                       style={{
                         background: "rgba(255,255,255,0.2)",
                         border: "none",
@@ -628,12 +652,12 @@ function UserManagement() {
                         fontWeight: "600",
                         color: "#333"
                       }}>
-                        Full Name
+                        Full Name <span style={{ color: "#FF4D4F" }}>*</span>
                       </label>
                       <input
                         type="text"
                         value={name}
-                        onChange={(e) => setName(e.target.value)}
+                        onChange={(e) => handleInputChange(e, 'name')}
                         placeholder="Enter full name"
                         style={{
                           width: "100%",
@@ -655,12 +679,12 @@ function UserManagement() {
                         fontWeight: "600",
                         color: "#333"
                       }}>
-                        Username
+                        Username <span style={{ color: "#FF4D4F" }}>*</span>
                       </label>
                       <input
                         type="text"
                         value={username}
-                        onChange={(e) => setUsername(e.target.value)}
+                        onChange={(e) => handleInputChange(e, 'username')}
                         placeholder="Enter username"
                         style={{
                           width: "100%",
@@ -683,12 +707,12 @@ function UserManagement() {
                           fontWeight: "600",
                           color: "#333"
                         }}>
-                          Password
+                          Password <span style={{ color: "#FF4D4F" }}>*</span>
                         </label>
                         <input
                           type="password"
                           value={password}
-                          onChange={(e) => setPassword(e.target.value)}
+                          onChange={(e) => handleInputChange(e, 'password')}
                           placeholder="Enter password"
                           style={{
                             width: "100%",
@@ -783,7 +807,7 @@ function UserManagement() {
                     marginTop: "30px"
                   }}>
                     <button
-                      onClick={() => setShowModal(false)}
+                      onClick={handleModalClose}
                       style={{
                         padding: "12px 20px",
                         backgroundColor: "#f5f5f5",
@@ -801,25 +825,43 @@ function UserManagement() {
                     </button>
                     <button
                       onClick={handleSave}
+                      disabled={isSaving}
                       style={{
                         padding: "12px 24px",
                         backgroundColor: "#5932EA",
                         color: "white",
                         border: "none",
                         borderRadius: "10px",
-                        cursor: "pointer",
+                        cursor: isSaving ? "wait" : "pointer",
                         fontWeight: "600",
                         boxShadow: "0 2px 6px rgba(89, 50, 234, 0.3)",
                         transition: "all 0.2s",
                         display: "flex",
                         alignItems: "center",
-                        gap: "8px"
+                        gap: "8px",
+                        opacity: isSaving ? 0.7 : 1
                       }}
-                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#4321C9"}
-                      onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#5932EA"}
+                      onMouseOver={(e) => !isSaving && (e.currentTarget.style.backgroundColor = "#4321C9")}
+                      onMouseOut={(e) => !isSaving && (e.currentTarget.style.backgroundColor = "#5932EA")}
                     >
-                      <FontAwesomeIcon icon={currentUser ? faCheck : faPlus} />
-                      {currentUser ? "Update User" : "Add User"}
+                      {isSaving ? (
+                        <>
+                          <div style={{
+                            width: "16px",
+                            height: "16px",
+                            border: "2px solid rgba(255, 255, 255, 0.3)",
+                            borderLeft: "2px solid white",
+                            borderRadius: "50%",
+                            animation: "spin 1s linear infinite"
+                          }}></div>
+                          {currentUser ? "Updating..." : "Adding..."}
+                        </>
+                      ) : (
+                        <>
+                          <FontAwesomeIcon icon={currentUser ? faCheck : faPlus} />
+                          {currentUser ? "Update User" : "Add User"}
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>

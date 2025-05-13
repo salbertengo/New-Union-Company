@@ -340,11 +340,33 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
     }
   };
 
-  const handleSelectVehicle = (vehicle) => {
+  const handleSelectVehicle = async (vehicle) => {
+    if (!vehicle || !vehicle.id) {
+      console.error("Invalid vehicle selected:", vehicle);
+      showNotification("Invalid vehicle selected", "error");
+      return;
+    }
+    
     const plateValue = vehicle.plate || vehicle.license_plate || "";
+    console.log(`Selected vehicle: ID=${vehicle.id}, plate=${plateValue}`);
+    
     setLicensePlate(plateValue);
     setPlateSearchResults([]);
-    handleCreateJobsheet(vehicle.id);
+    
+    try {
+      // Asegurar que el ID sea un número si es posible
+      const vehicleId = typeof vehicle.id === 'string' && !isNaN(parseInt(vehicle.id, 10)) 
+        ? parseInt(vehicle.id, 10) 
+        : vehicle.id;
+        
+      console.log(`Creating jobsheet with vehicle ID: ${vehicleId} (type: ${typeof vehicleId})`);
+      
+      // Llamar directamente, no con setTimeout
+      await handleCreateJobsheet(vehicleId);
+    } catch (error) {
+      console.error("Error in handleSelectVehicle:", error);
+      showNotification(`Error selecting vehicle: ${error.message}`, "error");
+    }
   };
 
   const handleCreateVehicle = async () => {
@@ -442,97 +464,237 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
   };
 
   const handleCreateJobsheet = async (vehicleId) => {
-    if (!vehicleId) {
-      showNotification("No vehicle selected", "error");
+  console.log("=== handleCreateJobsheet STARTED ===");
+  console.log(`Vehicle ID received: ${vehicleId} (${typeof vehicleId})`);
+  
+  if (!vehicleId) {
+    showNotification("No vehicle selected", "error");
+    console.log("ERROR: No vehicle ID provided to handleCreateJobsheet");
+    return;
+  }
+  
+  setIsLoading(true);
+  try {
+    // Check API_URL is defined
+    if (!API_URL) {
+      console.error("API_URL is not defined!", { API_URL });
+      showNotification("Configuration error: API URL not defined", "error");
+      setIsLoading(false);
       return;
     }
+    console.log(`API URL: ${API_URL}`);
     
-    setIsLoading(true);
+    // Get token
+    const token = localStorage.getItem("token");
+    if (!token) {
+      console.error("No token found in localStorage");
+      showNotification("Authentication error: Please login again", "error");
+      setIsLoading(false);
+      return;
+    }
+    console.log("Token retrieved successfully");
+    
+    // IMPROVED USER ID RETRIEVAL - Try multiple approaches
+    let userId = null;
+    
+    // Approach 1: Try getting from user object in localStorage
     try {
-      const token = localStorage.getItem("token");
-      if (!token) return;
-  
-      const jobsheetData = {
-        vehicle_id: vehicleId,
-        customer_id: null, 
-        state: "pending",
-        description: "",
-        service_notes: ""
-      };
-  
+      const userStr = localStorage.getItem("user");
+      console.log("Raw user data from localStorage:", userStr);
+      
+      if (userStr) {
+        const userData = JSON.parse(userStr);
+        console.log("Parsed user data:", userData);
+        
+        if (userData && userData.id) {
+          userId = userData.id;
+          console.log(`Found user ID in user object: ${userId}`);
+        }
+      }
+    } catch (parseError) {
+      console.error("Error parsing user data from localStorage:", parseError);
+    }
+    
+    // Approach 2: Try getting from userId in localStorage directly
+    if (!userId) {
+      const directUserId = localStorage.getItem("userId");
+      if (directUserId) {
+        userId = directUserId;
+        console.log(`Found direct user ID: ${userId}`);
+      }
+    }
+    
+    // Approach 3: Try getting from JWT token decode
+    if (!userId && token) {
+      try {
+        // Simple JWT token parsing (gets the payload part)
+        const base64Url = token.split('.')[1];
+        if (base64Url) {
+          const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+          const jsonPayload = decodeURIComponent(atob(base64).split('').map((c) => {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+          }).join(''));
+          
+          const tokenData = JSON.parse(jsonPayload);
+          console.log("Token decoded data:", tokenData);
+          
+          if (tokenData && tokenData.id) {
+            userId = tokenData.id;
+            console.log(`Extracted user ID from token: ${userId}`);
+          } else if (tokenData && tokenData.sub) {
+            userId = tokenData.sub;
+            console.log(`Using 'sub' from token as user ID: ${userId}`);
+          }
+        }
+      } catch (e) {
+        console.error("Error extracting user ID from token:", e);
+      }
+    }
+    
+    // Last resort: Use a default technician ID if configured
+    if (!userId) {
+      const defaultTechId = process.env.REACT_APP_DEFAULT_TECHNICIAN_ID;
+      if (defaultTechId) {
+        userId = defaultTechId;
+        console.log(`Using default technician ID: ${userId}`);
+      }
+    }
+    
+    // Final check
+    if (!userId) {
+      console.error("Could not find user ID in any storage location");
+      showNotification("User session not found. Please log in again.", "error");
+      setIsLoading(false);
+      return;
+    }
+    console.log(`Using user ID: ${userId}`);
+
+    const jobsheetData = {
+      vehicle_id: vehicleId,
+      customer_id: null,
+      state: "pending",
+      description: "",
+      service_notes: "",
+      user_id: userId
+    };
+    
+    console.log("Preparing to send request with data:", jobsheetData);
+    console.log(`Request URL: ${API_URL}/jobsheets`);
+    
+    try {
+      console.log("Sending fetch request...");
       const response = await fetch(`${API_URL}/jobsheets`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          "Authorization": `Bearer ${token}`,
         },
         body: JSON.stringify(jobsheetData),
       });
-  
+      
+      console.log("Fetch request complete, status:", response.status);
+      
+      let responseText;
+      try {
+        responseText = await response.text();
+        console.log("Response text:", responseText);
+      } catch (textError) {
+        console.error("Error getting response text:", textError);
+        responseText = "Could not read response";
+      }
+      
+      let parsedData;
+      try {
+        parsedData = JSON.parse(responseText);
+        console.log("Parsed response:", parsedData);
+      } catch (e) {
+        console.log("Response is not valid JSON:", e);
+        parsedData = { error: responseText };
+      }
+      
       if (response.ok) {
-        const newJobsheet = await response.json();
+        console.log("Request successful!");
         showNotification("Jobsheet created successfully", "success");
         
         setTimeout(() => {
           if (refreshJobsheets) refreshJobsheets();
           setInternalIsNew(false);
-          setInternalJobsheetId(newJobsheet.id);
-          loadJobsheetData(newJobsheet.id);
+          setInternalJobsheetId(parsedData.id);
+          loadJobsheetData(parsedData.id);
         }, 500);
       } else {
-        const errorData = await response.text();
-        showNotification("Error creating jobsheet: " + errorData, "error");
+        const errorMessage = parsedData.error || `Failed to create jobsheet (${response.status})`;
+        console.error("Error creating jobsheet:", errorMessage, parsedData);
+        showNotification("Error creating jobsheet: " + errorMessage, "error");
       }
-    } catch (error) {
-      showNotification("Error creating jobsheet: " + error.message, "error");
-    } finally {
-      setIsLoading(false);
+    } catch (fetchError) {
+      console.error("Network error in fetch operation:", fetchError);
+      showNotification(`Network error: ${fetchError.message || "Could not connect to server"}`, "error");
     }
-  };
+  } catch (error) {
+    console.error("Exception in handleCreateJobsheet:", error);
+    showNotification("Error creating jobsheet: " + error.message, "error");
+  } finally {
+    setIsLoading(false);
+    console.log("=== handleCreateJobsheet COMPLETED ===");
+  }
+};
 
   const handleWalkInJobsheet = async () => {
-    setIsLoading(true);
-    try {
-      const token = localStorage.getItem("token");
-      if (!token) return;
-  
-      const jobsheetData = {
-        vehicle_id: null,
-        customer_id: null,
-        state: "pending",
-        description: "Walk-in Sale",
-        service_notes: ""
-      };
-  
-      const response = await fetch(`${API_URL}/jobsheets`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(jobsheetData),
-      });
-  
-      if (response.ok) {
-        const newJobsheet = await response.json();
-        showNotification("Walk-in jobsheet created successfully", "success");
-        
-        setTimeout(() => {
-          if (refreshJobsheets) refreshJobsheets();
-          setInternalIsNew(false);
-          setInternalJobsheetId(newJobsheet.id);
-          loadJobsheetData(newJobsheet.id);
-        }, 500);
-      } else {
-        const errorData = await response.text();
-        showNotification("Error creating walk-in jobsheet: " + errorData, "error");
-      }
-    } catch (error) {
-      showNotification("Error creating walk-in jobsheet: " + error.message, "error");
-    } finally {
-      setIsLoading(false);
+  setIsLoading(true);
+  try {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    // Get the current user ID from localStorage or context
+    const userData = JSON.parse(localStorage.getItem("user") || "{}");
+    const userId = userData.id;
+
+    if (!userId) {
+      showNotification("User session not found. Please log in again.", "error");
+      return;
     }
-  };
+
+    const jobsheetData = {
+      vehicle_id: null,
+      customer_id: null,
+      state: "pending",
+      description: "Walk-in Sale",
+      service_notes: "",
+      user_id: userId  // Add the user ID here
+    };
+
+    const response = await fetch(`${API_URL}/jobsheets`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(jobsheetData),
+    });
+
+    if (response.ok) {
+      const newJobsheet = await response.json();
+      showNotification("Walk-in jobsheet created successfully", "success");
+      
+      setTimeout(() => {
+        if (refreshJobsheets) refreshJobsheets();
+        setInternalIsNew(false);
+        setInternalJobsheetId(newJobsheet.id);
+        loadJobsheetData(newJobsheet.id);
+      }, 500);
+    } else {
+      const errorData = await response.text();
+      console.error("Error creating walk-in jobsheet:", errorData);
+      showNotification("Error creating walk-in jobsheet: " + errorData, "error");
+    }
+  } catch (error) {
+    console.error("Exception creating walk-in jobsheet:", error);
+    showNotification("Error creating walk-in jobsheet: " + error.message, "error");
+  } finally {
+    setIsLoading(false);
+  }
+};
   
   const loadJobsheetData = async (id = null) => {
     setInventorySearchTerm("");
@@ -548,17 +710,32 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
       const token = localStorage.getItem("token");
       if (!token) {
         console.error("No token found");
+        showNotification("Authentication error: Please login again", "error");
+        setIsLoading(false);
         return;
       }
   
       const idToUse = id || effectiveJobsheetId;
       
+      if (!idToUse) {
+        console.error("No jobsheet ID to load");
+        showNotification("Error: No jobsheet ID specified", "error");
+        setIsLoading(false);
+        return;
+      }
+
+      console.log(`Loading jobsheet with ID: ${idToUse}`);
+      
       const response = await fetch(`${API_URL}/jobsheets/${idToUse}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}` 
+        },
       });
   
       if (response.ok) {
         const jobsheetData = await response.json();
+        console.log("Jobsheet data loaded:", jobsheetData);
         setJobsheet(jobsheetData);
         setLicensePlate(jobsheetData.license_plate || jobsheetData.plate || "");
   
@@ -567,20 +744,22 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
           fetchLabors(token, idToUse),
           fetchPayments(token, idToUse)
         ]);
+        
+        showNotification("Jobsheet loaded successfully", "success");
       } else {
-        console.error("Failed to load jobsheet:", response.status);
-        showNotification("Error loading jobsheet data", "error");
+        const errorText = await response.text();
+        console.error("Failed to load jobsheet:", response.status, errorText);
+        showNotification(`Error loading jobsheet: ${response.status}`, "error");
       }
     } catch (error) {
-      console.error("Error loading data:", error);
-      showNotification("Error loading jobsheet data", "error");
+      console.error("Exception in loadJobsheetData:", error);
+      showNotification(`Error: ${error.message}`, "error");
     } finally {
       setInventorySearchTerm("");
       setSearchResults([]);
       setIsLoading(false);
     }
   };
-
   const getLaborCategoryName = (workflowType) => {
     if (workflowType === "1" || workflowType === 1 || !workflowType) {
       return "General Labor";

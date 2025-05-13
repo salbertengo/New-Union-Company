@@ -135,20 +135,46 @@ class JobsheetController {
     }
   }
 
-  static async createJobsheet(req, res) {
+ static async createJobsheet(req, res) {
+  try {
+    const jobsheetData = req.body;
+    
+    // Enhanced logging to see exact request format
+    console.log('CREATE JOBSHEET REQUEST BODY:', JSON.stringify(req.body));
+    console.log('Vehicle ID type:', typeof jobsheetData.vehicle_id);
+    console.log('Vehicle ID value:', jobsheetData.vehicle_id);
+    
+    if (!jobsheetData.user_id) {
+      return res.status(400).json({ error: 'User ID is required' });
+    }
+    
+    // Log what we're creating for debugging
+    console.log('Creating jobsheet with data:', {
+      vehicle_id: jobsheetData.vehicle_id || 'none',
+      customer_id: jobsheetData.customer_id || 'none',
+      user_id: jobsheetData.user_id,
+      state: jobsheetData.state || 'pending',
+      workflow_type: jobsheetData.workflow_type || 1
+    });
+
     try {
-      const jobsheetData = req.body;
+      // Verify vehicle exists before creating jobsheet
+      if (jobsheetData.vehicle_id) {
+        const vehicleExists = await VehicleService.getVehicleById(jobsheetData.vehicle_id);
+        console.log('Vehicle check result:', vehicleExists ? 'Found' : 'Not found');
+      }
       
-      // Eliminamos la validación obligatoria de vehicle_id y customer_id
-      // Los walk-in tendrán ambos valores como null
-  
       const newJobsheet = await JobsheetService.createJobsheet(jobsheetData);
       res.status(201).json(newJobsheet);
-    } catch (err) {
-      console.error('Error in createJobsheet:', err);
-      res.status(500).json({ error: 'Internal server error' });
+    } catch (error) {
+      console.error('Error during jobsheet creation workflow:', error);
+      return res.status(400).json({ error: error.message });
     }
+  } catch (err) {
+    console.error('Error in createJobsheet:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
+}
 
   static async updateJobsheet(req, res) {
     try {

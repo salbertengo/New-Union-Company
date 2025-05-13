@@ -121,43 +121,63 @@ const InventoryView = () => {
     }
   }, [API_URL]);
 
-  const fetchJobsheets = useCallback(async () => {
-    try {
-      const token = localStorage.getItem('token');
-      
-      const response = await fetch(`${API_URL}/jobsheets?state=pending,in progress`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        
-        const processedJobsheets = data.map(job => ({
-          ...job,
-          hasVehicleIdButNoPlate: job.vehicle_id && (!job.license_plate || job.license_plate === "No plate")
-        }));
-        
-        const validJobsheets = processedJobsheets.filter(j => 
-          (j.license_plate && j.license_plate !== "No plate") || j.vehicle_id
-        );
-        setJobsheets(validJobsheets);
-      } else {
-        setNotification({
-          show: true,
-          type: 'error',
-          message: `Error loading jobsheets: ${response.status} ${response.statusText}`
-        });
-      }
-    } catch (error) {
-      setNotification({
-        show: true,
-        type: 'error',
-        message: 'Network error when loading jobsheets'
-      });
+const fetchJobsheets = useCallback(async () => {
+  try {
+    setLoading(true);
+    console.log("Starting jobsheets fetch...");
+    
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.error("No authentication token found");
+      setLoading(false);
+      return;
     }
-  }, [API_URL]);
+    
+    // Change the parameter format to what the backend expects
+    // Use 'pending' state only, or modify backend to support multiple states
+    const url = `${API_URL}/jobsheets?state=pending`;
+    console.log(`Fetching jobsheets from: ${url}`);
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    console.log(`Response status: ${response.status} ${response.statusText}`);
+    
+    if (!response.ok) {
+      console.error(`Error fetching jobsheets: ${response.status} ${response.statusText}`);
+      setJobsheets([]);
+      setLoading(false);
+      return;
+    }
+    
+    const data = await response.json();
+    console.log("Jobsheets data:", data);
+    
+    if (Array.isArray(data) && data.length > 0) {
+      setJobsheets(data);
+      console.log(`Found ${data.length} jobsheets`);
+    } else {
+      console.log("No jobsheets found or invalid response format");
+      setJobsheets([]);
+    }
+    
+  } catch (error) {
+    console.error("Exception during jobsheets fetch:", error);
+    setNotification({
+      show: true,
+      type: 'error',
+      message: 'Network error when loading job sheets'
+    });
+    setJobsheets([]);
+  } finally {
+    setLoading(false);
+  }
+}, [API_URL]);
 
   const handleSearchChange = (e) => {
     const value = e.target.value;
@@ -215,24 +235,38 @@ const InventoryView = () => {
     }, 50);
   };
 
-  const handleOpenGoodsReceiveModal = () => {
-    fetchSuppliers();
-    fetchJobsheets();
-    setGoodsReceiveData({
-      supplier_name: '',
-      invoice_number: '',
-      invoice_date: new Date().toISOString().split('T')[0],
-      items: []
-    });
-    setShowGoodsReceiveModal(true);
-    
-    // Set focus after modal opens
-    setTimeout(() => {
-      if (modalInitialFocusRef.current) {
-        modalInitialFocusRef.current.focus();
-      }
-    }, 100);
-  };
+ const handleOpenGoodsReceiveModal = async () => {
+  setShowGoodsReceiveModal(true);
+  
+  // Reset form data
+  setGoodsReceiveData({
+    supplier_name: '',
+    invoice_number: '',
+    invoice_date: new Date().toISOString().split('T')[0],
+    items: []
+  });
+  
+  // Show a loading state for jobsheets table
+  setJobsheets([]);
+  setLoading(true);
+  
+  try {
+    // Fetch data in parallel
+    await Promise.all([
+      fetchSuppliers(),
+      fetchJobsheets()
+    ]);
+  } catch (error) {
+    console.error("Error initializing goods receive modal:", error);
+  }
+  
+  // Set focus after modal opens and data is loaded
+  setTimeout(() => {
+    if (modalInitialFocusRef.current) {
+      modalInitialFocusRef.current.focus();
+    }
+  }, 100);
+};
 
   const handleGoodsReceiveInputChange = (e) => {
     const { name, value } = e.target;
@@ -2200,10 +2234,17 @@ const InventoryView = () => {
                   pointerEvents: "none"
                 }}>$</span>
                 <input
-                  type="number"
-                  name="cost_price"
-                  value={newReceiveItem.cost_price}
-                  onChange={handleNewReceiveItemChange}
+                  type="text"
+                  value={newReceiveItem.cost_price === 0 ? '' : newReceiveItem.cost_price}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                      setNewReceiveItem({
+                        ...newReceiveItem,
+                        cost_price: val === '' ? 0 : parseFloat(val)
+                      });
+                    }
+                  }}
                   min="0"
                   step="0.01"
                   style={{
@@ -2216,6 +2257,7 @@ const InventoryView = () => {
                     outline: "none",
                     boxSizing: "border-box"
                   }}
+                  placeholder="0.00"
                   required
                 />
               </div>
@@ -2236,13 +2278,17 @@ const InventoryView = () => {
                   pointerEvents: "none"
                 }}>$</span>
                 <input
-                  type="number"
-                  name="sale_price"
-                  value={newReceiveItem.sale_price || 0}
-                  onChange={(e) => setNewReceiveItem({
-                    ...newReceiveItem,
-                    sale_price: e.target.value
-                  })}
+                  type="text"
+                  value={newReceiveItem.sale_price === 0 ? '' : newReceiveItem.sale_price}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                      setNewReceiveItem({
+                        ...newReceiveItem,
+                        sale_price: val === '' ? 0 : parseFloat(val)
+                      });
+                    }
+                  }}
                   min="0"
                   step="0.01"
                   style={{
@@ -2255,64 +2301,195 @@ const InventoryView = () => {
                     outline: "none",
                     boxSizing: "border-box"
                   }}
+                  placeholder="0.00"
                   required
                 />
               </div>
             </div>
             
             <div>
-  <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
-  Assign to Job
+  <label style={{ 
+    display: "block", 
+    marginBottom: "8px", 
+    fontSize: "14px", 
+    fontWeight: "500", 
+    color: "#444",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center"
+  }}>
+    <span>Assign to Job Sheet</span>
+    <span style={{ fontSize: "12px", color: "#666" }}>
+      {jobsheets.length > 0 ? `${jobsheets.length} active job sheets` : ""}
+    </span>
   </label>
-  <input
-    type="text"
-    list="jobs-list"
-    name="license_plate"
-    value={newReceiveItem.license_plate || ""}
-    onChange={(e) => {
-      const value = e.target.value;
-      // Buscar el jobsheet que corresponde a esta placa
-      const job = jobsheets.find(j => j.license_plate === value);
-      
-      setNewReceiveItem({
-        ...newReceiveItem,
-        license_plate: value,
-        // Si se encuentra un jobsheet, guardar su ID
-        jobsheet_id: job ? job.id : ''
-      });
-    }}
-    style={{
-      width: "100%",
-      padding: "12px",
-      borderRadius: "8px",
-      border: "1px solid #e0e0e0",
-      backgroundColor: "#fff",
-      fontSize: "14px",
-      outline: "none",
-      boxSizing: "border-box"
-    }}
-    placeholder="Type license plate number"
-  />
-  <datalist id="jobs-list">
-    {jobsheets.map(job => (
-      <option key={job.id} value={job.license_plate || ''} />
-    ))}
-  </datalist>
+
+  <div style={{ 
+    height: "200px", 
+    maxHeight: "200px", 
+    overflowY: "auto", 
+    border: "1px solid #e0e0e0", 
+    borderRadius: "8px",
+    backgroundColor: "#fff" 
+  }}>
+    {loading ? (
+      <div style={{ 
+        display: "flex", 
+        justifyContent: "center", 
+        alignItems: "center", 
+        height: "100%",
+        flexDirection: "column",
+        gap: "12px"
+      }}>
+        <div style={{
+          width: "32px",
+          height: "32px",
+          border: "3px solid rgba(0, 0, 0, 0.1)",
+          borderTop: "3px solid #5932EA",
+          borderRadius: "50%",
+          animation: "spin 1s linear infinite"
+        }}></div>
+        <div style={{ color: "#666", fontSize: "14px" }}>Loading job sheets...</div>
+      </div>
+    ) : jobsheets && jobsheets.length > 0 ? (
+      <div style={{ padding: "8px" }}>
+        {jobsheets.map(job => (
+          <div 
+            key={job.id} 
+            style={{ 
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "10px 12px",
+              marginBottom: "8px",
+              borderRadius: "8px",
+              cursor: "pointer",
+              border: newReceiveItem.jobsheet_id === job.id ? "2px solid #5932EA" : "1px solid #e0e0e0",
+              backgroundColor: newReceiveItem.jobsheet_id === job.id ? "#F5F3FF" : "#fff",
+              transition: "all 0.2s ease"
+            }}
+            onClick={() => {
+              setNewReceiveItem({
+                ...newReceiveItem,
+                license_plate: job.license_plate || "",
+                jobsheet_id: job.id
+              });
+            }}
+            onMouseEnter={(e) => {
+              if (newReceiveItem.jobsheet_id !== job.id) {
+                e.currentTarget.style.backgroundColor = "#f5f5ff";
+                e.currentTarget.style.borderColor = "#d4daff";
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (newReceiveItem.jobsheet_id !== job.id) {
+                e.currentTarget.style.backgroundColor = "#fff";
+                e.currentTarget.style.borderColor = "#e0e0e0";
+              }
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <div style={{
+                minWidth: "32px",
+                height: "32px",
+                backgroundColor: newReceiveItem.jobsheet_id === job.id ? "#5932EA" : "#EDE7F6",
+                color: newReceiveItem.jobsheet_id === job.id ? "#fff" : "#5932EA",
+                borderRadius: "50%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontWeight: "600",
+                fontSize: "13px"
+              }}>
+                #{job.id}
+              </div>
+              <div style={{ fontSize: "14px", fontWeight: "500" }}>
+                {job.license_plate || "No plate"}
+              </div>
+            </div>
+            {newReceiveItem.jobsheet_id === job.id ? (
+              <div style={{
+                backgroundColor: "#5932EA",
+                color: "white",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "4px 8px",
+                borderRadius: "4px",
+                fontSize: "12px",
+                gap: "4px"
+              }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M20 6L9 17L4 12" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Selected
+              </div>
+            ) : (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setNewReceiveItem({
+                    ...newReceiveItem,
+                    license_plate: job.license_plate || "",
+                    jobsheet_id: job.id
+                  });
+                }}
+                style={{
+                  padding: "4px 10px",
+                  backgroundColor: "#5932EA",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  fontSize: "12px",
+                  fontWeight: "500"
+                }}
+              >
+                Select
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    ) : (
+      <div style={{ 
+        padding: "24px", 
+        textAlign: "center", 
+        color: "#666",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        height: "100%"
+      }}>
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ marginBottom: "12px", color: "#999" }}>
+          <rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="2"/>
+          <path d="M16 10H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+          <path d="M16 14H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+        </svg>
+        <p style={{ margin: "0 0 8px 0", fontSize: "15px", fontWeight: "500" }}>No active job sheets found</p>
+        <p style={{ margin: "0", fontSize: "13px" }}>Create a job sheet first or check your filters</p>
+      </div>
+    )}
+  </div>
   
-  {/* Mostrar información del jobsheet seleccionado si existe */}
   {newReceiveItem.jobsheet_id && (
     <div style={{ 
       fontSize: "12px", 
       color: "#2E7D32", 
-      marginTop: "4px",
-      backgroundColor: "#E8F5E9",
-      padding: "4px 8px",
-      borderRadius: "4px"
+      marginTop: "8px",
+      display: "flex",
+      alignItems: "center",
+      gap: "4px"
     }}>
-      Job #{newReceiveItem.jobsheet_id} selected - Plate: {newReceiveItem.license_plate}
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M20 6L9 17L4 12" stroke="#2E7D32" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+      Job #{newReceiveItem.jobsheet_id} selected - Plate: {newReceiveItem.license_plate || "No plate"}
     </div>
   )}
 </div>
+
           </div>
           
           {/* Add Item Button */}
@@ -2376,7 +2553,7 @@ const InventoryView = () => {
             <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "8px" }}>
               <div style={{ 
                 display: "grid",
-                gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 80px",
+                gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr 80px",
                 gap: "12px",
                 padding: "8px 16px",
                 borderBottom: "1px solid #e0e0e0",
@@ -2389,6 +2566,7 @@ const InventoryView = () => {
                 <div>Cost</div>
                 <div>Sale</div>
                 <div>Total</div>
+                <div>Assigned To</div>
                 <div></div>
               </div>
               
@@ -2397,7 +2575,7 @@ const InventoryView = () => {
                   key={index}
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 80px",
+                    gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr 80px",
                     gap: "12px",
                     alignItems: "center",
                     padding: "12px 16px",
@@ -2411,6 +2589,32 @@ const InventoryView = () => {
                   <div>${Number(item.cost_price).toFixed(2)}</div>
                   <div>${Number(item.sale_price).toFixed(2)}</div>
                   <div>${(item.quantity * item.cost_price).toFixed(2)}</div>
+                  <div>
+                    {item.jobsheet_id ? (
+                      <div style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        backgroundColor: "#EDE7F6",
+                        color: "#5932EA",
+                        borderRadius: "12px",
+                        padding: "4px 8px",
+                        fontSize: "12px",
+                        gap: "4px",
+                        fontWeight: "500"
+                      }}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M14 15.5C14 16.3284 13.3284 17 12.5 17C11.6716 17 11 16.3284 11 15.5C11 14.6716 11.6716 14 12.5 14C13.3284 14 14 14.6716 14 15.5Z" fill="#5932EA"/>
+                          <path d="M8.5 17C9.32843 17 10 16.3284 10 15.5C10 14.6716 9.32843 14 8.5 14C7.67157 14 7 14.6716 7 15.5C7 16.3284 7.67157 17 8.5 17Z" fill="#5932EA"/>
+                          <path d="M19.5 12L16 9V11C13 10 10 12 10 12" stroke="#5932EA" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M17 17C17.8284 17 18.5 16.3284 18.5 15.5C18.5 14.6716 17.8284 14 17 14C16.1716 14 15.5 14.6716 15.5 15.5C15.5 16.3284 16.1716 17 17 17Z" fill="#5932EA"/>
+                          <path fillRule="evenodd" clipRule="evenodd" d="M3 12.5V17.5H5.54879C5.79381 16.6453 6.57462 16 7.5 16C8.42538 16 9.20619 16.6453 9.45121 17.5H10.5488C10.7938 16.6453 11.5746 16 12.5 16C13.4254 16 14.2062 16.6453 14.4512 17.5H16.5488C16.7938 16.6453 17.5746 16 18.5 16C19.4254 16 20.2062 16.6453 20.4512 17.5H21V12.5L19 8H14V11L12.8406 10.2054C12.479 9.98224 12.0978 9.80209 11.7 9.66577M4 9.5H10M4 7.5H8" stroke="#5932EA" strokeWidth="2" strokeLinecap="round"/>
+                        </svg>
+                        #{item.jobsheet_id}
+                      </div>
+                    ) : (
+                      <span style={{ color: "#999", fontSize: "13px" }}>--</span>
+                    )}
+                  </div>
                   <button
                     onClick={() => removeReceiveItem(index)}
                     style={{

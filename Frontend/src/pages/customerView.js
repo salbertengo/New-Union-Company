@@ -541,21 +541,61 @@ const CustomersView = () => {
                 border: '1px solid #e0e0e0',
                 backgroundColor: '#F9FBFF',
                 height: '25px',
-                fontSize: '14px'
+                fontSize: '14px',
+                transition: 'all 0.2s ease'
               }}
               value={searchTerm}
               onChange={handleSearchChange}
+              onFocus={(e) => e.target.style.borderColor = '#5932EA'}
+              onBlur={(e) => e.target.style.borderColor = '#e0e0e0'}
             />
-            <FontAwesomeIcon 
-              icon={faSearch} 
-              style={{
-                position: 'absolute',
-                right: '10px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                color: loading ? '#4321C9' : '#6E6E6E',
-              }}
-            />
+            {loading ? (
+              <div
+                style={{
+                  position: 'absolute',
+                  right: '10px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: '14px',
+                  height: '14px',
+                  border: '2px solid rgba(89, 50, 234, 0.1)',
+                  borderLeftColor: '#5932EA',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite'
+                }}
+              ></div>
+            ) : (
+              <FontAwesomeIcon 
+                icon={faSearch} 
+                style={{
+                  position: 'absolute',
+                  right: '10px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: searchTerm ? '#4321C9' : '#6E6E6E',
+                }}
+              />
+            )}
+            {searchTerm && !loading && customers.length === 0 && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: '0',
+                  right: '0',
+                  background: 'white',
+                  padding: '10px',
+                  borderRadius: '5px',
+                  boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+                  marginTop: '5px',
+                  zIndex: 10,
+                  fontSize: '14px',
+                  color: '#666'
+                }}
+              >
+                No customers found matching "{searchTerm}"
+              </div>
+            )}
           </div>
           <button
             onClick={() => {

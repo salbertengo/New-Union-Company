@@ -37,6 +37,7 @@ const PaymentsPage = () => {
   const [showModal, setShowModal] = useState(false);
   const [currentPayment, setCurrentPayment] = useState(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [notification, setNotification] = useState({ show: false, message: "", type: "" });
   const gridRef = useRef(null);
   const searchTimeout = useRef(null);
   const [jobsheets, setJobsheets] = useState([]);
@@ -404,7 +405,7 @@ const PaymentsPage = () => {
       setFormData({
         id: null,
         jobsheet_id: "",
-        amount: "",
+        amount: "", // Quitamos el valor por defecto para que no aparezca el 0
         method: "cash",
         payment_date: new Date().toISOString().split('T')[0]
       });
@@ -414,6 +415,21 @@ const PaymentsPage = () => {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
+    
+    // Para el campo de cantidad, permitir solo valores numéricos válidos
+    if (name === 'amount') {
+      // Si es una entrada válida numérica o está vacío, actualizar
+      if (value === '' || (!isNaN(value) && parseFloat(value) >= 0)) {
+        setFormData({
+          ...formData,
+          [name]: value,
+        });
+      }
+      // No actualizar si la entrada no es válida
+      return;
+    }
+    
+    // Para otros campos, actualizar normalmente
     setFormData({
       ...formData,
       [name]: value,
@@ -421,8 +437,24 @@ const PaymentsPage = () => {
   };
 
   const handleSave = async () => {
-    if (!formData.jobsheet_id || !formData.amount || parseFloat(formData.amount) <= 0) {
-      alert("Please fill in all required fields with valid values");
+    // Cambiar validación y alertas por notificaciones visuales
+    if (!formData.jobsheet_id) {
+      setNotification({
+        show: true,
+        message: "Please select a job sheet",
+        type: "error"
+      });
+      setTimeout(() => setNotification({show: false}), 3000);
+      return;
+    }
+    
+    if (!formData.amount || parseFloat(formData.amount) <= 0) {
+      setNotification({
+        show: true,
+        message: "Please enter a valid amount greater than 0",
+        type: "error"
+      });
+      setTimeout(() => setNotification({show: false}), 3000);
       return;
     }
   
@@ -1061,6 +1093,25 @@ const PaymentsPage = () => {
             </div>
           )}
 
+          {notification.show && (
+            <div
+              style={{
+                position: "fixed",
+                bottom: "20px",
+                right: "20px",
+                backgroundColor: notification.type === "error" ? "#FF4D4F" : "#5932EA",
+                color: "white",
+                padding: "10px 20px",
+                borderRadius: "8px",
+                boxShadow: "0 2px 6px rgba(0, 0, 0, 0.2)",
+                zIndex: 1000,
+                animation: "fadeIn 0.3s ease",
+              }}
+            >
+              {notification.message}
+            </div>
+          )}
+
           <style>
             {`
             @keyframes spin {
@@ -1071,6 +1122,11 @@ const PaymentsPage = () => {
             @keyframes modalFadeIn {
               from { opacity: 0; transform: scale(0.95); }
               to { opacity: 1; transform: scale(1); }
+            }
+
+            @keyframes fadeIn {
+              from { opacity: 0; transform: translateY(10px); }
+              to { opacity: 1; transform: translateY(0); }
             }
             
             /* Uniform styles for AG Grid */
