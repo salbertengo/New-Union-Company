@@ -5,7 +5,7 @@ import SideBar from './Sidebar';
 import { AgGridReact } from 'ag-grid-react';
 import { ClientSideRowModelModule } from 'ag-grid-community';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faUser, faUserShield, faSearch, faPlus, faEdit, faTrashAlt, faTimes, faCheck, faKey, faSignOutAlt } from '@fortawesome/free-solid-svg-icons';
+import { faUser, faUserShield, faSearch, faPlus, faEdit, faTrashAlt, faTimes, faCheck, faKey, faSignOutAlt, faBars } from '@fortawesome/free-solid-svg-icons';
 import { ActionButton, ActionButtonsContainer } from '../components/common/ActionButtons';
 
 function UserManagement() {
@@ -25,6 +25,12 @@ function UserManagement() {
   const [message, setMessage] = useState({ text: '', type: '' });
   const [isSaving, setIsSaving] = useState(false);
   const [formDirty, setFormDirty] = useState(false);
+  
+  // Estados para manejo responsivo
+  const [isMobile, setIsMobile] = useState(false);
+  const [isVertical, setIsVertical] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  
   const gridRef = useRef(null);
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
@@ -33,6 +39,29 @@ function UserManagement() {
     navigate('/login');
   };
   const API_URL = process.env.REACT_APP_API_URL;
+  
+  // Detectar si es dispositivo móvil/tablet y orientación
+  useEffect(() => {
+    const checkDeviceAndOrientation = () => {
+      const isMobileDevice = window.innerWidth <= 1024; // Considera tablets
+      const isVerticalOrientation = window.innerHeight > window.innerWidth;
+      
+      setIsMobile(isMobileDevice);
+      setIsVertical(isVerticalOrientation);
+      
+      // En dispositivos grandes, la sidebar siempre está visible
+      // En móviles/tablets, está cerrada por defecto
+      setSidebarOpen(!isMobileDevice);
+    };
+    
+    checkDeviceAndOrientation();
+    window.addEventListener('resize', checkDeviceAndOrientation);
+    
+    return () => {
+      window.removeEventListener('resize', checkDeviceAndOrientation);
+    };
+  }, []);
+
   // Redirect if not admin
   useEffect(() => {
     if (!isAdmin()) {
@@ -233,16 +262,21 @@ function UserManagement() {
   };
 
   const onGridReady = (params) => {
-    params.api.sizeColumnsToFit();
+    gridRef.current = params.api;
+    setTimeout(() => {
+      if (gridRef.current && !gridRef.current.isDestroyed) {
+        gridRef.current.sizeColumnsToFit();
+      }
+    }, 100);
   };
 
-  // Column definitions for AG Grid
+  // Column definitions for AG Grid - adaptadas para móvil
   const columnDefs = [
     {
       headerName: 'User',
       field: 'name',
       flex: 1.5,
-      minWidth: 220,
+      minWidth: isMobile ? 180 : 220,
       cellRenderer: params => {
         if (!params.data) return '';
         return (
@@ -263,6 +297,7 @@ function UserManagement() {
       headerName: 'Role',
       field: 'role',
       width: 150,
+      hide: isMobile && isVertical,
       cellRenderer: params => {
         if (!params.data) return '';
         const isAdmin = params.data.role === 'admin';
@@ -287,6 +322,7 @@ function UserManagement() {
       headerName: 'Created',
       field: 'created_at',
       width: 150,
+      hide: isMobile && isVertical,
       cellRenderer: params => {
         if (!params.data || !params.data.created_at) return '';
         const date = new Date(params.data.created_at);
@@ -301,7 +337,7 @@ function UserManagement() {
     {
       headerName: 'Actions',
       field: 'actions',
-      width: 160,
+      width: isMobile ? 120 : 160,
       cellRenderer: params => {
         if (!params.data) return '';
         return (
@@ -336,11 +372,13 @@ function UserManagement() {
     sortable: true,
     suppressMenu: true,
     flex: 1,
+    minWidth: isMobile ? 100 : 120,
+    cellClass: isMobile ? 'touch-cell' : '',
     cellStyle: {
       display: 'flex',
       alignItems: 'center',
       paddingLeft: '12px',
-      fontSize: '14px',
+      fontSize: isMobile ? '14px' : '14px',
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
       color: '#333'
     },
@@ -359,18 +397,29 @@ function UserManagement() {
         overflow: 'hidden'
       }}
     >
+      {/* Barra lateral - Ahora responsiva */}
       <div
         style={{
-          width: '220px',
+          width: isMobile ? (sidebarOpen ? '250px' : '0px') : '220px',
           backgroundColor: 'white',
           display: 'flex',
           justifyContent: 'center',
-          alignItems: 'center'
+          alignItems: 'center',
+          transition: 'width 0.3s ease',
+          overflow: 'hidden', // Importante para ocultar contenido cuando width=0
+          position: isMobile ? 'fixed' : 'relative',
+          zIndex: 1000,
+          height: '100%'
         }}
       >
-        <SideBar />
+        <SideBar 
+          isMobile={isMobile} 
+          sidebarOpen={sidebarOpen} 
+          setSidebarOpen={setSidebarOpen} 
+        />
       </div>
 
+      {/* Contenedor principal */}
       <div
         style={{
           flex: 1,
@@ -379,6 +428,11 @@ function UserManagement() {
           gap: '20px',
           padding: '20px',
           boxSizing: 'border-box',
+          marginLeft: isMobile ? 0 : '0px',
+          transition: 'margin-left 0.3s ease',
+          height: '100%',
+          overflow: 'auto', // Permite scroll cuando sea necesario
+          WebkitOverflowScrolling: 'touch' // Scroll suave en iOS
         }}
       >
         <div
@@ -390,23 +444,65 @@ function UserManagement() {
             overflow: 'hidden',
             backgroundColor: '#ffffff',
             boxSizing: 'border-box',
-            padding: '20px',
+            padding: isMobile ? '16px' : '20px',
           }}
         >
           <div
             style={{
               display: 'flex',
+              flexDirection: isMobile && isVertical ? 'column' : 'row',
               justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '10px',
+              alignItems: isMobile && isVertical ? 'stretch' : 'center',
+              marginBottom: isMobile ? '15px' : '10px',
+              gap: isMobile ? '10px' : '0'
             }}
           >
-            <h2 style={{ margin: 0, fontSize: '18px' }}>User Management</h2>
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <div style={{ position: 'relative' }}>
+            {isMobile && (
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '8px' 
+              }}>
+                <h2 style={{ margin: 0, fontSize: isMobile ? '16px' : '18px' }}>User Management</h2>
+                {isMobile && (
+                  <button
+                    onClick={() => setSidebarOpen(!sidebarOpen)}
+                    style={{
+                      border: 'none',
+                      background: 'none',
+                      color: '#5932EA',
+                      cursor: 'pointer',
+                      padding: '8px',
+                      borderRadius: '4px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    <FontAwesomeIcon icon={faBars} size="lg" />
+                  </button>
+                )}
+              </div>
+            )}
+
+            {!isMobile && <h2 style={{ margin: 0, fontSize: '18px' }}>User Management</h2>}
+
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: isMobile && isVertical ? 'column' : 'row', 
+              gap: '10px', 
+              alignItems: isMobile && isVertical ? 'stretch' : 'center',
+              width: isMobile && isVertical ? '100%' : 'auto'
+            }}>
+              <div style={{ 
+                position: 'relative',
+                width: isMobile && isVertical ? '100%' : '216px' 
+              }}>
                 <div style={{ 
                   display: 'flex', 
                   alignItems: 'center',
+                  width: '100%'
                 }}>
                   <input
                     type="text"
@@ -414,12 +510,14 @@ function UserManagement() {
                     value={searchTerm}
                     onChange={handleSearch}
                     style={{
-                      padding: '5px 30px 5px 10px',
-                      width: '216px',
+                      padding: isMobile ? '12px 35px 12px 12px' : '5px 30px 5px 10px',
+                      width: '100%',
                       borderRadius: '10px',
                       border: '1px solid white',
                       backgroundColor: '#F9FBFF',
-                      height: '25px',
+                      height: isMobile ? '46px' : '25px',
+                      fontSize: isMobile ? '16px' : 'inherit',
+                      boxSizing: 'border-box'
                     }}
                   />
                   <FontAwesomeIcon
@@ -431,58 +529,118 @@ function UserManagement() {
                       transform: 'translateY(-50%)',
                       color: loading ? '#4321C9' : 'gray',
                       cursor: 'pointer',
+                      fontSize: isMobile ? '18px' : 'inherit'
                     }}
                   />
                 </div>
               </div>
 
-              <button
-                onClick={handleOpenNewModal}
-                onMouseEnter={() => setIsHovered(true)}
-                onMouseLeave={() => setIsHovered(false)}
-                style={{
-                  padding: '10px 20px',
-                  backgroundColor: isHovered ? '#4321C9' : '#5932EA',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '5px',
-                  cursor: 'pointer',
-                  transition: 'background-color 0.3s ease',
+              {/* Botones para escritorio o móvil horizontal */}
+              {!isMobile || !isVertical ? (
+                <>
+                  <button
+                    onClick={handleOpenNewModal}
+                    onMouseEnter={() => setIsHovered(true)}
+                    onMouseLeave={() => setIsHovered(false)}
+                    style={{
+                      padding: isMobile ? '12px 20px' : '10px 20px',
+                      backgroundColor: isHovered ? '#4321C9' : '#5932EA',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      transition: 'background-color 0.3s ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      fontSize: isMobile ? '15px' : 'inherit'
+                    }}
+                  >
+                    <FontAwesomeIcon icon={faPlus} />
+                    <span>Add User</span>
+                  </button>
+                  
+                  <button
+                    onClick={handleLogout}
+                    style={{
+                      padding: isMobile ? '12px 15px' : '10px 15px',
+                      backgroundColor: '#f5f5f5',
+                      color: '#666',
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      fontSize: isMobile ? '15px' : 'inherit'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.backgroundColor = '#e5e5e5';
+                      e.currentTarget.style.color = '#333';
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.backgroundColor = '#f5f5f5';
+                      e.currentTarget.style.color = '#666';
+                    }}
+                  >
+                    <FontAwesomeIcon icon={faSignOutAlt} />
+                    <span>Logout</span>
+                  </button>
+                </>
+              ) : (
+                // Botones para diseño móvil vertical
+                <div style={{
                   display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                }}
-              >
-                <FontAwesomeIcon icon={faPlus} />
-                <span>Add User</span>
-              </button>
-              
-              <button
-                onClick={handleLogout}
-                style={{
-                  padding: '10px 15px',
-                  backgroundColor: '#f5f5f5',
-                  color: '#666',
-                  border: 'none',
-                  borderRadius: '5px',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.backgroundColor = '#e5e5e5';
-                  e.currentTarget.style.color = '#333';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.backgroundColor = '#f5f5f5';
-                  e.currentTarget.style.color = '#666';
-                }}
-              >
-                <FontAwesomeIcon icon={faSignOutAlt} />
-                <span>Logout</span>
-              </button>
+                  flexDirection: 'column',
+                  width: '100%',
+                  gap: '10px'
+                }}>
+                  <button
+                    onClick={handleOpenNewModal}
+                    style={{
+                      padding: '14px 20px',
+                      backgroundColor: '#5932EA',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      transition: 'background-color 0.3s ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      fontSize: '16px',
+                      width: '100%'
+                    }}
+                  >
+                    <FontAwesomeIcon icon={faPlus} />
+                    <span>Add User</span>
+                  </button>
+                  
+                  <button
+                    onClick={handleLogout}
+                    style={{
+                      padding: '14px 15px',
+                      backgroundColor: '#f5f5f5',
+                      color: '#666',
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      fontSize: '16px',
+                      width: '100%'
+                    }}
+                  >
+                    <FontAwesomeIcon icon={faSignOutAlt} />
+                    <span>Logout</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -503,14 +661,15 @@ function UserManagement() {
 
           <div style={{ flex: 1, position: 'relative' }}>
             <div 
-              className="ag-theme-alpine inventory-view" 
+              className="ag-theme-alpine inventory-view touch-enabled-grid" 
               style={{ 
                 width: '100%', 
                 height: '100%',
-                overflowX: 'hidden',
+                overflowX: 'auto',
                 overflowY: 'auto',
                 opacity: loading ? 0.6 : 1,
                 transition: 'opacity 0.3s ease',
+                WebkitOverflowScrolling: 'touch'
               }}
             >
               <AgGridReact
@@ -520,11 +679,11 @@ function UserManagement() {
                 defaultColDef={defaultColDef}
                 modules={[ClientSideRowModelModule]}
                 pagination={true}
-                paginationPageSize={12}
-                headerHeight={30}
-                rowHeight={50}
+                paginationPageSize={isMobile ? 7 : 12}
+                headerHeight={isMobile ? 50 : 30}
+                rowHeight={isMobile ? 65 : 50}
                 suppressSizeToFit={true}
-                suppressHorizontalScroll={true}
+                suppressHorizontalScroll={false}
                 onGridReady={onGridReady}
               />
             </div>
@@ -553,6 +712,7 @@ function UserManagement() {
             )}
           </div>
 
+          {/* Modales adaptados para móvil */}
           {/* Add/Edit User Modal */}
           {showModal && (
             <div
@@ -574,16 +734,17 @@ function UserManagement() {
                 style={{
                   backgroundColor: "white",
                   borderRadius: "16px",
-                  width: "520px",
+                  width: isMobile ? "90%" : "520px",
+                  maxHeight: isMobile ? "90%" : "auto",
+                  overflowY: "auto",
                   boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
-                  overflow: "hidden",
                   animation: "modalFadeIn 0.3s ease",
                 }}
               >
                 <div
                   style={{
                     background: "linear-gradient(135deg, #5932EA 0%, #4321C9 100%)",
-                    padding: "24px 30px",
+                    padding: isMobile ? "20px" : "24px 30px",
                     color: "white",
                     position: "relative",
                     overflow: "hidden",
@@ -605,7 +766,7 @@ function UserManagement() {
                     <div>
                       <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "10px" }}>
                         <FontAwesomeIcon icon={currentUser?.role === 'admin' ? faUserShield : faUser} style={{ fontSize: '24px' }}/>
-                        <h2 style={{ margin: 0, fontSize: "22px", fontWeight: "600" }}>
+                        <h2 style={{ margin: 0, fontSize: isMobile ? "18px" : "22px", fontWeight: "600" }}>
                           {currentUser ? "Edit User" : "Add New User"}
                         </h2>
                       </div>
@@ -642,7 +803,7 @@ function UserManagement() {
                   </div>
                 </div>
 
-                <div style={{ padding: "24px 30px" }}>
+                <div style={{ padding: isMobile ? "20px" : "24px 30px" }}>
                   <div style={{ display: "grid", gap: "20px" }}>
                     <div>
                       <label style={{
@@ -664,7 +825,7 @@ function UserManagement() {
                           padding: "14px 16px",
                           borderRadius: "10px",
                           border: "1px solid #e0e0e0",
-                          fontSize: "14px",
+                          fontSize: isMobile ? "16px" : "14px",
                           backgroundColor: "#f9faff",
                           outline: "none",
                         }}
@@ -691,7 +852,7 @@ function UserManagement() {
                           padding: "14px 16px",
                           borderRadius: "10px",
                           border: "1px solid #e0e0e0",
-                          fontSize: "14px",
+                          fontSize: isMobile ? "16px" : "14px",
                           backgroundColor: "#f9faff",
                           outline: "none",
                         }}
@@ -719,7 +880,7 @@ function UserManagement() {
                             padding: "14px 16px",
                             borderRadius: "10px",
                             border: "1px solid #e0e0e0",
-                            fontSize: "14px",
+                            fontSize: isMobile ? "16px" : "14px",
                             backgroundColor: "#f9faff",
                             outline: "none",
                           }}
@@ -802,6 +963,7 @@ function UserManagement() {
 
                   <div style={{
                     display: "flex",
+                    flexDirection: isMobile && isVertical ? "column" : "row",
                     justifyContent: "flex-end",
                     gap: "12px",
                     marginTop: "30px"
@@ -816,7 +978,8 @@ function UserManagement() {
                         borderRadius: "10px",
                         cursor: "pointer",
                         fontWeight: "500",
-                        transition: "all 0.2s"
+                        transition: "all 0.2s",
+                        width: isMobile && isVertical ? "100%" : "auto",
                       }}
                       onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#e5e5e5"}
                       onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#f5f5f5"}
@@ -838,8 +1001,10 @@ function UserManagement() {
                         transition: "all 0.2s",
                         display: "flex",
                         alignItems: "center",
+                        justifyContent: isMobile && isVertical ? "center" : "space-between",
                         gap: "8px",
-                        opacity: isSaving ? 0.7 : 1
+                        opacity: isSaving ? 0.7 : 1,
+                        width: isMobile && isVertical ? "100%" : "auto",
                       }}
                       onMouseOver={(e) => !isSaving && (e.currentTarget.style.backgroundColor = "#4321C9")}
                       onMouseOut={(e) => !isSaving && (e.currentTarget.style.backgroundColor = "#5932EA")}
@@ -869,7 +1034,7 @@ function UserManagement() {
             </div>
           )}
 
-          {/* Delete Confirmation Modal */}
+          {/* Delete Confirmation Modal - adaptado para móvil */}
           {showDeleteModal && currentUser && (
             <div
               style={{
@@ -890,7 +1055,7 @@ function UserManagement() {
                 style={{
                   backgroundColor: "white",
                   borderRadius: "16px",
-                  width: "400px",
+                  width: isMobile ? "85%" : "400px",
                   overflow: "hidden",
                   boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
                   animation: "modalFadeIn 0.3s ease",
@@ -899,14 +1064,14 @@ function UserManagement() {
                 <div
                   style={{
                     background: "linear-gradient(135deg, #FF4D4F 0%, #D32F2F 100%)",
-                    padding: "20px 24px",
+                    padding: isMobile ? "20px" : "20px 24px",
                     color: "white",
                   }}
                 >
                   <h3 style={{ margin: 0, fontSize: "18px", fontWeight: "600" }}>Delete User</h3>
                 </div>
                 
-                <div style={{ padding: "20px 24px" }}>
+                <div style={{ padding: isMobile ? "20px" : "20px 24px" }}>
                   <p style={{ margin: "0 0 20px 0", fontSize: "14px", lineHeight: "1.5" }}>
                     Are you sure you want to delete the user <strong>{currentUser.name}</strong> ({currentUser.username})?
                     <br /><br />
@@ -916,6 +1081,7 @@ function UserManagement() {
                   <div
                     style={{
                       display: "flex",
+                      flexDirection: isMobile && isVertical ? "column" : "row",
                       justifyContent: "flex-end",
                       gap: "12px",
                     }}
@@ -931,6 +1097,7 @@ function UserManagement() {
                         cursor: "pointer",
                         fontWeight: "500",
                         transition: "all 0.2s",
+                        width: isMobile && isVertical ? "100%" : "auto",
                       }}
                       onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#e5e5e5"}
                       onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#f5f5f5"}
@@ -949,6 +1116,7 @@ function UserManagement() {
                         fontWeight: "600",
                         transition: "all 0.2s",
                         boxShadow: "0 2px 6px rgba(255, 77, 79, 0.3)",
+                        width: isMobile && isVertical ? "100%" : "auto",
                       }}
                       onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#D32F2F"}
                       onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#FF4D4F"}
@@ -961,7 +1129,7 @@ function UserManagement() {
             </div>
           )}
 
-          {/* Password Change Modal */}
+          {/* Password Change Modal - adaptado para móvil */}
           {showPasswordModal && currentUser && (
             <div
               style={{
@@ -982,7 +1150,7 @@ function UserManagement() {
                 style={{
                   backgroundColor: "white",
                   borderRadius: "16px",
-                  width: "400px",
+                  width: isMobile ? "85%" : "400px",
                   overflow: "hidden",
                   boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
                   animation: "modalFadeIn 0.3s ease",
@@ -991,14 +1159,14 @@ function UserManagement() {
                 <div
                   style={{
                     background: "linear-gradient(135deg, #FF9800 0%, #F57C00 100%)",
-                    padding: "20px 24px",
+                    padding: isMobile ? "20px" : "20px 24px",
                     color: "white",
                   }}
                 >
                   <h3 style={{ margin: 0, fontSize: "18px", fontWeight: "600" }}>Change Password</h3>
                 </div>
                 
-                <div style={{ padding: "20px 24px" }}>
+                <div style={{ padding: isMobile ? "20px" : "20px 24px" }}>
                   <p style={{ margin: "0 0 20px 0", fontSize: "14px", lineHeight: "1.5" }}>
                     Set a new password for user <strong>{currentUser.name}</strong> ({currentUser.username})
                   </p>
@@ -1023,7 +1191,7 @@ function UserManagement() {
                         padding: "14px 16px",
                         borderRadius: "10px",
                         border: "1px solid #e0e0e0",
-                        fontSize: "14px",
+                        fontSize: isMobile ? "16px" : "14px",
                         backgroundColor: "#f9faff",
                         outline: "none",
                       }}
@@ -1034,6 +1202,7 @@ function UserManagement() {
                   <div
                     style={{
                       display: "flex",
+                      flexDirection: isMobile && isVertical ? "column" : "row",
                       justifyContent: "flex-end",
                       gap: "12px",
                     }}
@@ -1049,6 +1218,7 @@ function UserManagement() {
                         cursor: "pointer",
                         fontWeight: "500",
                         transition: "all 0.2s",
+                        width: isMobile && isVertical ? "100%" : "auto",
                       }}
                       onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#e5e5e5"}
                       onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#f5f5f5"}
@@ -1067,6 +1237,7 @@ function UserManagement() {
                         fontWeight: "600",
                         transition: "all 0.2s",
                         boxShadow: "0 2px 6px rgba(255, 152, 0, 0.3)",
+                        width: isMobile && isVertical ? "100%" : "auto",
                       }}
                       onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#F57C00"}
                       onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#FF9800"}
@@ -1091,17 +1262,29 @@ function UserManagement() {
               to { opacity: 1; transform: scale(1); }
             }
             
+            /* Estilos touch-friendly */
+            .touch-enabled-grid {
+              -webkit-overflow-scrolling: touch !important;
+              overflow-scrolling: touch !important;
+              scroll-behavior: smooth !important;
+              overscroll-behavior: contain !important;
+            }
+            
+            .touch-cell {
+              padding: 16px 8px !important;
+            }
+            
             /* Uniform styles for AG Grid */
             .ag-theme-alpine {
-              --ag-header-height: 30px;
-              --ag-row-height: 50px;
+              --ag-header-height: ${isMobile ? "50px" : "30px"};
+              --ag-row-height: ${isMobile ? "65px" : "50px"};
               --ag-header-foreground-color: #333;
               --ag-header-background-color: #F9FBFF;
               --ag-odd-row-background-color: #fff;
               --ag-row-border-color: rgba(0, 0, 0, 0.1);
-              --ag-cell-horizontal-padding: 12px;
+              --ag-cell-horizontal-padding: ${isMobile ? "16px" : "12px"};
               --ag-borders: none;
-              --ag-font-size: 14px;
+              --ag-font-size: ${isMobile ? "15px" : "14px"};
               --ag-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             }
             
@@ -1153,10 +1336,54 @@ function UserManagement() {
               color: #666;
               margin-top: 2px;
             }
+            
+            @media (pointer: coarse) {
+              ::-webkit-scrollbar {
+                width: 6px;
+                height: 6px;
+              }
+              
+              ::-webkit-scrollbar-thumb {
+                background-color: rgba(89, 50, 234, 0.5);
+                border-radius: 6px;
+              }
+              
+              ::-webkit-scrollbar-track {
+                background-color: rgba(0, 0, 0, 0.05);
+              }
+              
+              input, select, button {
+                font-size: 16px !important;
+              }
+              
+              .ag-theme-alpine .ag-header-cell {
+                padding: 0 5px !important;
+              }
+              
+              .ag-theme-alpine .ag-cell {
+                padding: 10px 5px !important;
+              }
+            }
             `}
           </style>
         </div>
       </div>
+
+      {/* Overlay cuando sidebar está abierta en móvil/tablet */}
+      {isMobile && sidebarOpen && (
+        <div 
+          onClick={() => setSidebarOpen(false)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.3)',
+            zIndex: 999
+          }}
+        />
+      )}
     </div>
   );
 }

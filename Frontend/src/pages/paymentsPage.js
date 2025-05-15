@@ -17,7 +17,8 @@ import {
   faExchangeAlt,
   faFileInvoiceDollar,
   faWallet,
-  faMobile // Add this import
+  faMobile,
+  faBars // Añadir para el icono del menú en móvil
 } from "@fortawesome/free-solid-svg-icons";
 import "@fortawesome/fontawesome-svg-core/styles.css";
 import SideBar from './Sidebar';
@@ -25,6 +26,7 @@ import {
   ActionButton, 
   ActionButtonsContainer 
 } from '../components/common/ActionButtons';
+
 
 // Register AG Grid modules
 ModuleRegistry.registerModules([ClientSideRowModelModule]);
@@ -48,119 +50,148 @@ const PaymentsPage = () => {
     method: "cash",
     payment_date: new Date().toISOString().split('T')[0]
   });
-
+  const [isMobile, setIsMobile] = useState(false);
+  const [isVertical, setIsVertical] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  useEffect(() => { 
+    const checkDeviceAndOrientation = () => {
+      const isMobileDevice = window.innerWidth <= 1024; // Considera tablets
+      const isVerticalOrientation = window.innerHeight > window.innerWidth;
+      setIsMobile(isMobileDevice);
+      setIsVertical(isVerticalOrientation);
+      setSidebarOpen(!isMobileDevice);
+    };
+    checkDeviceAndOrientation();
+    window.addEventListener('resize', checkDeviceAndOrientation);
+    return () => {
+      window.removeEventListener('resize', checkDeviceAndOrientation);
+    };
+  }, []);
+  
   const paymentMethods = ["cash", "paynow", "nets"];
   const API_URL = process.env.REACT_APP_API_URL;
-  const columnDefs = useMemo(() => [
-    {
-      headerName: 'ID',
-      field: 'id',
-      width: 80,
-      suppressMenu: true,
-      headerClass: 'custom-header-sumary'
-    },
-    {
-      headerName: 'Jobsheet',
-      field: 'jobsheet_id',
-      suppressMenu: true,
-      headerClass: 'custom-header-sumary',
-      cellRenderer: (params) => {
-        return `#${params.value}`;
-      }
-    },
-{
-  headerName: 'Date',
-  field: 'payment_date',
-  suppressMenu: true,
-  headerClass: 'custom-header-sumary',
-  cellRenderer: (params) => {
-    if (!params.value) return '';
-    const date = new Date(params.value);
-    // Cambiar al formato DD/MM/YYYY usando la localización en-GB
-    return date.toLocaleDateString('en-GB');
-  }
-},
-    {
-      headerName: 'Amount',
-      field: 'amount',
-      suppressMenu: true,
-      headerClass: 'custom-header-sumary',
-      cellRenderer: (params) => {
-        return `$${parseFloat(params.value).toFixed(2)}`;
-      }
-    },
-    {
-      headerName: 'Method',
-      field: 'method',
-      suppressMenu: true,
-      headerClass: 'custom-header-sumary',
-      width: 100,
-      cellRenderer: (params) => {
-        // Use default method if value is undefined or not in our color map
-        let method = params.value || 'cash';
-        
-        const colors = {
-          cash: { bg: "#E3F2FD", text: "#0D47A1", icon: "#2196F3" },
-          paynow: { bg: "#F3E5F5", text: "#4A148C", icon: "#9C27B0" },
-          nets: { bg: "#E8F5E9", text: "#1B5E20", icon: "#4CAF50" }
-        };
-        
-        // Check if method exists in our colors object, if not use 'cash'
-        if (!colors[method]) {
-          method = 'cash';
+    const columnDefs = useMemo(() => {
+    // Columnas base para todas las vistas
+    const baseColumns = [
+      {
+        headerName: 'ID',
+        field: 'id',
+        width: isMobile ? 70 : 80,
+        suppressMenu: true,
+        headerClass: 'custom-header-sumary'
+      },
+      {
+        headerName: 'Amount',
+        field: 'amount',
+        suppressMenu: true,
+        headerClass: 'custom-header-sumary',
+        width: isMobile ? 100 : 120,
+        cellRenderer: (params) => {
+          return `$${parseFloat(params.value).toFixed(2)}`;
         }
-        
-        let icon;
-        switch(method) {
-          case 'cash':
-            icon = <FontAwesomeIcon icon={faMoneyBill} />;
-            break;
-          case 'paynow':
-            icon = <FontAwesomeIcon icon={faMobile} />; // Add import for faMobile
-            break;
-          case 'nets':
-            icon = <FontAwesomeIcon icon={faCreditCard} />;
-            break;
-          default:
-            icon = <FontAwesomeIcon icon={faMoneyBill} />;
+      }
+    ];
+    
+    // Columnas adicionales para escritorio o tablets horizontales
+    const desktopColumns = [
+      {
+        headerName: 'Jobsheet',
+        field: 'jobsheet_id',
+        suppressMenu: true,
+        width: isMobile ? 100 : 120,
+        headerClass: 'custom-header-sumary',
+        cellRenderer: (params) => {
+          return `#${params.value}`;
         }
-        
-        return (
-          <div style={{
-            height: "100%", // Fill the entire cell
-            display: "flex",
-            alignItems: "center", 
-            justifyContent: "flex-start", // Changed to left-align
-            paddingLeft: "12px" // Added left padding
-          }}>
+      },
+      {
+        headerName: 'Date',
+        field: 'payment_date',
+        suppressMenu: true,
+        headerClass: 'custom-header-sumary',
+        width: isMobile && !isVertical ? 100 : 120,
+        cellRenderer: (params) => {
+          if (!params.value) return '';
+          const date = new Date(params.value);
+          return date.toLocaleDateString('en-GB');
+        }
+      },
+      {
+        headerName: 'Method',
+        field: 'method',
+        suppressMenu: true,
+        headerClass: 'custom-header-sumary',
+        width: 100,
+        cellRenderer: (params) => {
+          // Use default method if value is undefined or not in our color map
+          let method = params.value || 'cash';
+          
+          const colors = {
+            cash: { bg: "#E3F2FD", text: "#0D47A1", icon: "#2196F3" },
+            paynow: { bg: "#F3E5F5", text: "#4A148C", icon: "#9C27B0" },
+            nets: { bg: "#E8F5E9", text: "#1B5E20", icon: "#4CAF50" }
+          };
+          
+          // Check if method exists in our colors object, if not use 'cash'
+          if (!colors[method]) {
+            method = 'cash';
+          }
+          
+          let icon;
+          switch(method) {
+            case 'cash':
+              icon = <FontAwesomeIcon icon={faMoneyBill} />;
+              break;
+            case 'paynow':
+              icon = <FontAwesomeIcon icon={faMobile} />;
+              break;
+            case 'nets':
+              icon = <FontAwesomeIcon icon={faCreditCard} />;
+              break;
+            default:
+              icon = <FontAwesomeIcon icon={faMoneyBill} />;
+          }
+          
+          return (
             <div style={{
-              backgroundColor: colors[method].bg,
-              color: colors[method].text,
-              width: "24px",
-              height: "24px",
-              borderRadius: "50%",
+              height: "100%", // Fill the entire cell
               display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: "11px",
-              boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
-              lineHeight: 0
+              alignItems: "center", 
+              justifyContent: "flex-start", // Changed to left-align
+              paddingLeft: "12px" // Added left padding
             }}>
-              {icon}
+              <div style={{
+                backgroundColor: colors[method].bg,
+                color: colors[method].text,
+                width: "24px",
+                height: "24px",
+                borderRadius: "50%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "11px",
+                boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+                lineHeight: 0
+              }}>
+                {icon}
+              </div>
             </div>
-          </div>
-        );
-      }
-    },
-    {
-      headerName: 'Customer',
-      field: 'customer_name',
-      suppressMenu: true,
-      headerClass: 'custom-header-sumary'
-    },
-    {
+          );
+        }
+      },
+      {
+        headerName: 'Customer',
+        field: 'customer_name',
+        suppressMenu: true,
+        headerClass: 'custom-header-sumary',
+        hide: isMobile && isVertical
+      },
+    ];
+    
+    // Columna de acciones adaptada según el dispositivo
+    const actionsColumn = {
       headerName: 'Actions',
-      width: 160,
+      width: isMobile ? 120 : 160,
       cellRenderer: params => {
         if (!params.data) return '';
         return (
@@ -180,8 +211,27 @@ const PaymentsPage = () => {
           </ActionButtonsContainer>
         );
       }
+    };
+    
+    // En vista móvil vertical, mostrar menos columnas
+    if (isMobile && isVertical) {
+      return [...baseColumns, {
+        headerName: 'Date',
+        field: 'payment_date',
+        suppressMenu: true,
+        headerClass: 'custom-header-sumary',
+        width: 100,
+        cellRenderer: (params) => {
+          if (!params.value) return '';
+          const date = new Date(params.value);
+          return date.toLocaleDateString('en-GB');
+        }
+      }, actionsColumn];
     }
-  ], []);
+    
+    // Vista completa para desktop o tablets horizontales
+    return [...baseColumns, ...desktopColumns, actionsColumn];
+  }, [isMobile, isVertical]);
 
   
   const onGridReady = (params) => {
@@ -219,7 +269,6 @@ const PaymentsPage = () => {
       fetchPayments(e.target.value);
     }, 500);
   };
-
   const fetchPayments = useCallback(async () => {
     setLoading(true);
     try {
@@ -503,18 +552,29 @@ const PaymentsPage = () => {
         overflow: 'hidden'
       }}
     >
+      {/* Barra lateral - Ahora responsiva */}
       <div
         style={{
-          width: '220px',
+          width: isMobile ? (sidebarOpen ? '250px' : '0px') : '220px',
           backgroundColor: 'white',
           display: 'flex',
           justifyContent: 'center',
-          alignItems: 'center'
+          alignItems: 'center',
+          transition: 'width 0.3s ease',
+          overflow: 'hidden', // Importante para ocultar contenido cuando width=0
+          position: isMobile ? 'fixed' : 'relative',
+          zIndex: 1000,
+          height: '100%'
         }}
       >
-        <SideBar />
+        <SideBar 
+          isMobile={isMobile} 
+          sidebarOpen={sidebarOpen} 
+          setSidebarOpen={setSidebarOpen} 
+        />
       </div>
 
+      {/* Contenedor principal */}
       <div
         style={{
           flex: 1,
@@ -523,6 +583,11 @@ const PaymentsPage = () => {
           gap: '20px',
           padding: '20px',
           boxSizing: 'border-box',
+          marginLeft: isMobile ? 0 : '0px',
+          transition: 'margin-left 0.3s ease',
+          height: '100%',
+          overflow: 'auto', // Permite scroll cuando sea necesario
+          WebkitOverflowScrolling: 'touch' // Scroll suave en iOS
         }}
       >
         <div
@@ -534,23 +599,65 @@ const PaymentsPage = () => {
             overflow: 'hidden',
             backgroundColor: '#ffffff',
             boxSizing: 'border-box',
-            padding: '20px',
+            padding: isMobile ? '16px' : '20px',
           }}
         >
           <div
             style={{
               display: 'flex',
+              flexDirection: isMobile && isVertical ? 'column' : 'row',
               justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '10px',
+              alignItems: isMobile && isVertical ? 'stretch' : 'center',
+              marginBottom: isMobile ? '15px' : '10px',
+              gap: isMobile ? '10px' : '0'
             }}
           >
-            <h2 style={{ margin: 0, fontSize: '18px' }}>Payments</h2>
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <div style={{ position: 'relative' }}>
+            {isMobile && (
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '8px' 
+              }}>
+                <h2 style={{ margin: 0, fontSize: isMobile ? '16px' : '18px' }}>Payments</h2>
+                {isMobile && (
+                  <button
+                    onClick={() => setSidebarOpen(!sidebarOpen)}
+                    style={{
+                      border: 'none',
+                      background: 'none',
+                      color: '#5932EA',
+                      cursor: 'pointer',
+                      padding: '8px',
+                      borderRadius: '4px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    <FontAwesomeIcon icon={faBars} size="lg" />
+                  </button>
+                )}
+              </div>
+            )}
+
+            {!isMobile && <h2 style={{ margin: 0, fontSize: '18px' }}>Payments</h2>}
+
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: isMobile && isVertical ? 'column' : 'row', 
+              gap: '10px', 
+              alignItems: isMobile && isVertical ? 'stretch' : 'center',
+              width: isMobile && isVertical ? '100%' : 'auto'
+            }}>
+              <div style={{ 
+                position: 'relative',
+                width: isMobile && isVertical ? '100%' : '216px' 
+              }}>
                 <div style={{ 
                   display: 'flex', 
                   alignItems: 'center',
+                  width: '100%'
                 }}>
                   <input
                     type="text"
@@ -558,12 +665,14 @@ const PaymentsPage = () => {
                     value={searchTerm}
                     onChange={handleSearch}
                     style={{
-                      padding: '5px 30px 5px 10px',
-                      width: '216px',
+                      padding: isMobile ? '12px 35px 12px 12px' : '5px 30px 5px 10px',
+                      width: '100%',
                       borderRadius: '10px',
                       border: '1px solid white',
                       backgroundColor: '#F9FBFF',
-                      height: '25px',
+                      height: isMobile ? '46px' : '25px',
+                      fontSize: isMobile ? '16px' : 'inherit',
+                      boxSizing: 'border-box'
                     }}
                   />
                   <FontAwesomeIcon
@@ -575,6 +684,7 @@ const PaymentsPage = () => {
                       transform: 'translateY(-50%)',
                       color: loading ? '#4321C9' : 'gray',
                       cursor: 'pointer',
+                      fontSize: isMobile ? '18px' : 'inherit'
                     }}
                   />
                 </div>
@@ -585,16 +695,19 @@ const PaymentsPage = () => {
                 onMouseEnter={() => setIsHovered(true)}
                 onMouseLeave={() => setIsHovered(false)}
                 style={{
-                  padding: '10px 20px',
+                  padding: isMobile ? '14px 20px' : '10px 20px',
                   backgroundColor: isHovered ? '#4321C9' : '#5932EA',
                   color: 'white',
                   border: 'none',
-                  borderRadius: '5px',
+                  borderRadius: '8px',
                   cursor: 'pointer',
                   transition: 'background-color 0.3s ease',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
+                  fontSize: isMobile ? '16px' : 'inherit',
+                  width: isMobile && isVertical ? '100%' : 'auto',
+                  justifyContent: isMobile && isVertical ? 'center' : 'flex-start'
                 }}
               >
                 <FontAwesomeIcon icon={faPlus} />
@@ -605,49 +718,48 @@ const PaymentsPage = () => {
 
           <div style={{ flex: 1, position: 'relative' }}>
             <div 
-  className="ag-theme-alpine inventory-view" 
-  style={{ 
-    width: '100%', 
-    height: '100%',
-    overflowX: 'hidden',
-    overflowY: 'auto',
-    opacity: loading ? 0.6 : 1,
-    transition: 'opacity 0.3s ease',
-  }}
+              className="ag-theme-alpine inventory-view touch-enabled-grid" 
+              style={{ 
+                width: '100%', 
+                height: '100%',
+                overflowX: 'auto',
+                overflowY: 'auto',
+                opacity: loading ? 0.6 : 1,
+                transition: 'opacity 0.3s ease',
+                WebkitOverflowScrolling: 'touch'
+              }}
             >
-  <AgGridReact
-    key={`payments-grid-${showModal ? 'hidden' : 'visible'}`}
-    ref={gridRef}
-    rowData={payments}
-    columnDefs={columnDefs}
-    defaultColDef={{
-      resizable: false,
-      sortable: true,
-      suppressMenu: true, // Crítico para evitar el error
-      flex: 1,
-      cellStyle: {
-        display: 'flex',
-        alignItems: 'center',
-        paddingLeft: '12px',
-        fontSize: '14px',
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-        color: '#333'
-      },
-      headerClass: 'custom-header'
-    }}
-    modules={[ClientSideRowModelModule]}
-    pagination={true}
-    paginationPageSize={12}
-    headerHeight={30}
-    rowHeight={50}
-    suppressSizeToFit={true}
-    suppressHorizontalScroll={true}
-    suppressMenuHide={true} // Añadir esta propiedad
-    suppressLoadingOverlay={true} // Gestiona tu propio estado de carga
-    onGridReady={onGridReady}
-    // Ocultar temporalmente la grid cuando el modal está abierto
-    style={{ display: showModal ? 'none' : 'block' }}
-/>
+              <AgGridReact
+                ref={gridRef}
+                rowData={payments}
+                columnDefs={columnDefs}
+                defaultColDef={{
+                  resizable: false,
+                  sortable: true,
+                  suppressMenu: true,
+                  flex: 1,
+                  minWidth: isMobile ? 90 : 100,
+                  cellClass: isMobile ? 'touch-cell' : '',
+                  cellStyle: {
+                    display: 'flex',
+                    alignItems: 'center',
+                    paddingLeft: '12px',
+                    fontSize: isMobile ? '14px' : '14px',
+                    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+                    color: '#333'
+                  }
+                }}
+                modules={[ClientSideRowModelModule]}
+                pagination={true}
+                paginationPageSize={isMobile ? 7 : 12}
+                headerHeight={isMobile ? 50 : 30}
+                rowHeight={isMobile ? 65 : 50}
+                suppressSizeToFit={true}
+                suppressHorizontalScroll={false}
+                suppressMenuHide={true}
+                suppressLoadingOverlay={true}
+                onGridReady={onGridReady}
+              />
             </div>
             {loading && (
               <div
@@ -693,16 +805,17 @@ const PaymentsPage = () => {
                 style={{
                   backgroundColor: "white",
                   borderRadius: "16px",
-                  width: "520px",
+                  width: isMobile ? "90%" : "520px",
+                  maxHeight: isMobile ? "90%" : "90%",
+                  overflowY: "auto",
                   boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
-                  overflow: "hidden",
                   animation: "modalFadeIn 0.3s ease",
                 }}
               >
                 <div
                   style={{
                     background: "linear-gradient(135deg, #5932EA 0%, #4321C9 100%)",
-                    padding: "24px 30px",
+                    padding: isMobile ? "20px" : "24px 30px",
                     color: "white",
                     position: "relative",
                     overflow: "hidden",
@@ -724,7 +837,7 @@ const PaymentsPage = () => {
                     <div>
                       <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "10px" }}>
                         <FontAwesomeIcon icon={faMoneyBill} style={{ fontSize: '24px' }}/>
-                        <h2 style={{ margin: 0, fontSize: "22px", fontWeight: "600" }}>
+                        <h2 style={{ margin: 0, fontSize: isMobile ? "18px" : "22px", fontWeight: "600" }}>
                           {currentPayment ? "Edit Payment" : "Add Payment"}
                         </h2>
                       </div>
@@ -761,7 +874,7 @@ const PaymentsPage = () => {
                   </div>
                 </div>
 
-                <div style={{ padding: "24px 30px" }}>
+                <div style={{ padding: isMobile ? "20px" : "24px 30px" }}>
                   <div style={{ display: "grid", gap: "20px" }}>
                     <div>
                       <label style={{
@@ -787,7 +900,7 @@ const PaymentsPage = () => {
                           style={{
                             width: "100%",
                             padding: "14px 16px",
-                            fontSize: "14px",
+                            fontSize: isMobile ? "16px" : "14px", // Agrandar para evitar zoom en móviles
                             border: "none",
                             backgroundColor: "transparent",
                             appearance: "none",
@@ -850,7 +963,7 @@ const PaymentsPage = () => {
                             padding: "14px 16px 14px 28px",
                             borderRadius: "10px",
                             border: "1px solid #e0e0e0",
-                            fontSize: "14px",
+                            fontSize: isMobile ? "16px" : "14px",
                             backgroundColor: "#f9faff",
                             outline: "none",
                           }}
@@ -873,12 +986,12 @@ const PaymentsPage = () => {
                         gridTemplateColumns: "repeat(3, 1fr)",
                         gap: "10px"
                       }}>
-                  {paymentMethods.map((method) => (
+                        {paymentMethods.map((method) => (
                           <div 
                             key={method}
                             onClick={() => setFormData({...formData, method})}
                             style={{
-                              padding: "10px",
+                              padding: isMobile ? "12px 10px" : "10px",
                               borderRadius: "10px",
                               border: `1px solid ${formData.method === method ? "#5932EA" : "#e0e0e0"}`,
                               backgroundColor: formData.method === method ? "#f5f3ff" : "white",
@@ -900,7 +1013,7 @@ const PaymentsPage = () => {
                             }}
                           >
                             <div style={{
-                              fontSize: "13px",
+                              fontSize: isMobile ? "14px" : "13px",
                               fontWeight: formData.method === method ? "600" : "500",
                               color: formData.method === method ? "#5932EA" : "#555",
                               textTransform: "capitalize"
@@ -943,7 +1056,7 @@ const PaymentsPage = () => {
                             padding: "14px 16px 14px 40px",
                             borderRadius: "10px",
                             border: "1px solid #e0e0e0",
-                            fontSize: "14px",
+                            fontSize: isMobile ? "16px" : "14px",
                             backgroundColor: "#f9faff",
                             outline: "none",
                           }}
@@ -954,6 +1067,7 @@ const PaymentsPage = () => {
 
                   <div style={{
                     display: "flex",
+                    flexDirection: isMobile && isVertical ? "column" : "row",
                     justifyContent: "flex-end",
                     gap: "12px",
                     marginTop: "30px"
@@ -968,7 +1082,8 @@ const PaymentsPage = () => {
                         borderRadius: "10px",
                         cursor: "pointer",
                         fontWeight: "500",
-                        transition: "all 0.2s"
+                        transition: "all 0.2s",
+                        width: isMobile && isVertical ? "100%" : "auto",
                       }}
                       onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#e5e5e5"}
                       onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#f5f5f5"}
@@ -989,7 +1104,9 @@ const PaymentsPage = () => {
                         transition: "all 0.2s",
                         display: "flex",
                         alignItems: "center",
-                        gap: "8px"
+                        justifyContent: isMobile && isVertical ? "center" : "space-between",
+                        gap: "8px",
+                        width: isMobile && isVertical ? "100%" : "auto",
                       }}
                       onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#4321C9"}
                       onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#5932EA"}
@@ -1002,6 +1119,7 @@ const PaymentsPage = () => {
             </div>
           )}
 
+          {/* Modal de eliminación adaptado para móvil */}
           {showDeleteModal && (
             <div
               style={{
@@ -1022,7 +1140,7 @@ const PaymentsPage = () => {
                 style={{
                   backgroundColor: "white",
                   borderRadius: "16px",
-                  width: "400px",
+                  width: isMobile ? "85%" : "400px",
                   overflow: "hidden",
                   boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
                   animation: "modalFadeIn 0.3s ease",
@@ -1031,14 +1149,14 @@ const PaymentsPage = () => {
                 <div
                   style={{
                     background: "linear-gradient(135deg, #FF4D4F 0%, #D32F2F 100%)",
-                    padding: "20px 24px",
+                    padding: isMobile ? "20px" : "20px 24px",
                     color: "white",
                   }}
                 >
                   <h3 style={{ margin: 0, fontSize: "18px", fontWeight: "600" }}>Confirm Delete</h3>
                 </div>
                 
-                <div style={{ padding: "20px 24px" }}>
+                <div style={{ padding: isMobile ? "20px" : "20px 24px" }}>
                   <p style={{ margin: "0 0 20px 0", fontSize: "14px", lineHeight: "1.5" }}>
                     Are you sure you want to delete this payment of <strong>${parseFloat(currentPayment?.amount).toFixed(2)}</strong> for jobsheet #{currentPayment?.jobsheet_id}?
                     <br /><br />
@@ -1048,6 +1166,7 @@ const PaymentsPage = () => {
                   <div
                     style={{
                       display: "flex",
+                      flexDirection: isMobile && isVertical ? "column" : "row",
                       justifyContent: "flex-end",
                       gap: "12px",
                     }}
@@ -1063,6 +1182,7 @@ const PaymentsPage = () => {
                         cursor: "pointer",
                         fontWeight: "500",
                         transition: "all 0.2s",
+                        width: isMobile && isVertical ? "100%" : "auto",
                       }}
                       onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#e5e5e5"}
                       onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#f5f5f5"}
@@ -1081,6 +1201,7 @@ const PaymentsPage = () => {
                         fontWeight: "600",
                         transition: "all 0.2s",
                         boxShadow: "0 2px 6px rgba(255, 77, 79, 0.3)",
+                        width: isMobile && isVertical ? "100%" : "auto",
                       }}
                       onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#D32F2F"}
                       onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#FF4D4F"}
@@ -1093,25 +1214,29 @@ const PaymentsPage = () => {
             </div>
           )}
 
+          {/* Notificación adaptativa */}
           {notification.show && (
             <div
               style={{
                 position: "fixed",
-                bottom: "20px",
-                right: "20px",
+                bottom: isMobile ? "10px" : "20px",
+                right: isMobile ? "10px" : "20px",
                 backgroundColor: notification.type === "error" ? "#FF4D4F" : "#5932EA",
                 color: "white",
-                padding: "10px 20px",
+                padding: isMobile ? "12px 16px" : "10px 20px",
                 borderRadius: "8px",
                 boxShadow: "0 2px 6px rgba(0, 0, 0, 0.2)",
                 zIndex: 1000,
                 animation: "fadeIn 0.3s ease",
+                fontSize: isMobile ? "14px" : "inherit",
+                maxWidth: isMobile ? "85%" : "280px"
               }}
             >
               {notification.message}
             </div>
           )}
 
+          {/* Estilos CSS adaptados para móviles */}
           <style>
             {`
             @keyframes spin {
@@ -1129,45 +1254,97 @@ const PaymentsPage = () => {
               to { opacity: 1; transform: translateY(0); }
             }
             
-            /* Uniform styles for AG Grid */
-.ag-theme-alpine {
-  --ag-header-height: 30px;
-  --ag-row-height: 50px;
-  --ag-header-foreground-color: #333;
-  --ag-header-background-color: #F9FBFF;
-  --ag-odd-row-background-color: #fff;
-  --ag-row-border-color: rgba(0, 0, 0, 0.1);
-  --ag-cell-horizontal-padding: 12px;
-  --ag-borders: none;
-  --ag-font-size: 14px;
-  --ag-font-family: Poppins, sans-serif; /* Usa la fuente principal de la aplicación */
-}
-
-/* Estilo de encabezado unificado */
-.ag-theme-alpine .ag-header {
-  border-bottom: 1px solid #5932EA;
-}
-
-.ag-theme-alpine .ag-cell {
-  display: flex;
-  align-items: center;
-}
-
-/* Una única clase de cabecera para todas las tablas */
-.custom-header {
-  background-color: #F9FBFF !important;
-  font-weight: 600 !important;
-  color: #333 !important;
-  border-bottom: 1px solid #5932EA !important;
-  text-align: left !important;
-  padding-left: 12px !important;
-}
-
-
+            /* Estilos touch-friendly */
+            .touch-enabled-grid {
+              -webkit-overflow-scrolling: touch !important;
+              overflow-scrolling: touch !important;
+              scroll-behavior: smooth !important;
+              overscroll-behavior: contain !important;
+            }
+            
+            .touch-cell {
+              padding: 16px 8px !important;
+            }
+            
+            /* Estilos para AG Grid */
+            .ag-theme-alpine {
+              --ag-header-height: ${isMobile ? "50px" : "30px"};
+              --ag-row-height: ${isMobile ? "65px" : "50px"};
+              --ag-header-foreground-color: #333;
+              --ag-header-background-color: #F9FBFF;
+              --ag-odd-row-background-color: #fff;
+              --ag-row-border-color: rgba(0, 0, 0, 0.1);
+              --ag-cell-horizontal-padding: ${isMobile ? "16px" : "12px"};
+              --ag-borders: none;
+              --ag-font-size: ${isMobile ? "15px" : "14px"};
+              --ag-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            }
+            
+            .ag-theme-alpine .ag-header {
+              border-bottom: 1px solid #5932EA;
+            }
+            
+            .ag-theme-alpine .ag-cell {
+              display: flex;
+              align-items: center;
+            }
+            
+            .custom-header-sumary {
+              background-color: #F9FBFF !important;
+              font-weight: 600 !important;
+              color: #333 !important;
+              border-bottom: 1px solid #5932EA !important;
+              text-align: left !important;
+              padding-left: 12px !important;
+            }
+            
+            @media (pointer: coarse) {
+              ::-webkit-scrollbar {
+                width: 6px;
+                height: 6px;
+              }
+              
+              ::-webkit-scrollbar-thumb {
+                background-color: rgba(89, 50, 234, 0.5);
+                border-radius: 6px;
+              }
+              
+              ::-webkit-scrollbar-track {
+                background-color: rgba(0, 0, 0, 0.05);
+              }
+              
+              input, select, button {
+                font-size: 16px !important;
+              }
+              
+              .ag-theme-alpine .ag-header-cell {
+                padding: 0 5px !important;
+              }
+              
+              .ag-theme-alpine .ag-cell {
+                padding: 10px 5px !important;
+              }
+            }
             `}
           </style>
         </div>
       </div>
+
+      {/* Overlay cuando sidebar está abierta en móvil/tablet */}
+      {isMobile && sidebarOpen && (
+        <div 
+          onClick={() => setSidebarOpen(false)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.3)',
+            zIndex: 999
+          }}
+        />
+      )}
     </div>
   );
 };

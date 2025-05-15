@@ -11,7 +11,9 @@ import {
   faClipboardList,
   faEdit,
   faCheck,
-} from '@fortawesome/free-solid-svg-icons';
+  faSearch,
+  faBars
+}  from '@fortawesome/free-solid-svg-icons';
 import { AgGridReact } from 'ag-grid-react';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
@@ -48,18 +50,14 @@ const VehiclesPage = () => {
   const API_URL = process.env.REACT_APP_API_URL;
   // Reference for AG Grid table
   const gridRef = useRef(null);
+const [isMobile, setIsMobile] = useState(false);
+  const [isVertical, setIsVertical] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  
 
-  // List of common Ginsapur motorcycle models
-  const commonMotorcycleModels = [
-    { model: 'GN125', year: '2023' },
-    { model: 'GN150', year: '2023' },
-    { model: 'GD150', year: '2022' },
-    { model: 'GSX150', year: '2023' },
-    { model: 'GDR150', year: '2022' },
-  ];
 
   // Filter vehicles based on search term
-  const filteredVehicles = vehicles.filter(vehicle => {
+ const filteredVehicles = vehicles.filter(vehicle => {
     let matchesSearch = true;
     if (searchTerm !== '') {
       if (searchType === 'vehicle') {
@@ -222,13 +220,201 @@ const VehiclesPage = () => {
   ];
 
 
+const getColumnDefs = () => {
+    const baseColumns = [
+      {
+        headerName: 'Motorcycle',
+        field: 'model',
+        flex: 1.5,
+        minWidth: isMobile ? 150 : 180,
+        cellRenderer: params => {
+          if (!params.data) return '';
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div>
+                <div style={{ fontWeight: '500', color: '#292D32', fontSize: isMobile ? '15px' : 'inherit' }}>
+                  {params.data.brand} {params.data.model}
+                </div>
+              </div>
+            </div>
+          );
+        },
+        headerClass: "custom-header-sumary",
+      },
+      {
+        headerName: 'License Plate',
+        field: 'plate',
+        width: isMobile ? 100 : 120,
+        cellRenderer: params => {
+          if (!params.data) return '';
+          return <div>{(params.value || "").toUpperCase()}</div>;
+        },
+        headerClass: "custom-header-sumary",
+      }
+    ];
 
+    // En modo móvil vertical, reducimos las columnas
+    if (isMobile && isVertical) {
+      return [
+        ...baseColumns,
+        {
+          headerName: 'Actions',
+          field: 'actions',
+          width: 100,
+          cellRenderer: params => {
+            if (!params.data) return '';
+            return (
+              <ActionButtonsContainer>
+                <ActionButton
+                  icon={faHistory}
+                  onClick={() => handleViewServiceHistory(params.data)}
+                  tooltip="View History"
+                  type="primary"
+                />
+                <ActionButton
+                  icon={faEdit}
+                  onClick={() => handleEditVehicle(params.data)}
+                  tooltip="Edit"
+                  type="default"
+                />
+              </ActionButtonsContainer>
+            );
+          },
+          headerClass: "custom-header-sumary",
+        }
+      ];
+    }
+
+    // En modo escritorio o tablet horizontal, mostramos todas las columnas
+    return [
+      ...baseColumns,
+      {
+        headerName: 'Customer',
+        field: 'customer_name',
+        width: 180,
+        cellRenderer: params => {
+          if (!params.data) return '';
+          return (
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              <span>{params.value || 'No customer'}</span>
+            </div>
+          );
+        },
+        headerClass: "custom-header-sumary",
+      },
+      {
+        headerName: 'Last Service',
+        field: 'last_service',
+        width: 150,
+        cellRenderer: params => {
+          if (!params.data || !params.value || params.value === 'null' || params.value === '') {
+            return (
+              <div style={{
+                color: '#9E9E9E',
+                fontSize: '13px',
+                fontStyle: 'italic'
+              }}>
+                No services
+              </div>
+            );
+          }
+          
+          try {
+            const dateObj = new Date(params.value);
+            const now = new Date();
+            if (!isNaN(dateObj.getTime()) && dateObj <= now && dateObj.getFullYear() > 2000) {
+              return (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}>
+                  <FontAwesomeIcon icon={faCalendarAlt} style={{ color: '#5932EA', fontSize: '12px' }} />
+                  <span>{dateObj.toLocaleDateString()}</span>
+                </div>
+              );
+            } else {
+              return (
+                <div style={{
+                  color: '#9E9E9E',
+                  fontSize: '13px',
+                  fontStyle: 'italic'
+                }}>
+                  No services
+                </div>
+              );
+            }
+          } catch (e) {
+            console.error("Error parsing date:", e);
+            return (
+              <div style={{
+                color: '#9E9E9E',
+                fontSize: '13px',
+                fontStyle: 'italic'
+              }}>
+                No services
+              </div>
+            );
+          }
+        },
+        headerClass: "custom-header-sumary",
+      },
+      {
+        headerName: 'Actions',
+        field: 'actions',
+        width: 160,
+        cellRenderer: params => {
+          if (!params.data) return '';
+          return (
+            <ActionButtonsContainer>
+              <ActionButton
+                icon={faHistory}
+                onClick={() => handleViewServiceHistory(params.data)}
+                tooltip="View Service History"
+                type="primary"
+              />
+              <ActionButton
+                icon={faEdit}
+                onClick={() => handleEditVehicle(params.data)}
+                tooltip="Edit Motorcycle"
+                type="default"
+              />
+            </ActionButtonsContainer>
+          );
+        },
+        headerClass: "custom-header-sumary",
+      }
+    ];
+  };
   // Load data on component mount
   useEffect(() => {
     fetchVehicles();
     fetchCustomers();
   }, []);
-
+ useEffect(() => {
+    const checkDeviceAndOrientation = () => {
+      const isMobileDevice = window.innerWidth <= 1024; // Considera tablets
+      const isVerticalOrientation = window.innerHeight > window.innerWidth;
+      
+      setIsMobile(isMobileDevice);
+      setIsVertical(isVerticalOrientation);
+      
+      // En dispositivos grandes, la sidebar siempre está visible
+      // En móviles/tablets, está cerrada por defecto
+      setSidebarOpen(!isMobileDevice);
+    };
+    
+    checkDeviceAndOrientation();
+    window.addEventListener('resize', checkDeviceAndOrientation);
+    
+    return () => {
+      window.removeEventListener('resize', checkDeviceAndOrientation);
+    };
+  }, []);
   const fetchVehicles = async () => {
     setLoading(true);
     const token = localStorage.getItem('token');
@@ -722,18 +908,29 @@ const VehiclesPage = () => {
         overflow: 'hidden'
       }}
     >
+      {/* Barra lateral - Ahora responsiva */}
       <div
         style={{
-          width: '220px',
+          width: isMobile ? (sidebarOpen ? '250px' : '0px') : '220px',
           backgroundColor: 'white',
           display: 'flex',
           justifyContent: 'center',
-          alignItems: 'center'
+          alignItems: 'center',
+          transition: 'width 0.3s ease',
+          overflow: 'hidden', // Importante para ocultar contenido cuando width=0
+          position: isMobile ? 'fixed' : 'relative',
+          zIndex: 1000,
+          height: '100%'
         }}
       >
-        <SideBar />
+        <SideBar 
+          isMobile={isMobile} 
+          sidebarOpen={sidebarOpen} 
+          setSidebarOpen={setSidebarOpen} 
+        />
       </div>
 
+      {/* Contenedor principal */}
       <div
         style={{
           flex: 1,
@@ -742,8 +939,14 @@ const VehiclesPage = () => {
           gap: '20px',
           padding: '20px',
           boxSizing: 'border-box',
+          marginLeft: isMobile ? 0 : '0px',
+          transition: 'margin-left 0.3s ease',
+          height: '100%',
+          overflow: 'auto', // Permite scroll cuando sea necesario
+          WebkitOverflowScrolling: 'touch' // Scroll suave en iOS
         }}
       >
+        {/* Contenedor de la tabla de vehículos */}
         <div
           style={{
             height: '100%',
@@ -753,23 +956,65 @@ const VehiclesPage = () => {
             overflow: 'hidden',
             backgroundColor: '#ffffff',
             boxSizing: 'border-box',
-            padding: '20px',
+            padding: isMobile ? '16px' : '20px',
           }}
         >
           <div
             style={{
               display: 'flex',
+              flexDirection: isMobile && isVertical ? 'column' : 'row',
               justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '10px',
+              alignItems: isMobile && isVertical ? 'stretch' : 'center',
+              marginBottom: isMobile ? '15px' : '10px',
+              gap: isMobile ? '10px' : '0'
             }}
           >
-            <h2 style={{ margin: 0, fontSize: '18px' }}>Motorcycles</h2>
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <div style={{ position: 'relative' }}>
+            {isMobile && (
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '8px' 
+              }}>
+                <h2 style={{ margin: 0, fontSize: isMobile ? '16px' : '18px' }}>Motorcycles</h2>
+                {isMobile && (
+                  <button
+                    onClick={() => setSidebarOpen(!sidebarOpen)}
+                    style={{
+                      border: 'none',
+                      background: 'none',
+                      color: '#5932EA',
+                      cursor: 'pointer',
+                      padding: '8px',
+                      borderRadius: '4px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    <FontAwesomeIcon icon={faBars} size="lg" />
+                  </button>
+                )}
+              </div>
+            )}
+
+            {!isMobile && <h2 style={{ margin: 0, fontSize: '18px' }}>Motorcycles</h2>}
+
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: isMobile && isVertical ? 'column' : 'row', 
+              gap: '10px', 
+              alignItems: isMobile && isVertical ? 'stretch' : 'center',
+              width: isMobile && isVertical ? '100%' : 'auto'
+            }}>
+              <div style={{ 
+                position: 'relative',
+                width: isMobile && isVertical ? '100%' : '216px' 
+              }}>
                 <div style={{ 
                   display: 'flex', 
                   alignItems: 'center',
+                  width: '100%'
                 }}>
                   <input
                     type="text"
@@ -777,12 +1022,14 @@ const VehiclesPage = () => {
                     value={searchTerm}
                     onChange={handleSearch}
                     style={{
-                      padding: '5px 30px 5px 10px',
-                      width: '216px',
+                      padding: isMobile ? '12px 35px 12px 12px' : '5px 30px 5px 10px',
+                      width: '100%',
                       borderRadius: '10px',
                       border: '1px solid white',
                       backgroundColor: '#F9FBFF',
-                      height: '25px',
+                      height: isMobile ? '46px' : '25px',
+                      fontSize: isMobile ? '16px' : 'inherit',
+                      boxSizing: 'border-box'
                     }}
                   />
                   <button
@@ -800,6 +1047,7 @@ const VehiclesPage = () => {
                       justifyContent: 'center',
                       cursor: 'pointer',
                       color: loading ? '#4321C9' : 'gray',
+                      fontSize: isMobile ? '18px' : 'inherit'
                     }}
                   >
                     <FontAwesomeIcon icon={searchType === 'vehicle' ? faMotorcycle : faUser} />
@@ -807,23 +1055,24 @@ const VehiclesPage = () => {
                 </div>
               </div>
 
-              
-
               <button
                 onClick={handleOpenNewModal}
                 onMouseEnter={() => setIsHovered(true)}
                 onMouseLeave={() => setIsHovered(false)}
                 style={{
-                  padding: '10px 20px',
+                  padding: isMobile ? '14px 20px' : '10px 20px',
                   backgroundColor: isHovered ? '#4321C9' : '#5932EA',
                   color: 'white',
                   border: 'none',
-                  borderRadius: '5px',
+                  borderRadius: '8px',
                   cursor: 'pointer',
                   transition: 'background-color 0.3s ease',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
+                  fontSize: isMobile ? '16px' : 'inherit',
+                  width: isMobile && isVertical ? '100%' : 'auto',
+                  justifyContent: isMobile && isVertical ? 'center' : 'flex-start'
                 }}
               >
                 <FontAwesomeIcon icon={faPlus} />
@@ -834,36 +1083,39 @@ const VehiclesPage = () => {
 
           <div style={{ flex: 1, position: 'relative' }}>
             <div 
-              className="ag-theme-alpine inventory-view" 
+              className="ag-theme-alpine inventory-view touch-enabled-grid" 
               style={{ 
                 width: '100%', 
                 height: '100%',
-                overflowX: 'hidden',
+                overflowX: 'auto',
                 overflowY: 'auto',
                 opacity: loading ? 0.6 : 1,
                 transition: 'opacity 0.3s ease',
+                WebkitOverflowScrolling: 'touch'
               }}
             >
               <AgGridReact
                 ref={gridRef}
                 rowData={filteredVehicles}
-                columnDefs={columnDefs}
+                columnDefs={getColumnDefs()}
                 defaultColDef={{
                   resizable: false,
                   sortable: true,
                   flex: 1,
                   suppressMenu: true,
+                  minWidth: isMobile ? 120 : 100,
+                  cellClass: isMobile ? 'touch-cell' : ''
                 }}
                 modules={[ClientSideRowModelModule]}
                 pagination={true}
-                paginationPageSize={12}
-                headerHeight={30}
-                rowHeight={50}
-                suppressSizeToFit={true}
-                suppressHorizontalScroll={true}
+                paginationPageSize={isMobile ? 7 : 12}
+                headerHeight={isMobile ? 50 : 30}
+                rowHeight={isMobile ? 65 : 50}
+                suppressSizeToFit={false}
+                suppressHorizontalScroll={false}
               />
             </div>
-            {loading && (
+                    {loading && (
               <div
                 style={{
                   position: 'absolute',
@@ -1541,7 +1793,7 @@ const VehiclesPage = () => {
           )}
 
           <style>{`
-            @keyframes spin {
+           @keyframes spin {
               0% { transform: rotate(0deg); }
               100% { transform: rotate(360deg); }
             }
@@ -1551,37 +1803,73 @@ const VehiclesPage = () => {
               to { opacity: 1; transform: scale(1); }
             }
             
-            /* Uniform styles for AG Grid */
-            .ag-theme-alpine {
-  --ag-header-height: 30px;
-  --ag-row-height: 50px;
-  --ag-header-foreground-color: #333;
-  --ag-header-background-color: #F9FBFF;
-  --ag-odd-row-background-color: #fff;
-  --ag-row-border-color: rgba(0, 0, 0, 0.1);
-  --ag-cell-horizontal-padding: 12px;
-  --ag-borders: none;
-  --ag-font-size: 14px;
-  --ag-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-}
-
+            /* Estilos para dispositivos táctiles */
+            .touch-enabled-grid {
+              -webkit-overflow-scrolling: touch !important;
+              overflow-scrolling: touch !important;
+              scroll-behavior: smooth !important;
+              overscroll-behavior: contain !important;
+            }
             
-.ag-theme-alpine .ag-header {
-  border-bottom: 1px solid #5932EA;
-}
-
-.ag-theme-alpine .ag-cell {
-  display: flex;
-  align-items: center;
-}
-.custom-header {
-  background-color: #F9FBFF !important;
-  font-weight: 600 !important;
-  color: #333 !important;
-  border-bottom: 1px solid #5932EA !important;
-  text-align: left !important;
-  padding-left: 12px !important;
-}
+            .touch-cell {
+              padding: 16px 8px !important;
+            }
+            
+            /* Estilos para AG Grid */
+            .ag-theme-alpine {
+              --ag-header-height: ${isMobile ? "50px" : "30px"};
+              --ag-row-height: ${isMobile ? "65px" : "50px"};
+              --ag-header-foreground-color: #333;
+              --ag-header-background-color: #F9FBFF;
+              --ag-odd-row-background-color: #fff;
+              --ag-row-border-color: rgba(0, 0, 0, 0.1);
+              --ag-cell-horizontal-padding: ${isMobile ? "16px" : "12px"};
+              --ag-borders: none;
+              --ag-font-size: ${isMobile ? "15px" : "14px"};
+              --ag-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            }
+            
+            .ag-theme-alpine .ag-header {
+              border-bottom: 1px solid #5932EA;
+            }
+            
+            .ag-theme-alpine .ag-cell {
+              display: flex;
+              align-items: center;
+            }
+            
+            .custom-header-sumary {
+              background-color: #F9FBFF !important;
+              font-weight: 600 !important;
+              color: #333 !important;
+              border-bottom: 1px solid #5932EA !important;
+              text-align: left !important;
+              padding-left: 12px !important;
+            }
+            
+            @media (pointer: coarse) {
+              ::-webkit-scrollbar {
+                width: 6px;
+                height: 6px;
+              }
+              
+              ::-webkit-scrollbar-thumb {
+                background-color: rgba(89, 50, 234, 0.5);
+                border-radius: 6px;
+              }
+              
+              ::-webkit-scrollbar-track {
+                background-color: rgba(0, 0, 0, 0.05);
+              }
+              
+              .ag-theme-alpine .ag-header-cell {
+                padding: 0 5px !important;
+              }
+              
+              .ag-theme-alpine .ag-cell {
+                padding: 10px 5px !important;
+              }
+            }
           `}</style>
         </div>
       </div>

@@ -100,6 +100,32 @@ const [deletedLaborIds, setDeletedLaborIds] = useState([]);
 const [pendingJobsheetUpdates, setPendingJobsheetUpdates] = useState({});
 const [hasPendingChanges, setHasPendingChanges] = useState(false);
 
+// Agregar después de las declaraciones de estado existentes
+const [isTouchDevice, setIsTouchDevice] = useState(false);
+const [isVerticalOrientation, setIsVerticalOrientation] = useState(false);
+
+// Detectar dispositivo táctil y orientación
+useEffect(() => {
+  const detectDeviceAndOrientation = () => {
+    // Detectar si es dispositivo táctil
+    const isTouchEnabled = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    setIsTouchDevice(isTouchEnabled);
+    
+    // Detectar orientación vertical
+    setIsVerticalOrientation(window.innerHeight > window.innerWidth);
+  };
+  
+  // Detectar al cargar y cuando cambia la orientación o el tamaño de ventana
+  detectDeviceAndOrientation();
+  window.addEventListener('resize', detectDeviceAndOrientation);
+  window.addEventListener('orientationchange', detectDeviceAndOrientation);
+  
+  return () => {
+    window.removeEventListener('resize', detectDeviceAndOrientation);
+    window.removeEventListener('orientationchange', detectDeviceAndOrientation);
+  };
+}, []);
+
 // Reset these when jobsheet ID changes
 useEffect(() => {
   setDeletedItemIds([]);
@@ -2881,20 +2907,21 @@ const isReadOnly = effectiveJobsheetId &&
     onClick={handlePrint}
     style={{
       width: "100%",
-      padding: "8px",
+      padding: isTouchDevice ? "12px" : "8px",
       backgroundColor: "#5932EA",
       color: "white",
       border: "none",
-      borderRadius: "4px",
-      fontSize: "13px",
+      borderRadius: isTouchDevice ? "8px" : "4px",
+      fontSize: isTouchDevice ? "15px" : "13px",
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
       gap: "6px",
-      cursor: "pointer"
+      cursor: "pointer",
+      boxShadow: isTouchDevice ? "0 2px 4px rgba(0,0,0,0.2)" : "none"
     }}
   >
-    <FontAwesomeIcon icon={faPrint} size="sm" />
+    <FontAwesomeIcon icon={faPrint} size={isTouchDevice ? "sm" : "sm"} />
     Print Invoice
   </button>
   
@@ -2904,61 +2931,91 @@ const isReadOnly = effectiveJobsheetId &&
       onClick={onClose}
       style={{
         width: "100%",
-        padding: "8px",
+        padding: isTouchDevice ? "12px" : "8px",
         backgroundColor: "#757575",
         color: "white",
         border: "none",
-        borderRadius: "4px",
-        fontSize: "13px",
+        borderRadius: isTouchDevice ? "8px" : "4px",
+        fontSize: isTouchDevice ? "15px" : "13px",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         gap: "6px",
         cursor: "pointer",
-        marginTop: "5px"
+        marginTop: "5px",
+        boxShadow: isTouchDevice ? "0 2px 4px rgba(0,0,0,0.2)" : "none",
+        WebkitTapHighlightColor: "transparent" // Evitar highlight en tap para iOS
       }}
     >
-      <FontAwesomeIcon icon={faArrowLeft} size="sm" />
+      <FontAwesomeIcon icon={faArrowLeft} size={isTouchDevice ? "sm" : "sm"} />
       Exit
     </button>
   ) : (
     // Editable mode: show unified Save/Exit button that changes label based on pending changes
-<button 
-  onClick={hasPendingChanges ? handleSave : handleExitClick}  disabled={isLoading}
-  style={{
-    width: "100%",
-    padding: "8px",
-    backgroundColor: hasPendingChanges ? "#00C853" : "#757575",
-    color: "white",
-    border: "none",
-    borderRadius: "4px",
-    fontSize: "13px",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "6px",
-    cursor: isLoading ? "not-allowed" : "pointer",
-    opacity: isLoading ? 0.7 : 1,
-    marginTop: "5px"
-  }}
->
-  {isLoading ? (
-    <>
-      <FontAwesomeIcon icon={faSave} size="sm" />
-      Saving...
-    </>
-  ) : hasPendingChanges ? (
-    <>
-      <FontAwesomeIcon icon={faSave} size="sm" />
-      Save
-    </>
-  ) : (
-    <>
-      <FontAwesomeIcon icon={faArrowLeft} size="sm" />
-      Exit
-    </>
+    <button 
+      onClick={hasPendingChanges ? handleSave : handleExitClick}
+      disabled={isLoading}
+      style={{
+        width: "100%",
+        padding: isTouchDevice ? "12px" : "8px",
+        backgroundColor: hasPendingChanges ? "#00C853" : "#757575",
+        color: "white",
+        border: "none",
+        borderRadius: isTouchDevice ? "8px" : "4px",
+        fontSize: isTouchDevice ? "15px" : "13px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: "8px",
+        cursor: isLoading ? "not-allowed" : "pointer",
+        opacity: isLoading ? 0.7 : 1,
+        marginTop: "5px",
+        boxShadow: isTouchDevice ? "0 2px 4px rgba(0,0,0,0.2)" : "none",
+        transition: "background-color 0.2s ease",
+        WebkitTapHighlightColor: "transparent", // Evitar highlight en tap para iOS
+        minHeight: isTouchDevice ? "48px" : "auto" // Altura mínima para mejor área táctil
+      }}
+    >
+      {isLoading ? (
+        <>
+          <div
+            style={{
+              width: isTouchDevice ? "18px" : "16px",
+              height: isTouchDevice ? "18px" : "16px",
+              borderRadius: "50%",
+              border: "2px solid rgba(255,255,255,0.3)",
+              borderTopColor: "white",
+              animation: "spin 1s linear infinite"
+            }}
+          ></div>
+          Saving...
+        </>
+      ) : hasPendingChanges ? (
+        <>
+          <FontAwesomeIcon icon={faSave} size={isTouchDevice ? "sm" : "sm"} />
+          Save
+        </>
+      ) : (
+        <>
+          <FontAwesomeIcon icon={faArrowLeft} size={isTouchDevice ? "sm" : "sm"} />
+          Exit
+        </>
+      )}
+    </button>
   )}
-</button>
+
+  {/* Estilos adicionales específicos para dispositivos táctiles */}
+  {isTouchDevice && (
+    <style jsx="true">{`
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      
+      button:active {
+        transform: scale(0.98);
+      }
+    `}</style>
   )}
 </div>
           </div>

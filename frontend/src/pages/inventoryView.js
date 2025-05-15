@@ -16,6 +16,32 @@ import {
 ModuleRegistry.registerModules([ClientSideRowModelModule]);
 
 const InventoryView = () => {
+  // Estado para detección de dispositivo y orientación
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const [isVerticalOrientation, setIsVerticalOrientation] = useState(false);
+  
+  // Detectar dispositivo táctil y orientación
+  useEffect(() => {
+    const detectDeviceAndOrientation = () => {
+      // Detectar si es dispositivo táctil
+      const isTouchEnabled = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+      setIsTouchDevice(isTouchEnabled);
+      
+      // Detectar orientación vertical
+      setIsVerticalOrientation(window.innerHeight > window.innerWidth);
+    };
+    
+    // Detectar al cargar y cuando cambia la orientación o el tamaño de ventana
+    detectDeviceAndOrientation();
+    window.addEventListener('resize', detectDeviceAndOrientation);
+    window.addEventListener('orientationchange', detectDeviceAndOrientation);
+    
+    return () => {
+      window.removeEventListener('resize', detectDeviceAndOrientation);
+      window.removeEventListener('orientationchange', detectDeviceAndOrientation);
+    };
+  }, []);
+
   const GridStyles = () => (
   <style>
     {`
@@ -34,6 +60,43 @@ const InventoryView = () => {
       /* Asegurarnos que el highlight es visible en las celdas */
       #inventory-grid-container .ag-row.highlight-flash .ag-cell {
         background-color: transparent !important;
+      }
+      
+      /* Estilos específicos para dispositivos táctiles */
+      .touch-cell {
+        padding: ${isTouchDevice ? '16px 8px' : '8px'} !important;
+        height: ${isTouchDevice ? '60px' : 'auto'};
+        user-select: none; /* Mejora experiencia táctil */
+      }
+      
+      /* Mejoras para scroll táctil */
+      .ag-theme-alpine .ag-body-viewport {
+        -webkit-overflow-scrolling: touch !important;
+        overscroll-behavior: contain;
+        touch-action: pan-y;
+      }
+      
+      /* Ajustes para orientación vertical */
+      @media (orientation: portrait) {
+        .ag-theme-alpine .ag-header-cell {
+          padding: 0 5px !important;
+        }
+        
+        .ag-theme-alpine .ag-cell {
+          padding: 10px 5px !important;
+        }
+        
+        .ag-header-cell-label {
+          width: 100%;
+          text-align: center;
+        }
+      }
+      
+      /* Botones de acción más grandes para táctil */
+      .action-button-touch {
+        min-width: 40px !important;
+        min-height: 40px !important;
+        margin: 2px !important;
       }
     `}
   </style>
@@ -56,13 +119,13 @@ const InventoryView = () => {
   const searchTimeout = useRef(null);
   const [gridReady, setGridReady] = useState(false);
   const API_URL = process.env.REACT_APP_API_URL;
-const [isNewProduct, setIsNewProduct] = useState(false);
+  const [isNewProduct, setIsNewProduct] = useState(false);
   const [showGoodsReceiveModal, setShowGoodsReceiveModal] = useState(false);
   const [suppliers, setSuppliers] = useState([]);
   const [jobsheets, setJobsheets] = useState([]);
   const [newProductSku, setNewProductSku] = useState('');
-const [newProductCategory, setNewProductCategory] = useState('');
-const [newProductMinStock, setNewProductMinStock] = useState(0);
+  const [newProductCategory, setNewProductCategory] = useState('');
+  const [newProductMinStock, setNewProductMinStock] = useState(0);
   const [goodsReceiveData, setGoodsReceiveData] = useState({
     supplier_name: '',
     invoice_number: '',
@@ -87,106 +150,94 @@ const [newProductMinStock, setNewProductMinStock] = useState(0);
   const [receiveHighlightIndex, setReceiveHighlightIndex] = useState(null);
   const [highlightedRowIds, setHighlightedRowIds] = useState([]);
 
-useEffect(() => {
-  if (!gridReady || !gridRef.current || highlightedRowIds.length === 0) return;
-  
-  console.log('🔍 Aplicando highlight a productos:', highlightedRowIds);
+  useEffect(() => {
+    if (!gridReady || !gridRef.current || highlightedRowIds.length === 0) return;
+    
+    console.log('🔍 Aplicando highlight a productos:', highlightedRowIds);
 
-  // Función para encontrar la página donde está un producto específico
-  const findProductPage = (productId) => {
-    let foundPage = -1;
-    const pageSize = gridRef.current.paginationGetPageSize();
-    const totalRows = gridRef.current.getDisplayedRowCount();
-    const totalPages = Math.ceil(totalRows / pageSize);
-    
-    // Revisar en cada página hasta encontrar el producto
-    for (let page = 0; page < totalPages; page++) {
-      let found = false;
+    const findProductPage = (productId) => {
+      let foundPage = -1;
+      const pageSize = gridRef.current.paginationGetPageSize();
+      const totalRows = gridRef.current.getDisplayedRowCount();
+      const totalPages = Math.ceil(totalRows / pageSize);
       
-      // Temporalmente cambiar a esta página para verificar
-      gridRef.current.paginationGoToPage(page);
-      
-      gridRef.current.forEachNodeAfterFilterAndSort(node => {
-        if (node.data && highlightedRowIds.includes(node.data.id.toString())) {
-          foundPage = page;
-          found = true;
-        }
-      });
-      
-      if (found) break;
-    }
-    
-    return foundPage;
-  };
-  
-  // Encontrar la primera página que contiene un producto a resaltar
-  const targetPage = findProductPage(highlightedRowIds[0]);
-  
-  if (targetPage >= 0) {
-    console.log(`🔍 Productos encontrados en página ${targetPage+1}, navegando...`);
-    
-    // Navegar a la página donde está el producto
-    gridRef.current.paginationGoToPage(targetPage);
-    
-    // Esperar a que se complete el cambio de página
-    setTimeout(() => {
-      // Aplicar highlight a los productos visibles en esta página
-      const matchingNodes = [];
-      gridRef.current.forEachNodeAfterFilterAndSort(node => {
-        if (node.data && highlightedRowIds.includes(node.data.id.toString())) {
-          matchingNodes.push(node);
-        }
-      });
-      
-      console.log(`🟢 Encontrados ${matchingNodes.length} productos para highlight en página actual`);
-      
-      // Aplicar estilos a los productos encontrados
-      matchingNodes.forEach(node => {
-        const rowElement = document.querySelector(`#inventory-grid-container .ag-row[row-index="${node.rowIndex}"]`);
+      for (let page = 0; page < totalPages; page++) {
+        let found = false;
         
-        if (rowElement) {
-          console.log(`✅ Aplicando highlight a fila ${node.rowIndex} (ID=${node.data.id})`);
-          
-          // Efectos visuales
-          rowElement.style.transition = "all 0.3s ease";
-          rowElement.style.backgroundColor = "#4CAF50";
-          rowElement.style.color = "white";
-          rowElement.style.fontWeight = "bold";
-          
-          // Añadir una notificación para informar sobre productos en otras páginas
-          if (highlightedRowIds.length > matchingNodes.length) {
-            setNotification({
-              show: true,
-              type: 'info',
-              message: `${matchingNodes.length} de ${highlightedRowIds.length} productos nuevos visibles en esta página`
-            });
-          }
-          
-          // Animación de flash
-          setTimeout(() => {
-            rowElement.style.backgroundColor = "#90EE90";
-          }, 500);
-        }
-      });
-      
-      // Limpiar después de un tiempo
-      setTimeout(() => {
-        matchingNodes.forEach(node => {
-          const rowElement = document.querySelector(`#inventory-grid-container .ag-row[row-index="${node.rowIndex}"]`);
-          if (rowElement) {
-            rowElement.style.backgroundColor = '';
-            rowElement.style.color = '';
-            rowElement.style.fontWeight = '';
+        gridRef.current.paginationGoToPage(page);
+        
+        gridRef.current.forEachNodeAfterFilterAndSort(node => {
+          if (node.data && highlightedRowIds.includes(node.data.id.toString())) {
+            foundPage = page;
+            found = true;
           }
         });
-        setHighlightedRowIds([]);
-      }, 3000);
-    }, 300);
-  } else {
-    console.log('❌ No se encontraron productos para highlight en ninguna página');
-    setHighlightedRowIds([]);
-  }
-}, [highlightedRowIds, gridReady]);
+        
+        if (found) break;
+      }
+      
+      return foundPage;
+    };
+    
+    const targetPage = findProductPage(highlightedRowIds[0]);
+    
+    if (targetPage >= 0) {
+      console.log(`🔍 Productos encontrados en página ${targetPage+1}, navegando...`);
+      
+      gridRef.current.paginationGoToPage(targetPage);
+      
+      setTimeout(() => {
+        const matchingNodes = [];
+        gridRef.current.forEachNodeAfterFilterAndSort(node => {
+          if (node.data && highlightedRowIds.includes(node.data.id.toString())) {
+            matchingNodes.push(node);
+          }
+        });
+        
+        console.log(`🟢 Encontrados ${matchingNodes.length} productos para highlight en página actual`);
+        
+        matchingNodes.forEach(node => {
+          const rowElement = document.querySelector(`#inventory-grid-container .ag-row[row-index="${node.rowIndex}"]`);
+          
+          if (rowElement) {
+            console.log(`✅ Aplicando highlight a fila ${node.rowIndex} (ID=${node.data.id})`);
+            
+            rowElement.style.transition = "all 0.3s ease";
+            rowElement.style.backgroundColor = "#4CAF50";
+            rowElement.style.color = "white";
+            rowElement.style.fontWeight = "bold";
+            
+            if (highlightedRowIds.length > matchingNodes.length) {
+              setNotification({
+                show: true,
+                type: 'info',
+                message: `${matchingNodes.length} de ${highlightedRowIds.length} productos nuevos visibles en esta página`
+              });
+            }
+            
+            setTimeout(() => {
+              rowElement.style.backgroundColor = "#90EE90";
+            }, 500);
+          }
+        });
+        
+        setTimeout(() => {
+          matchingNodes.forEach(node => {
+            const rowElement = document.querySelector(`#inventory-grid-container .ag-row[row-index="${node.rowIndex}"]`);
+            if (rowElement) {
+              rowElement.style.backgroundColor = '';
+              rowElement.style.color = '';
+              rowElement.style.fontWeight = '';
+            }
+          });
+          setHighlightedRowIds([]);
+        }, 3000);
+      }, 300);
+    } else {
+      console.log('❌ No se encontraron productos para highlight en ninguna página');
+      setHighlightedRowIds([]);
+    }
+  }, [highlightedRowIds, gridReady]);
 
   const fetchInventoryData = useCallback(async (search = '', category = '') => {
     setLoading(true);
@@ -223,7 +274,6 @@ useEffect(() => {
       return data;
     } catch (error) {
       console.error('Error fetching inventory:', error);
-      // opcional: podrías setear una notificación de error aquí
     } finally {
       setLoading(false);
     }
@@ -326,7 +376,6 @@ const fetchJobsheets = useCallback(async () => {
 
   useEffect(() => {
     fetchInventoryData().then(() => {
-      // rowData ya actualizado
     });
     
     return () => {
@@ -403,36 +452,28 @@ const fetchJobsheets = useCallback(async () => {
   const handleNewReceiveItemChange = (e) => {
   const { name, value } = e.target;
   
-  // Update the field value first
   setNewReceiveItem({
     ...newReceiveItem,
     [name]: value
   });
   
-  // Only check for new product if the product name field is being changed
-  // and only after user has stopped typing
   if (name === 'product_name') {
-    // Clear any existing timeout
     if (searchTimeout.current) {
       clearTimeout(searchTimeout.current);
     }
     
-    // Set new timeout to check for product existence
-    // This helps prevent UI disruption while typing
     searchTimeout.current = setTimeout(() => {
       if (value.trim() === '') {
         setIsNewProduct(false);
         return;
       }
       
-      // Search for exact matches first
       const exactProduct = rowData.find(p => 
         p.name.toLowerCase() === value.toLowerCase() || 
         `${p.sku} - ${p.name}`.toLowerCase() === value.toLowerCase()
       );
       
       if (exactProduct) {
-        // Product exists in inventory
         setIsNewProduct(false);
         setNewReceiveItem(prev => ({
           ...prev,
@@ -441,17 +482,14 @@ const fetchJobsheets = useCallback(async () => {
           sale_price: exactProduct.sale || 0
         }));
       } else {
-        // For new products, don't immediately activate new product mode
-        // Only set if the name has at least 3 characters to avoid accidental triggers
         if (value.trim().length >= 3) {
           setIsNewProduct(true);
         }
       }
-    }, 500); // Wait 500ms after user stops typing
+    }, 500);
   }
 };
 const addItemToReceive = () => {
-    // Validate required fields
     if (!newReceiveItem.product_name || !newReceiveItem.quantity || 
         !newReceiveItem.cost_price || !newReceiveItem.sale_price) {
       setNotification({
@@ -462,7 +500,6 @@ const addItemToReceive = () => {
       return;
     }
 
-    // Additional validation for new products
     if (isNewProduct) {
       if (!newProductSku) {
         setNotification({
@@ -473,7 +510,6 @@ const addItemToReceive = () => {
         return;
       }
       
-      // Validate SKU uniqueness
       const skuExists = rowData.some(p => p.sku.toLowerCase() === newProductSku.toLowerCase());
       if (skuExists) {
         setNotification({
@@ -487,7 +523,6 @@ const addItemToReceive = () => {
 
     const itemToAdd = { ...newReceiveItem };
     
-    // Add additional info for new products
     if (isNewProduct) {
       itemToAdd._isNew = true;
       itemToAdd.sku = newProductSku;
@@ -497,7 +532,6 @@ const addItemToReceive = () => {
       itemToAdd.min = parseInt(newProductMinStock) || 0;
     }
 
-    // Add item to the list
     const prevLen = goodsReceiveData.items.length;
     setGoodsReceiveData({
       ...goodsReceiveData,
@@ -506,14 +540,12 @@ const addItemToReceive = () => {
     setReceiveHighlightIndex(prevLen);
     setTimeout(() => setReceiveHighlightIndex(null), 3000);
 
-    // Show success notification
     setNotification({
       show: true,
       type: 'success',
       message: isNewProduct ? 'New product added successfully' : 'Item added successfully'
     });
     
-    // Reset form fields
     setNewReceiveItem({
       product_id: '',
       product_name: '',
@@ -528,7 +560,6 @@ const addItemToReceive = () => {
     setNewProductCategory('');
     setNewProductMinStock(0);
     
-    // Focus on product field for next entry
     const productField = document.querySelector('input[name="product_name"]');
     if (productField) productField.focus();
 };
@@ -563,17 +594,12 @@ const handleSubmitGoodsReceive = async () => {
     });
       
     if (response.ok) {
-      // Guardamos los IDs de los productos recién recibidos
-      // Aquí solo incluimos los IDs de productos existentes, no los nuevos (ya que sus IDs reales
-      // serán generados por el servidor)
       const productIds = goodsReceiveData.items
         .filter(i => !i._isNew)
         .map(i => i.product_id.toString());
       
-      // Recargamos los datos y esperamos a que termine
       await fetchInventoryData(searchTerm, categoryTerm);
       
-      // Esperar a que React actualice el DOM antes de intentar actualizar highlightedRowIds
       setTimeout(() => {
         console.log(`🔄 Aplicando highlight a ${productIds.length} productos recibidos`);
         setHighlightedRowIds(productIds);
@@ -603,22 +629,38 @@ const handleSubmitGoodsReceive = async () => {
   }
 };
 
-  const defaultColDef = {
+  const defaultColDef = useMemo(() => ({
     resizable: false,
     sortable: true,
     suppressMenu: true,
     flex: 1,
+    minWidth: isTouchDevice ? 150 : 120,
     cellStyle: {
       display: 'flex',
       alignItems: 'center',
       paddingLeft: '12px',
-      fontSize: '14px',
+      fontSize: isTouchDevice ? '16px' : '14px',
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-      color: '#333'
+      color: '#333',
+      height: '100%'
     },
-    headerClass: 'custom-header'
-  };
-  
+    headerClass: 'custom-header',
+    cellClass: isTouchDevice ? 'touch-cell' : ''
+  }), [isTouchDevice]);
+
+  const gridOptions = useMemo(() => ({
+    suppressRowClickSelection: isTouchDevice,
+    suppressColumnVirtualisation: isTouchDevice && isVerticalOrientation,
+    suppressMovableColumns: true,
+    rowBuffer: isTouchDevice ? 20 : 10,
+    animateRows: true,
+    paginationPageSize: isTouchDevice ? 8 : 12,
+    headerHeight: isTouchDevice ? 50 : 30,
+    rowHeight: isTouchDevice ? 65 : 50,
+    alwaysShowVerticalScroll: isTouchDevice,
+    suppressScrollOnNewData: false,
+  }), [isTouchDevice, isVerticalOrientation]);
+
   const fetchCompatibilities = async (productId) => {
     const token = localStorage.getItem('token');
     try {
@@ -705,7 +747,6 @@ const handleSubmitGoodsReceive = async () => {
   headerClass: 'custom-header-inventory', 
   suppressMenu: true,
   cellRenderer: params => {
-    // Verificar si este producto está en la lista de destacados
     const isHighlighted = highlightedRowIds.includes(params.data.id.toString());
     
     return (
@@ -910,11 +951,37 @@ const handleSubmitGoodsReceive = async () => {
     }
   };
 
-  const onGridReady = params => {
-    gridRef.current = params.api;
-    params.api.sizeColumnsToFit();
-    setGridReady(true);
-  };
+const onGridReady = params => {
+  gridRef.current = params.api;
+  params.api.sizeColumnsToFit();
+  setGridReady(true);
+  
+  // Ajustar grid para dispositivos táctiles
+  if (isTouchDevice) {
+    // Dar tiempo a la grid para renderizar completamente
+    setTimeout(() => {
+      params.api.sizeColumnsToFit();
+      // Si está en vertical, ajustar ancho para evitar scroll horizontal
+      if (isVerticalOrientation) {
+        // Fix for newer versions of AG Grid
+        if (params.columnApi) {
+          params.columnApi.autoSizeAllColumns();
+        } else if (params.api.autoSizeAllColumns) {
+          params.api.autoSizeAllColumns();
+        } else if (params.api.columnModel && params.api.columnModel.autoSizeAllColumns) {
+          params.api.columnModel.autoSizeAllColumns();
+        } else {
+          // Fallback to manual sizing if autoSizeAllColumns is not available
+          const allColumnIds = [];
+          params.api.getColumns().forEach(column => {
+            allColumnIds.push(column.getId());
+          });
+          params.api.sizeColumnsToFit(allColumnIds);
+        }
+      }
+    }, 300);
+  }
+};
 
   const Notification = ({ show, message, type, onClose }) => {
     useEffect(() => {
@@ -932,22 +999,23 @@ const handleSubmitGoodsReceive = async () => {
       <div
         style={{
           position: 'fixed',
-          bottom: '20px',
-          right: '20px',
+          bottom: isTouchDevice ? '40px' : '20px',
+          right: isTouchDevice ? '20px' : '20px',
           backgroundColor: type === 'success' ? '#34A853' : '#D32F2F',
           color: 'white',
-          padding: '12px 24px',
-          borderRadius: '8px',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          padding: isTouchDevice ? '16px 24px' : '12px 24px',
+          borderRadius: '12px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
           zIndex: 1100,
-          maxWidth: '400px',
-          animation: 'slideIn 0.3s ease'
+          maxWidth: isTouchDevice ? '90%' : '400px',
+          animation: 'slideIn 0.3s ease',
+          fontSize: isTouchDevice ? '16px' : '14px'
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{ 
-            width: '24px', 
-            height: '24px', 
+            width: isTouchDevice ? '36px' : '24px', 
+            height: isTouchDevice ? '36px' : '24px', 
             borderRadius: '50%',
             backgroundColor: 'rgba(255,255,255,0.2)',
             display: 'flex',
@@ -955,27 +1023,33 @@ const handleSubmitGoodsReceive = async () => {
             justifyContent: 'center'
           }}>
             {type === 'success' ? (
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <svg width={isTouchDevice ? '20' : '14'} height={isTouchDevice ? '20' : '14'} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M20 6L9 17L4 12" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             ) : (
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <svg width={isTouchDevice ? '20' : '14'} height={isTouchDevice ? '20' : '14'} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 8V12M12 16H12.01" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             )}
           </div>
-          <span style={{ fontSize: '14px', fontWeight: '500' }}>{message}</span>
+          <span style={{ fontSize: isTouchDevice ? '16px' : '14px', fontWeight: '500', flex: 1 }}>{message}</span>
           <button
             onClick={onClose}
             style={{
               background: 'none',
               border: 'none',
               color: 'white',
-              marginLeft: 'auto',
               cursor: 'pointer',
-              fontSize: '18px',
+              fontSize: isTouchDevice ? '24px' : '18px',
               opacity: 0.7,
-              transition: 'opacity 0.2s'
+              transition: 'opacity 0.2s',
+              width: isTouchDevice ? '44px' : '24px',
+              height: isTouchDevice ? '44px' : '24px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 0,
+              margin: 0
             }}
             onMouseOver={(e) => e.currentTarget.style.opacity = 1}
             onMouseOut={(e) => e.currentTarget.style.opacity = 0.7}
@@ -985,8 +1059,8 @@ const handleSubmitGoodsReceive = async () => {
         </div>
         <style jsx="true">{`
           @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
+            from { transform: translateY(30px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
           }
         `}</style>
       </div>
@@ -996,38 +1070,62 @@ const handleSubmitGoodsReceive = async () => {
   return (
     <div
       style={{
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        borderRadius: '30px',
-        overflow: 'hidden',
-        backgroundColor: '#ffffff',
-        boxSizing: 'border-box',
-        padding: '20px'
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        borderRadius: isTouchDevice ? "16px" : "30px",
+        overflow: "hidden",
+        backgroundColor: "#ffffff",
+        boxSizing: "border-box",
+        padding: isTouchDevice && isVerticalOrientation ? "15px" : "20px",
+        position: "relative",
+        touchAction: "manipulation",
+        WebkitOverflowScrolling: "touch"
       }}
     >
       <GridStyles />
+      
       <div
         style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '10px'
+          display: "flex",
+          flexDirection: isTouchDevice && isVerticalOrientation ? "column" : "row",
+          justifyContent: "space-between",
+          alignItems: isTouchDevice && isVerticalOrientation ? "stretch" : "center",
+          marginBottom: isTouchDevice ? "15px" : "10px",
+          gap: isTouchDevice ? "12px" : "10px"
         }}
       >
-        <h2 style={{ margin: 0, fontSize: '18px' }}>Inventory View</h2>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          <div style={{ position: 'relative' }}>
+        <h2 style={{ 
+          margin: 0, 
+          fontSize: isTouchDevice ? "20px" : "18px",
+          marginBottom: isTouchDevice && isVerticalOrientation ? "5px" : 0
+        }}>
+          Inventory View
+        </h2>
+        
+        <div style={{ 
+          display: "flex", 
+          flexDirection: isTouchDevice && isVerticalOrientation ? "column" : "row",
+          gap: "10px", 
+          alignItems: isTouchDevice && isVerticalOrientation ? "stretch" : "center",
+          width: isTouchDevice && isVerticalOrientation ? "100%" : "auto"
+        }}>
+          <div style={{ 
+            position: "relative",
+            width: isTouchDevice && isVerticalOrientation ? "100%" : "auto"
+          }}>
             <input
               type="text"
               placeholder="Search by name"
               style={{
-                padding: '5px 30px 5px 10px',
-                width: '216px',
-                borderRadius: '10px',
-                border: '1px solid white',
-                backgroundColor: '#F9FBFF',
-                height: '25px'
+                padding: isTouchDevice ? "12px 35px 12px 12px" : "5px 30px 5px 10px",
+                width: isTouchDevice && isVerticalOrientation ? "100%" : "216px",
+                borderRadius: "10px",
+                border: "1px solid white",
+                backgroundColor: "#F9FBFF",
+                height: isTouchDevice ? "46px" : "25px",
+                fontSize: isTouchDevice ? "16px" : "inherit",
+                boxSizing: "border-box"
               }}
               value={searchTerm}
               onChange={handleSearchChange}
@@ -1035,26 +1133,35 @@ const handleSubmitGoodsReceive = async () => {
             <FontAwesomeIcon 
               icon={faSearch} 
               style={{
-                position: 'absolute',
-                right: '10px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                color: loading ? '#4321C9' : 'gray',
-                cursor: 'pointer'
+                position: "absolute",
+                right: "12px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                color: loading ? "#4321C9" : "gray",
+                cursor: "pointer",
+                fontSize: isTouchDevice ? "18px" : "14px"
               }}
             />
           </div>
+          
           <select
             value={categoryTerm}
             onChange={handleCategoryChange}
             style={{
-              padding: '5px',
-              width: '216px',
-              borderRadius: '10px',
-              border: '1px solid white',
-              backgroundColor: '#F9FBFF',
-              height: '35px',
-              color: 'gray'
+              padding: isTouchDevice ? "12px" : "5px",
+              width: isTouchDevice && isVerticalOrientation ? "100%" : "216px",
+              borderRadius: "10px",
+              border: "1px solid white",
+              backgroundColor: "#F9FBFF",
+              height: isTouchDevice ? "46px" : "35px",
+              color: "gray",
+              fontSize: isTouchDevice ? "16px" : "inherit",
+              appearance: "none",
+              backgroundImage: "url('data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polyline points=\"6 9 12 15 18 9\"></polyline></svg>')",
+              backgroundRepeat: "no-repeat",
+              backgroundPosition: "right 12px center",
+              backgroundSize: "14px",
+              boxSizing: "border-box"
             }}
           >
             <option value="">All Categories</option>
@@ -1064,755 +1171,132 @@ const handleSubmitGoodsReceive = async () => {
               </option>
             ))}
           </select>
-          <button
-  onClick={handleOpenGoodsReceiveModal}
-  style={{
-    padding: '10px 20px',
-    backgroundColor: '#34A853',
-    color: 'white',
-    border: 'none',
-    borderRadius: '5px',
-    cursor: 'pointer',
-    transition: 'background-color 0.3s ease',
-    fontWeight: 600,
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px'
-  }}
-  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2D9249'}
-  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#34A853'}
->
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M14 10V12.6667C14 13.0203 13.8595 13.3594 13.6095 13.6095C13.3594 13.8595 13.0203 14 12.6667 14H3.33333C2.97971 14 2.64057 13.8595 2.39052 13.6095C2.14048 13.3594 2 13.0203 2 12.6667V10" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-    <path d="M4.66667 6.66669L8.00001 10L11.3333 6.66669" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-    <path d="M8 10V2" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-  </svg>
-  Goods Receive
-</button>
+          
+          <div style={{
+            display: "flex",
+            flexDirection: isTouchDevice && isVerticalOrientation ? "column" : "row",
+            gap: "10px",
+            width: isTouchDevice && isVerticalOrientation ? "100%" : "auto"
+          }}>
+            <button
+              onClick={handleOpenGoodsReceiveModal}
+              style={{
+                padding: isTouchDevice ? "14px 20px" : "10px 20px",
+                backgroundColor: "#34A853",
+                color: "white",
+                border: "none",
+                borderRadius: isTouchDevice ? "10px" : "5px",
+                cursor: "pointer",
+                transition: "background-color 0.3s ease",
+                fontWeight: 600,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: isTouchDevice && isVerticalOrientation ? "center" : "flex-start",
+                gap: "8px",
+                width: isTouchDevice && isVerticalOrientation ? "100%" : "auto",
+                fontSize: isTouchDevice ? "16px" : "14px"
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#2D9249"}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#34A853"}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M14 10V12.6667C14 13.0203 13.8595 13.3594 13.6095 13.6095C13.3594 13.8595 13.0203 14 12.6667 14H3.33333C2.97971 14 2.64057 13.8595 2.39052 13.6095C2.14048 13.3594 2 13.0203 2 12.6667V10" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M4.66667 6.66669L8.00001 10L11.3333 6.66669" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M8 10V2" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Goods Receive
+            </button>
 
-          <button
-            onClick={handleAddProduct}
-            style={{
-              padding: '10px 20px',
-              backgroundColor: isHovered ? '#4321C9' : '#5932EA',
-              color: 'white',
-              border: 'none',
-              borderRadius: '5px',
-              cursor: 'pointer',
-              transition: 'background-color 0.3s ease',
-              fontWeight: 600
-            }}
-            onMouseEnter={() => setIsHovered(true)}
-            onMouseLeave={() => setIsHovered(false)}
-          >
-            Add Product
-          </button>
+            <button
+              onClick={handleAddProduct}
+              style={{
+                padding: isTouchDevice ? "14px 20px" : "10px 20px",
+                backgroundColor: isHovered ? "#4321C9" : "#5932EA",
+                color: "white",
+                border: "none",
+                borderRadius: isTouchDevice ? "10px" : "5px",
+                cursor: "pointer",
+                transition: "background-color 0.3s ease",
+                fontWeight: 600,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: isTouchDevice && isVerticalOrientation ? "center" : "flex-start",
+                gap: "8px",
+                width: isTouchDevice && isVerticalOrientation ? "100%" : "auto",
+                fontSize: isTouchDevice ? "16px" : "14px"
+              }}
+              onMouseEnter={() => setIsHovered(true)}
+              onMouseLeave={() => setIsHovered(false)}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M8 3.33331V12.6666" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M3.33337 8H12.6667" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Add Product
+            </button>
+          </div>
         </div>
       </div>
 
-      <div style={{ flex: 1, position: 'relative' }}>
+      <div style={{ flex: 1, position: "relative", touchAction: "auto" }}>
         <div 
           id="inventory-grid-container" 
-          className="ag-theme-alpine inventory-view" 
+          className={`ag-theme-alpine inventory-view ${isTouchDevice ? 'touch-enabled-grid' : ''}`}
           style={{ 
-            width: '100%', 
-            height: '100%',
-            overflowX: 'hidden',
-            overflowY: 'auto',
+            width: "100%", 
+            height: "100%",
+            overflowX: "hidden",
+            overflowY: "auto",
             opacity: loading ? 0.6 : 1,
-            transition: 'opacity 0.3s ease'
-          }}>
-   <AgGridReact
-  ref={gridRef}
-  rowData={rowData}
-  columnDefs={columnDefs}
-  defaultColDef={defaultColDef}
-  modules={[ClientSideRowModelModule]}
-  pagination
-  paginationPageSize={12}
-  headerHeight={30}
-  rowHeight={50}
-  suppressSizeToFit={false}
-  suppressHorizontalScroll={false}
-  onGridReady={onGridReady}
-  getRowNodeId={data => data.id.toString()}
-  rowClassRules={{
-    'inventory-highlight-row': params => 
-      highlightedRowIds.includes(params.data.id.toString())
-  }}
-/>
+            transition: "opacity 0.3s ease",
+            WebkitOverflowScrolling: "touch",
+            msOverflowStyle: "-ms-autohiding-scrollbar",
+            touchAction: "pan-y"
+          }}
+        >
+          <AgGridReact
+            ref={gridRef}
+            rowData={rowData}
+            columnDefs={columnDefs}
+            defaultColDef={defaultColDef}
+            modules={[ClientSideRowModelModule]}
+            pagination={true}
+            paginationPageSize={isTouchDevice ? 8 : 12}
+            headerHeight={isTouchDevice ? 46 : 30}
+            rowHeight={isTouchDevice ? 65 : 50}
+            suppressSizeToFit={false}
+            suppressHorizontalScroll={isVerticalOrientation}
+            onGridReady={onGridReady}
+            getRowNodeId={data => data.id.toString()}
+            rowClassRules={{
+              'inventory-highlight-row': params => 
+                highlightedRowIds.includes(params.data.id.toString())
+            }}
+            gridOptions={gridOptions}
+          />
         </div>
+        
         {loading && (
           <div style={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
+            position: "absolute",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
             zIndex: 1000
           }}>
             <div style={{
-              width: '40px',
-              height: '40px',
-              border: '4px solid rgba(0, 0, 0, 0.1)',
-              borderLeft: '4px solid #4321C9',
-              borderRadius: '50%',
-              animation: 'spin 1s linear infinite'
+              width: isTouchDevice ? "50px" : "40px",
+              height: isTouchDevice ? "50px" : "40px",
+              border: `4px solid rgba(0, 0, 0, 0.1)`,
+              borderLeft: `4px solid #4321C9`,
+              borderRadius: "50%",
+              animation: "spin 1s linear infinite"
             }}></div>
-            <style>{`
-              @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-              }
-            `}</style>
           </div>
         )}
       </div>
 
-      {/* Product Modal */}
-      {showModal && editItem && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="product-modal-title"
-          aria-describedby="product-modal-description"
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: "rgba(0, 0, 0, 0.6)",
-            backdropFilter: "blur(5px)",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            zIndex: 1000,
-            animation: "fadeIn 0.2s ease",
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: "white",
-              borderRadius: "16px",
-              width: "95%",
-              maxWidth: "800px",
-              maxHeight: "90vh",
-              boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
-              display: "flex",
-              flexDirection: "column",
-              overflow: "visible",
-              animation: "modalFadeIn 0.3s ease",
-            }}
-          >
-            {/* NUEVO DISEÑO DE HEADER - Completamente rediseñado con altura fija */}
-            <div
-              style={{
-                background: "linear-gradient(135deg, #5932EA 0%, #4321C9 100%)",
-                color: "white",
-                position: "relative",
-                overflow: "visible",
-                width: "100%",
-                height: "150px", // Altura fija estricta
-                boxSizing: "border-box",
-              }}
-            >
-              {/* Decoración de fondo */}
-              <div style={{
-                position: "absolute",
-                top: 0,
-                right: 0,
-                width: "200px",
-                height: "100%",
-                background: "linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.1) 100%)",
-                transform: "skewX(-20deg) translateX(30%)",
-                pointerEvents: "none"
-              }}></div>
-              
-              {/* Contenido del header en grid para mejor control */}
-              <div style={{
-                display: "grid",
-                gridTemplateRows: "auto auto",
-                height: "100%",
-                padding: "24px 30px",
-                boxSizing: "border-box",
-              }}>
-                {/* Fila 1: Título y botón de cierre */}
-                <div style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "flex-start"
-                }}>
-                  <div style={{ maxWidth: "calc(100% - 40px)" }}>
-                    <h2 id="product-modal-title" style={{ 
-                      margin: 0, 
-                      fontSize: "22px", 
-                      fontWeight: "600", 
-                      whiteSpace: "nowrap",
-                      overflow: "visible",
-                      textOverflow: "ellipsis",
-                    }}>
-                      {editItem.id ? 'Edit Product' : 'Add New Product'}
-                    </h2>
-                    <p id="product-modal-description" style={{ 
-                      margin: "4px 0 0 0", 
-                      opacity: "0.8", 
-                      fontSize: "14px",
-                      whiteSpace: "nowrap",
-                      overflow: "visible", 
-                      textOverflow: "ellipsis",
-                    }}>
-                      {editItem.id ? `Editing ${editItem.name || 'Product'}` : "Enter product details below"}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setShowModal(false)}
-                    aria-label="Close modal"
-                    style={{
-                      background: "rgba(255,255,255,0.2)",
-                      border: "none",
-                      color: "white",
-                      width: "32px",
-                      height: "32px",
-                      minWidth: "32px",
-                      borderRadius: "50%",
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: "18px",
-                      transition: "background-color 0.2s",
-                      userSelect: "none",
-                      zIndex: 10,
-                      outline: "none",
-                    }}
-                    onMouseOver={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.3)")}
-                    onMouseOut={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.2)")}
-                    onFocus={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.3)")}
-                    onBlur={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.2)")}
-                  >
-                    ×
-                  </button>
-                </div>
-                
-                {/* Fila 2: Selector de Quick Mode con diseño moderno y limpio */}
-                <div style={{
-                  alignSelf: "end",
-                  marginTop: "auto"
-                }}>
-                  {/* Diseño simplificado con switch visual en lugar de texto largo */}
-                  <div style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "16px",
-                  }}>
-                    <button
-                      onClick={() => setQuickMode(!quickMode)}
-                      style={{
-                        backgroundColor: "transparent",
-                        color: "white",
-                        border: "none",
-                        borderRadius: "6px",
-                        fontSize: "14px",
-                        cursor: "pointer",
-                        padding: "6px 8px",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px",
-                        transition: "background-color 0.2s",
-                      }}
-                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.1)"}
-                      onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-                    >
-                      {/* Switch visual */}
-                      <div style={{
-                        width: "36px",
-                        height: "20px",
-                        backgroundColor: quickMode ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.1)",
-                        borderRadius: "10px",
-                        position: "relative",
-                        transition: "background-color 0.2s"
-                      }}>
-                        <div style={{
-                          position: "absolute",
-                          left: quickMode ? "18px" : "2px",
-                          top: "2px",
-                          width: "16px",
-                          height: "16px",
-                          backgroundColor: "white",
-                          borderRadius: "50%",
-                          transition: "left 0.2s"
-                        }}></div>
-                      </div>
-                      <span style={{ fontWeight: "500" }}>Quick Mode</span>
-                    </button>
-                    
-                    {/* Texto descriptivo corto y no truncado */}
-                    <span style={{
-                      fontSize: "13px",
-                      opacity: "0.8",
-                    }}>
-                      {quickMode ? "Essential fields only" : "Show all fields"}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Content area */}
-            <div style={{ flex: 1, overflowY: "auto", padding: "24px 30px" }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-                {/* Product Identification - Always visible */}
-                <div style={{ padding: "20px", backgroundColor: "#f9fafc", borderRadius: "12px", border: "1px solid #e0e0e0" }}>
-                  <h3 style={{ margin: "0 0 16px 0", fontSize: "16px", fontWeight: "600", color: "#333" }}>
-                    Product Identification
-                  </h3>
-                  <div style={{ 
-                    display: "grid", 
-                    gridTemplateColumns: "1fr 1fr", 
-                    gap: "16px", 
-                    width: "100%", 
-                    boxSizing: "border-box" 
-                  }}>
-                    <div>
-                      <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
-                        SKU *
-                      </label>
-                      <input
-                        type="text"
-                        value={editItem.sku}
-                        onChange={(e) => setEditItem({ ...editItem, sku: e.target.value })}
-                        style={{
-                          width: "100%",
-                          padding: "12px",
-                          borderRadius: "8px",
-                          border: "1px solid #e0e0e0",
-                          backgroundColor: "#fff",
-                          fontSize: "14px",
-                          transition: "border-color 0.2s",
-                          outline: "none",
-                          boxSizing: "border-box"
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
-                        Name *
-                      </label>
-                      <input
-                        type="text"
-                        value={editItem.name}
-                        onChange={(e) => setEditItem({ ...editItem, name: e.target.value })}
-                        style={{
-                          width: "100%",
-                          padding: "12px",
-                          borderRadius: "8px",
-                          border: "1px solid #e0e0e0",
-                          backgroundColor: "#fff",
-                          fontSize: "14px",
-                          transition: "border-color 0.2s",
-                          outline: "none",
-                          boxSizing: "border-box"
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Pricing Information - Always visible */}
-                <div style={{ padding: "20px", backgroundColor: "#f9fafc", borderRadius: "12px", border: "1px solid #e0e0e0" }}>
-                  <h3 style={{ margin: "0 0 16px 0", fontSize: "16px", fontWeight: "600", color: "#333" }}>
-                    Pricing Information
-                  </h3>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
-                    <div>
-  <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
-    Cost Price *
-  </label>
-  <div style={{ position: "relative" }}>
-    <span style={{
-      position: "absolute",
-      left: "12px",
-      top: "50%",
-      transform: "translateY(-50%)",
-      color: "#666",
-      fontSize: "14px",
-      pointerEvents: "none"
-    }}>$</span>
-    <input
-      type="number"
-      step="0.01"
-      min="0"
-      name="cost_price"
-      value={newReceiveItem.cost_price}
-      onChange={e => setNewReceiveItem({
-        ...newReceiveItem,
-        cost_price: parseFloat(e.target.value) || 0
-      })}
-      style={{
-        width: "100%",
-        padding: "12px 12px 12px 30px",
-        borderRadius: "8px",
-        border: "1px solid #e0e0e0",
-        backgroundColor: "#fff",
-        fontSize: "14px",
-        outline: "none",
-        boxSizing: "border-box"
-      }}
-      placeholder="0.00"
-      required
-    />
-  </div>
-                    </div>
-                   <div>
-  <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
-    Sale Price *
-  </label>
-  <div style={{ position: "relative" }}>
-    <span style={{
-      position: "absolute",
-      left: "12px",
-      top: "50%",
-      transform: "translateY(-50%)",
-      color: "#666",
-      fontSize: "14px",
-      pointerEvents: "none"
-    }}>$</span>
-    <input
-      type="number"
-      step="0.01"
-      min="0"
-      name="sale_price"
-      value={newReceiveItem.sale_price}
-      onChange={e => setNewReceiveItem({
-        ...newReceiveItem,
-        sale_price: parseFloat(e.target.value) || 0
-      })}
-      style={{
-        width: "100%",
-        padding: "12px 12px 12px 30px",
-        borderRadius: "8px",
-        border: "1px solid #e0e0e0",
-        backgroundColor: "#fff",
-        fontSize: "14px",
-        outline: "none",
-        boxSizing: "border-box"
-      }}
-      placeholder="0.00"
-      required
-    />
-</div>
-                      {editItem.cost > 0 && editItem.sale > 0 && (
-                        <div style={{ 
-                          marginTop: "6px", 
-                          fontSize: "13px", 
-                          color: 
-                          editItem.sale > editItem.cost 
-                            ? "#2E7D32" 
-                            : editItem.sale < editItem.cost 
-                              ? "#C62828" 
-                              : "#666"
-                        }}>
-                          {editItem.sale > editItem.cost 
-                            ? `Margin: ${((editItem.sale - editItem.cost) / editItem.cost * 100).toFixed(1)}%` 
-                            : editItem.sale < editItem.cost 
-                              ? "Warning: Sale price is lower than cost" 
-                              : "No margin - selling at cost"}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Additional sections - Only visible if not in quick mode */}
-
-                  {!quickMode && (
-  <>
-    {/* Classification */}
-    <div style={{ 
-      display: "grid", 
-      gridTemplateColumns: "1fr 1fr", 
-      gap: "16px",
-      marginBottom: "20px"
-    }}>
-      {/* Categoría */}
-      <div>
-        <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
-          Category
-        </label>
-        <input
-          type="text"
-          list="category-options"
-          value={editItem.category}
-          onChange={(e) => setEditItem({ ...editItem, category: e.target.value })}
-          style={{
-            width: "100%",
-            padding: "12px",
-            borderRadius: "8px",
-            border: "1px solid #e0e0e0",
-            backgroundColor: "#fff",
-            fontSize: "14px",
-            transition: "border-color 0.2s",
-            outline: "none",
-            boxSizing: "border-box"
-          }}
-          onFocus={(e) => e.target.style.borderColor = "#5932EA"}
-          onBlur={(e) => e.target.style.borderColor = "#e0e0e0"}
-        />
-        <datalist id="category-options">
-          {uniqueCategories.map(cat => (
-            <option key={cat} value={cat} />
-          ))}
-        </datalist>
-      </div>
-
-      {/* Marca */}
-      <div>
-        <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
-          Brand
-        </label>
-        <input
-          type="text"
-          list="brand-options"
-          value={editItem.brand}
-          onChange={(e) => setEditItem({ ...editItem, brand: e.target.value })}
-          style={{
-            width: "100%",
-            padding: "12px",
-            borderRadius: "8px",
-            border: "1px solid #e0e0e0",
-            backgroundColor: "#fff",
-            fontSize: "14px",
-            transition: "border-color 0.2s",
-            outline: "none",
-            boxSizing: "border-box"
-          }}
-          onFocus={(e) => e.target.style.borderColor = "#5932EA"}
-          onBlur={(e) => e.target.style.borderColor = "#e0e0e0"}
-        />
-        <datalist id="brand-options">
-          {uniqueBrands.map(brand => (
-            <option key={brand} value={brand} />
-          ))}
-        </datalist>
-      </div>
-    </div>
-
-                    {/* Inventory Information */}
-                    <div style={{ padding: "20px", backgroundColor: "#f9fafc", borderRadius: "12px", border: "1px solid #e0e0e0" }}>
-  <h3 style={{ margin: "0 0 16px 0", fontSize: "16px", fontWeight: "600", color: "#333" }}>
-    Inventory Information
-  </h3>
-  <div style={{ 
-    display: "grid", 
-    gridTemplateColumns: "1fr 1fr", 
-    gap: "16px", /* Reducido el gap para evitar choques */
-    width: "100%", 
-    boxSizing: "border-box" 
-  }}>
-    <div>
-      <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
-        Current Stock
-      </label>
-      <input
-        type="text"
-        value={editItem.stock === 0 ? '' : editItem.stock}
-        onChange={(e) => {
-          const val = e.target.value;
-          if (val === '' || /^\d+$/.test(val)) {
-            setEditItem({ ...editItem, stock: val === '' ? 0 : Number(val) });
-          }
-        }}
-        style={{
-          width: "100%",
-          padding: "12px",
-          borderRadius: "8px",
-          border: "1px solid #e0e0e0",
-          backgroundColor: "#fff",
-          fontSize: "14px",
-          transition: "border-color 0.2s",
-          outline: "none",
-          boxSizing: "border-box" /* Asegurarse que tiene box-sizing */
-        }}
-        onFocus={(e) => e.target.style.borderColor = "#5932EA"}
-        onBlur={(e) => e.target.style.borderColor = "#e0e0e0"}
-        placeholder="0"
-      />
-    </div>
-    <div>
-      <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
-        Minimum Stock Alert
-      </label>
-      <input
-        type="text"
-        value={editItem.min === 0 ? '' : editItem.min}
-        onChange={(e) => {
-          const val = e.target.value;
-          if (val === '' || /^\d+$/.test(val)) {
-            setEditItem({ ...editItem, min: val === '' ? 0 : Number(val) });
-          }
-        }}
-        style={{
-          width: "100%",
-          padding: "12px",
-          borderRadius: "8px",
-          border: "1px solid #e0e0e0",
-          backgroundColor: "#fff",
-          fontSize: "14px",
-          transition: "border-color 0.2s",
-          outline: "none",
-          boxSizing: "border-box" /* Asegurarse que tiene box-sizing */
-        }}
-        onFocus={(e) => e.target.style.borderColor = "#5932EA"}
-        onBlur={(e) => e.target.style.borderColor = "#e0e0e0"}
-        placeholder="0"
-      />
-    </div>
-  </div>
-</div>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {/* Footer with improved actions */}
-            <div
-              style={{
-                borderTop: "1px solid #e0e0e0",
-                padding: "16px 24px",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                backgroundColor: "#f9fafc",
-              }}
-            >
-              {editItem.id && (
-                <button
-                  onClick={handleDelete}
-                  style={{
-                    padding: "12px 20px",
-                    backgroundColor: "transparent",
-                    color: "#D32F2F",
-                    border: "1px solid #FFCDD2",
-                    borderRadius: "8px",
-                    cursor: "pointer",
-                    fontSize: "14px",
-                    fontWeight: "500",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    transition: "all 0.2s",
-                  }}
-                  onMouseOver={(e) => {
-                    e.currentTarget.style.backgroundColor = "#FFF5F5";
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.backgroundColor = "transparent";
-                  }}
-                >
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M2 4H3.33333H14" stroke="#D32F2F" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M5.33331 4.00016V2.66683C5.33331 2.31321 5.4738 1.97407 5.72385 1.72402C5.9739 1.47397 6.31304 1.33349 6.66665 1.33349H9.33331C9.68693 1.33349 10.0261 1.47397 10.2761 1.72402C10.5262 1.97407 10.6666 2.31321 10.6666 2.66683V4.00016M12.6666 4.00016V13.3335C12.6666 13.6871 12.5262 14.0263 12.2761 14.2763C12.0261 14.5264 11.6869 14.6668 11.3333 14.6668H4.66665C4.31304 14.6668 3.9739 14.5264 3.72385 14.2763C3.4738 14.0263 3.33331 13.6871 3.33331 13.3335V4.00016H12.6666Z" stroke="#D32F2F" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M6.66669 7.33349V11.3335" stroke="#D32F2F" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M9.33331 7.33349V11.3335" stroke="#D32F2F" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  Delete Product
-                </button>
-              )}
-              
-              <div style={{ display: "flex", gap: "12px", marginLeft: "auto" }}>
-                <button
-                  onClick={() => setShowModal(false)}
-                  style={{
-                    padding: "12px 20px",
-                    backgroundColor: "transparent",
-                    color: "#666",
-                    border: "1px solid #d0d0d0",
-                    borderRadius: "8px",
-                    cursor: "pointer",
-                    fontSize: "14px",
-                    fontWeight: "500",
-                    transition: "all 0.2s",
-                  }}
-                  onMouseOver={(e) => {
-                    e.currentTarget.style.backgroundColor = "#f5f5f5";
-                    e.currentTarget.style.color = "#555";
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.backgroundColor = "transparent";
-                    e.currentTarget.style.color = "#666";
-                  }}
-                >
-                  Cancel
-                </button>
-                
-                {!editItem.id && (
-                  <button
-                    onClick={handleSaveAndAddAnother}
-                    style={{
-                      padding: "12px 24px",
-                      backgroundColor: "#4E9F3D",
-                      color: "white",
-                      border: "none",
-                      borderRadius: "8px",
-                      cursor: "pointer",
-                      fontSize: "14px",
-                      fontWeight: "600",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "8px",
-                      minWidth: "170px",
-                      transition: "all 0.2s",
-                    }}
-                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#3D8030"}
-                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#4E9F3D"}
-                  >
-                    Save & Add Another
-                  </button>
-                )}
-                
-                <button
-                  onClick={handleSave}
-                  style={{
-                    padding: "12px 24px",
-                    backgroundColor: "#5932EA",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "8px",
-                    cursor: "pointer",
-                    fontSize: "14px",
-                    fontWeight: "600",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "8px",
-                    minWidth: "120px",
-                    transition: "all 0.2s",
-                  }}
-                  onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#4321C9"}
-                  onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#5932EA"}
-                >
-                  {editItem.id ? "Update Product" : "Create Product"}
-                </button>
-              </div>
-            </div>
-
-            {/* CSS animations */}
-            <style jsx="true">{`
-              @keyframes fadeIn {
-                from { opacity: 0; }
-                to { opacity: 1; }
-              }
-              @keyframes modalFadeIn {
-                from { opacity: 0; transform: scale(0.95); }
-                to { opacity: 1; transform: scale(1); }
-              }
-            `}</style>
-          </div>
-        </div>
-      )}
-
-      {/* Compatibility Modal */}
+            {/* Compatibility Modal */}
       {showCompatibilityModal && selectedProduct && (
         <div
           style={{
@@ -3037,7 +2521,648 @@ const handleSubmitGoodsReceive = async () => {
     </div>
   </div>
 )}
+ {showModal && editItem && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="product-modal-title"
+          aria-describedby="product-modal-description"
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0, 0, 0, 0.6)",
+            backdropFilter: "blur(5px)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 1000,
+            animation: "fadeIn 0.2s ease",
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: "white",
+              borderRadius: "16px",
+              width: "95%",
+              maxWidth: "800px",
+              maxHeight: "90vh",
+              boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
+              display: "flex",
+              flexDirection: "column",
+              overflow: "visible",
+              animation: "modalFadeIn 0.3s ease",
+            }}
+          >
+            {/* NUEVO DISEÑO DE HEADER - Completamente rediseñado con altura fija */}
+            <div
+              style={{
+                background: "linear-gradient(135deg, #5932EA 0%, #4321C9 100%)",
+                color: "white",
+                position: "relative",
+                overflow: "visible",
+                width: "100%",
+                height: "150px", // Altura fija estricta
+                boxSizing: "border-box",
+              }}
+            >
+              {/* Decoración de fondo */}
+              <div style={{
+                position: "absolute",
+                top: 0,
+                right: 0,
+                width: "200px",
+                height: "100%",
+                background: "linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.1) 100%)",
+                transform: "skewX(-20deg) translateX(30%)",
+                pointerEvents: "none"
+              }}></div>
+              
+              {/* Contenido del header en grid para mejor control */}
+              <div style={{
+                display: "grid",
+                gridTemplateRows: "auto auto",
+                height: "100%",
+                padding: "24px 30px",
+                boxSizing: "border-box",
+              }}>
+                {/* Fila 1: Título y botón de cierre */}
+                <div style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "flex-start"
+                }}>
+                  <div style={{ maxWidth: "calc(100% - 40px)" }}>
+                    <h2 id="product-modal-title" style={{ 
+                      margin: 0, 
+                      fontSize: "22px", 
+                      fontWeight: "600", 
+                      whiteSpace: "nowrap",
+                      overflow: "visible",
+                      textOverflow: "ellipsis",
+                    }}>
+                      {editItem.id ? 'Edit Product' : 'Add New Product'}
+                    </h2>
+                    <p id="product-modal-description" style={{ 
+                      margin: "4px 0 0 0", 
+                      opacity: "0.8", 
+                      fontSize: "14px",
+                      whiteSpace: "nowrap",
+                      overflow: "visible", 
+                      textOverflow: "ellipsis",
+                    }}>
+                      {editItem.id ? `Editing ${editItem.name || 'Product'}` : "Enter product details below"}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowModal(false)}
+                    aria-label="Close modal"
+                    style={{
+                      background: "rgba(255,255,255,0.2)",
+                      border: "none",
+                      color: "white",
+                      width: "32px",
+                      height: "32px",
+                      minWidth: "32px",
+                      borderRadius: "50%",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "18px",
+                      transition: "background-color 0.2s",
+                      userSelect: "none",
+                      zIndex: 10,
+                      outline: "none",
+                    }}
+                    onMouseOver={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.3)")}
+                    onMouseOut={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.2)")}
+                    onFocus={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.3)")}
+                    onBlur={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.2)")}
+                  >
+                    ×
+                  </button>
+                </div>
+                
+                {/* Fila 2: Selector de Quick Mode con diseño moderno y limpio */}
+                <div style={{
+                  alignSelf: "end",
+                  marginTop: "auto"
+                }}>
+                  {/* Diseño simplificado con switch visual en lugar de texto largo */}
+                  <div style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "16px",
+                  }}>
+                    <button
+                      onClick={() => setQuickMode(!quickMode)}
+                      style={{
+                        backgroundColor: "transparent",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "6px",
+                        fontSize: "14px",
+                        cursor: "pointer",
+                        padding: "6px 8px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        transition: "background-color 0.2s",
+                      }}
+                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.1)"}
+                      onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                    >
+                      {/* Switch visual */}
+                      <div style={{
+                        width: "36px",
+                        height: "20px",
+                        backgroundColor: quickMode ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.1)",
+                        borderRadius: "10px",
+                        position: "relative",
+                        transition: "background-color 0.2s"
+                      }}>
+                        <div style={{
+                          position: "absolute",
+                          left: quickMode ? "18px" : "2px",
+                          top: "2px",
+                          width: "16px",
+                          height: "16px",
+                          backgroundColor: "white",
+                          borderRadius: "50%",
+                          transition: "left 0.2s"
+                        }}></div>
+                      </div>
+                      <span style={{ fontWeight: "500" }}>Quick Mode</span>
+                    </button>
+                    
+                    {/* Texto descriptivo corto y no truncado */}
+                    <span style={{
+                      fontSize: "13px",
+                      opacity: "0.8",
+                    }}>
+                      {quickMode ? "Essential fields only" : "Show all fields"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
 
+            {/* Content area */}
+            <div style={{ flex: 1, overflowY: "auto", padding: "24px 30px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+                {/* Product Identification - Always visible */}
+                <div style={{ padding: "20px", backgroundColor: "#f9fafc", borderRadius: "12px", border: "1px solid #e0e0e0" }}>
+                  <h3 style={{ margin: "0 0 16px 0", fontSize: "16px", fontWeight: "600", color: "#333" }}>
+                    Product Identification
+                  </h3>
+                  <div style={{ 
+                    display: "grid", 
+                    gridTemplateColumns: "1fr 1fr", 
+                    gap: "16px", 
+                    width: "100%", 
+                    boxSizing: "border-box" 
+                  }}>
+                    <div>
+                      <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
+                        SKU *
+                      </label>
+                      <input
+                        type="text"
+                        value={editItem.sku}
+                        onChange={(e) => setEditItem({ ...editItem, sku: e.target.value })}
+                        style={{
+                          width: "100%",
+                          padding: "12px",
+                          borderRadius: "8px",
+                          border: "1px solid #e0e0e0",
+                          backgroundColor: "#fff",
+                          fontSize: "14px",
+                          transition: "border-color 0.2s",
+                          outline: "none",
+                          boxSizing: "border-box"
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
+                        Name *
+                      </label>
+                      <input
+                        type="text"
+                        value={editItem.name}
+                        onChange={(e) => setEditItem({ ...editItem, name: e.target.value })}
+                        style={{
+                          width: "100%",
+                          padding: "12px",
+                          borderRadius: "8px",
+                          border: "1px solid #e0e0e0",
+                          backgroundColor: "#fff",
+                          fontSize: "14px",
+                          transition: "border-color 0.2s",
+                          outline: "none",
+                          boxSizing: "border-box"
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Pricing Information - Always visible */}
+                <div style={{ padding: "20px", backgroundColor: "#f9fafc", borderRadius: "12px", border: "1px solid #e0e0e0" }}>
+                  <h3 style={{ margin: "0 0 16px 0", fontSize: "16px", fontWeight: "600", color: "#333" }}>
+                    Pricing Information
+                  </h3>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
+                    <div>
+  <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
+    Cost Price *
+  </label>
+  <div style={{ position: "relative" }}>
+    <span style={{
+      position: "absolute",
+      left: "12px",
+      top: "50%",
+      transform: "translateY(-50%)",
+      color: "#666",
+      fontSize: "14px",
+      pointerEvents: "none"
+    }}>$</span>
+    <input
+      type="number"
+      step="0.01"
+      min="0"
+      name="cost_price"
+      value={newReceiveItem.cost_price}
+      onChange={e => setNewReceiveItem({
+        ...newReceiveItem,
+        cost_price: parseFloat(e.target.value) || 0
+      })}
+      style={{
+        width: "100%",
+        padding: "12px 12px 12px 30px",
+        borderRadius: "8px",
+        border: "1px solid #e0e0e0",
+        backgroundColor: "#fff",
+        fontSize: "14px",
+        outline: "none",
+        boxSizing: "border-box"
+      }}
+      placeholder="0.00"
+      required
+    />
+  </div>
+                    </div>
+                   <div>
+  <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
+    Sale Price *
+  </label>
+  <div style={{ position: "relative" }}>
+    <span style={{
+      position: "absolute",
+      left: "12px",
+      top: "50%",
+      transform: "translateY(-50%)",
+      color: "#666",
+      fontSize: "14px",
+      pointerEvents: "none"
+    }}>$</span>
+    <input
+      type="number"
+      step="0.01"
+      min="0"
+      name="sale_price"
+      value={newReceiveItem.sale_price}
+      onChange={e => setNewReceiveItem({
+        ...newReceiveItem,
+        sale_price: parseFloat(e.target.value) || 0
+      })}
+      style={{
+        width: "100%",
+        padding: "12px 12px 12px 30px",
+        borderRadius: "8px",
+        border: "1px solid #e0e0e0",
+        backgroundColor: "#fff",
+        fontSize: "14px",
+        outline: "none",
+        boxSizing: "border-box"
+      }}
+      placeholder="0.00"
+      required
+    />
+</div>
+                      {editItem.cost > 0 && editItem.sale > 0 && (
+                        <div style={{ 
+                          marginTop: "6px", 
+                          fontSize: "13px", 
+                          color: 
+                          editItem.sale > editItem.cost 
+                            ? "#2E7D32" 
+                            : editItem.sale < editItem.cost 
+                              ? "#C62828" 
+                              : "#666"
+                        }}>
+                          {editItem.sale > editItem.cost 
+                            ? `Margin: ${((editItem.sale - editItem.cost) / editItem.cost * 100).toFixed(1)}%` 
+                            : editItem.sale < editItem.cost 
+                              ? "Warning: Sale price is lower than cost" 
+                              : "No margin - selling at cost"}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Additional sections - Only visible if not in quick mode */}
+
+                  {!quickMode && (
+  <>
+    {/* Classification */}
+    <div style={{ 
+      display: "grid", 
+      gridTemplateColumns: "1fr 1fr", 
+      gap: "16px",
+      marginBottom: "20px"
+    }}>
+      {/* Categoría */}
+      <div>
+        <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
+          Category
+        </label>
+        <input
+          type="text"
+          list="category-options"
+          value={editItem.category}
+          onChange={(e) => setEditItem({ ...editItem, category: e.target.value })}
+          style={{
+            width: "100%",
+            padding: "12px",
+            borderRadius: "8px",
+            border: "1px solid #e0e0e0",
+            backgroundColor: "#fff",
+            fontSize: "14px",
+            transition: "border-color 0.2s",
+            outline: "none",
+            boxSizing: "border-box"
+          }}
+          onFocus={(e) => e.target.style.borderColor = "#5932EA"}
+          onBlur={(e) => e.target.style.borderColor = "#e0e0e0"}
+        />
+        <datalist id="category-options">
+          {uniqueCategories.map(cat => (
+            <option key={cat} value={cat} />
+          ))}
+        </datalist>
+      </div>
+
+      {/* Marca */}
+      <div>
+        <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
+          Brand
+        </label>
+        <input
+          type="text"
+          list="brand-options"
+          value={editItem.brand}
+          onChange={(e) => setEditItem({ ...editItem, brand: e.target.value })}
+          style={{
+            width: "100%",
+            padding: "12px",
+            borderRadius: "8px",
+            border: "1px solid #e0e0e0",
+            backgroundColor: "#fff",
+            fontSize: "14px",
+            transition: "border-color 0.2s",
+            outline: "none",
+            boxSizing: "border-box"
+          }}
+          onFocus={(e) => e.target.style.borderColor = "#5932EA"}
+          onBlur={(e) => e.target.style.borderColor = "#e0e0e0"}
+        />
+        <datalist id="brand-options">
+          {uniqueBrands.map(brand => (
+            <option key={brand} value={brand} />
+          ))}
+        </datalist>
+      </div>
+    </div>
+
+                    {/* Inventory Information */}
+                    <div style={{ padding: "20px", backgroundColor: "#f9fafc", borderRadius: "12px", border: "1px solid #e0e0e0" }}>
+  <h3 style={{ margin: "0 0 16px 0", fontSize: "16px", fontWeight: "600", color: "#333" }}>
+    Inventory Information
+  </h3>
+  <div style={{ 
+    display: "grid", 
+    gridTemplateColumns: "1fr 1fr", 
+    gap: "16px", /* Reducido el gap para evitar choques */
+    width: "100%", 
+    boxSizing: "border-box" 
+  }}>
+    <div>
+      <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
+        Current Stock
+      </label>
+      <input
+        type="text"
+        value={editItem.stock === 0 ? '' : editItem.stock}
+        onChange={(e) => {
+          const val = e.target.value;
+          if (val === '' || /^\d+$/.test(val)) {
+            setEditItem({ ...editItem, stock: val === '' ? 0 : Number(val) });
+          }
+        }}
+        style={{
+          width: "100%",
+          padding: "12px",
+          borderRadius: "8px",
+          border: "1px solid #e0e0e0",
+          backgroundColor: "#fff",
+          fontSize: "14px",
+          transition: "border-color 0.2s",
+          outline: "none",
+          boxSizing: "border-box" /* Asegurarse que tiene box-sizing */
+        }}
+        onFocus={(e) => e.target.style.borderColor = "#5932EA"}
+        onBlur={(e) => e.target.style.borderColor = "#e0e0e0"}
+        placeholder="0"
+      />
+    </div>
+    <div>
+      <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
+        Minimum Stock Alert
+      </label>
+      <input
+        type="text"
+        value={editItem.min === 0 ? '' : editItem.min}
+        onChange={(e) => {
+          const val = e.target.value;
+          if (val === '' || /^\d+$/.test(val)) {
+            setEditItem({ ...editItem, min: val === '' ? 0 : Number(val) });
+          }
+        }}
+        style={{
+          width: "100%",
+          padding: "12px",
+          borderRadius: "8px",
+          border: "1px solid #e0e0e0",
+          backgroundColor: "#fff",
+          fontSize: "14px",
+          transition: "border-color 0.2s",
+          outline: "none",
+          boxSizing: "border-box" /* Asegurarse que tiene box-sizing */
+        }}
+        onFocus={(e) => e.target.style.borderColor = "#5932EA"}
+        onBlur={(e) => e.target.style.borderColor = "#e0e0e0"}
+        placeholder="0"
+      />
+    </div>
+  </div>
+</div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Footer with improved actions */}
+            <div
+              style={{
+                borderTop: "1px solid #e0e0e0",
+                padding: "16px 24px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                backgroundColor: "#f9fafc",
+              }}
+            >
+              {editItem.id && (
+                <button
+                  onClick={handleDelete}
+                  style={{
+                    padding: "12px 20px",
+                    backgroundColor: "transparent",
+                    color: "#D32F2F",
+                    border: "1px solid #FFCDD2",
+                    borderRadius: "8px",
+                    cursor: "pointer",
+                    fontSize: "14px",
+                    fontWeight: "500",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    transition: "all 0.2s",
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.backgroundColor = "#FFF5F5";
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.backgroundColor = "transparent";
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M2 4H3.33333H14" stroke="#D32F2F" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M5.33331 4.00016V2.66683C5.33331 2.31321 5.4738 1.97407 5.72385 1.72402C5.9739 1.47397 6.31304 1.33349 6.66665 1.33349H9.33331C9.68693 1.33349 10.0261 1.47397 10.2761 1.72402C10.5262 1.97407 10.6666 2.31321 10.6666 2.66683V4.00016M12.6666 4.00016V13.3335C12.6666 13.6871 12.5262 14.0263 12.2761 14.2763C12.0261 14.5264 11.6869 14.6668 11.3333 14.6668H4.66665C4.31304 14.6668 3.9739 14.5264 3.72385 14.2763C3.4738 14.0263 3.33331 13.6871 3.33331 13.3335V4.00016H12.6666Z" stroke="#D32F2F" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M6.66669 7.33349V11.3335" stroke="#D32F2F" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M9.33331 7.33349V11.3335" stroke="#D32F2F" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  Delete Product
+                </button>
+              )}
+              
+              <div style={{ display: "flex", gap: "12px", marginLeft: "auto" }}>
+                <button
+                  onClick={() => setShowModal(false)}
+                  style={{
+                    padding: "12px 20px",
+                    backgroundColor: "transparent",
+                    color: "#666",
+                    border: "1px solid #d0d0d0",
+                    borderRadius: "8px",
+                    cursor: "pointer",
+                    fontSize: "14px",
+                    fontWeight: "500",
+                    transition: "all 0.2s",
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.backgroundColor = "#f5f5f5";
+                    e.currentTarget.style.color = "#555";
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.backgroundColor = "transparent";
+                    e.currentTarget.style.color = "#666";
+                  }}
+                >
+                  Cancel
+                </button>
+                
+                {!editItem.id && (
+                  <button
+                    onClick={handleSaveAndAddAnother}
+                    style={{
+                      padding: "12px 24px",
+                      backgroundColor: "#4E9F3D",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "8px",
+                      cursor: "pointer",
+                      fontSize: "14px",
+                      fontWeight: "600",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "8px",
+                      minWidth: "170px",
+                      transition: "all 0.2s",
+                    }}
+                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#3D8030"}
+                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#4E9F3D"}
+                  >
+                    Save & Add Another
+                  </button>
+                )}
+                
+                <button
+                  onClick={handleSave}
+                  style={{
+                    padding: "12px 24px",
+                    backgroundColor: "#5932EA",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "8px",
+                    cursor: "pointer",
+                    fontSize: "14px",
+                    fontWeight: "600",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "8px",
+                    minWidth: "120px",
+                    transition: "all 0.2s",
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#4321C9"}
+                  onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#5932EA"}
+                >
+                  {editItem.id ? "Update Product" : "Create Product"}
+                </button>
+              </div>
+            </div>
+
+            {/* CSS animations */}
+            <style jsx="true">{`
+              @keyframes fadeIn {
+                from { opacity: 0; }
+                to { opacity: 1; }
+              }
+              @keyframes modalFadeIn {
+                from { opacity: 0; transform: scale(0.95); }
+                to { opacity: 1; transform: scale(1); }
+              }
+            `}</style>
+          </div>
+        </div>
+      )}
 
 {notification.show && (
   <Notification
@@ -3047,9 +3172,42 @@ const handleSubmitGoodsReceive = async () => {
     onClose={() => setNotification({ ...notification, show: false })}
   />
 )}
+      <style jsx="true">{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        
+        @media (orientation: portrait) {
+          .ag-theme-alpine .ag-paging-button {
+            min-width: 40px !important;
+            min-height: 40px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            font-size: ${isTouchDevice ? '16px' : '14px'} !important;
+          }
+          
+          .ag-theme-alpine .ag-paging-panel {
+            height: ${isTouchDevice ? '60px' : '35px'} !important;
+            padding: ${isTouchDevice ? '10px' : '5px'} !important;
+          }
+        }
+        
+        input, select, button {
+          -webkit-tap-highlight-color: rgba(0,0,0,0);
+        }
+        
+        .touch-enabled-grid {
+          -webkit-overflow-scrolling: touch !important;
+          scroll-behavior: smooth !important;
+          overscroll-behavior: contain !important;
+        }
+      `}</style>
     </div>
     
   );
+
   
 };
 

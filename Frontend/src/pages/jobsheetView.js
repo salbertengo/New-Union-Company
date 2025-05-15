@@ -25,7 +25,8 @@ const JobsheetView = () => {
   const [jobsheets, setJobsheets] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [customers, setCustomers] = useState([]);
-const [vehicles, setVehicles] = useState([]);  const [currentJobsheet, setCurrentJobsheet] = useState(null);
+  const [vehicles, setVehicles] = useState([]);
+  const [currentJobsheet, setCurrentJobsheet] = useState(null);
   const [isHovered, setIsHovered] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -66,51 +67,78 @@ const [vehicles, setVehicles] = useState([]);  const [currentJobsheet, setCurren
       setRunTour(false);
     }
   };
-const [startDate, setStartDate] = useState(new Date());
-const [endDate, setEndDate] = useState(new Date());
-const [showDatePicker, setShowDatePicker] = useState(false);
+
+  const [startDate, setStartDate] = useState(new Date());
+  const [endDate, setEndDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+
+  // Add touch detection state
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const [isVerticalOrientation, setIsVerticalOrientation] = useState(false);
+  const [isDesktopView, setIsDesktopView] = useState(window.innerWidth > 1024);
+
+  // Detect touch device and orientation
+  useEffect(() => {
+    const detectDeviceAndOrientation = () => {
+      // Check for true desktop view based on width, regardless of touch capability
+      const isDesktop = window.innerWidth > 1024;
+      setIsDesktopView(isDesktop);
+      
+      // Only consider it a touch device if it has touch AND is not a desktop size
+      const hasTouchCapability = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+      setIsTouchDevice(hasTouchCapability && !isDesktop);
+      
+      // Set orientation
+      setIsVerticalOrientation(window.innerHeight > window.innerWidth);
+    };
+
+    detectDeviceAndOrientation();
+    window.addEventListener('touchstart', detectDeviceAndOrientation, { once: true });
+    window.addEventListener('resize', detectDeviceAndOrientation);
+
+    return () => {
+      window.removeEventListener('touchstart', detectDeviceAndOrientation);
+      window.removeEventListener('resize', detectDeviceAndOrientation);
+    };
+  }, []);
 
   const columnDefs = [
-  { 
-    headerName: "ID",
-    field: "id",
-    width: 0,
-    suppressMenu: true,
-    headerClass: "custom-header-sumary", 
-  },
-  { 
-    // Moved to position 2
-    headerName: "Created",
-    field: "created_at",
-    suppressMenu: true,
-    headerClass: "custom-header-sumary",
-    cellRenderer: (params) => {
-      if (!params.data.created_at) return "—";
-      const date = new Date(params.data.created_at);
-      // Format as DD/MM/YYYY (using en-GB locale)
-      return date.toLocaleDateString('en-GB');
-    },
-  },
     { 
-    headerName: "Plate",
-    field: "license_plate",
-    suppressMenu: true,
-    headerClass: "custom-header-sumary",
-    width: 120,
-    cellRenderer: (params) => {
-      if (!params.data) return null;
-      return <div>{params.value || ""}</div>;
+      headerName: "ID",
+      field: "id",
+      width: 0,
+      suppressMenu: true,
+      headerClass: "custom-header-sumary", 
     },
-  },
-  {
-    headerName: "Customer",
-    field: "customer_name",
-    width: 140,
-    suppressMenu: true,
-    headerClass: "custom-header-sumary",
-  },
-
-
+    { 
+      headerName: "Created",
+      field: "created_at",
+      suppressMenu: true,
+      headerClass: "custom-header-sumary",
+      cellRenderer: (params) => {
+        if (!params.data.created_at) return "—";
+        const date = new Date(params.data.created_at);
+        return date.toLocaleDateString('en-GB');
+      },
+    },
+    { 
+      headerName: "Plate",
+      field: "license_plate",
+      suppressMenu: true,
+      headerClass: "custom-header-sumary",
+      width: 120,
+      cellRenderer: (params) => {
+        if (!params.data) return null;
+        return <div>{params.value || ""}</div>;
+      },
+    },
+    {
+      headerName: "Customer",
+      field: "customer_name",
+      width: 140,
+      suppressMenu: true,
+      headerClass: "custom-header-sumary",
+    },
     {
       headerName: "State",
       field: "state",
@@ -155,11 +183,7 @@ const [showDatePicker, setShowDatePicker] = useState(false);
       headerClass: "custom-header-sumary",
       cellRenderer: (params) => {
         if (!params.data) return '';
-        
-        // Since we're already showing a button that navigates to details,
-        // we can use the existing data without additional API calls
         const totalValue = parseFloat(params.data.total_amount || 0);
-        
         return (
           <div 
             onClick={() => handleOpenJobsheetDetail(params.data.id)} 
@@ -211,7 +235,6 @@ const [showDatePicker, setShowDatePicker] = useState(false);
             justifyContent: "center", 
             gap: "8px" 
           }}>
-            {/* Using direct styles instead of ActionButtonsContainer for simplicity */}
             {params.data.state !== "cancelled" && (
               <button
                 onClick={() => handleCancel(params.data)}
@@ -239,261 +262,126 @@ const [showDatePicker, setShowDatePicker] = useState(false);
     },
   ];
 
+const gridOptions = {
+  suppressRowClickSelection: isTouchDevice,
+  suppressCellSelection: false,
+  suppressMovableColumns: true,
+  suppressContextMenu: true,
+  rowBuffer: isDesktopView ? 15 : isTouchDevice ? 15 : 10,
+  animateRows: true,
+  alwaysShowVerticalScroll: isTouchDevice,
+  suppressScrollOnNewData: false,
+  domLayout: isDesktopView ? 'autoHeight' : isTouchDevice ? 'normal' : 'autoHeight'
+};
+
   const onGridReady = (params) => {
     gridRef.current = params.api;
   };
 
-  // Function to open JobsheetDetailView as a modal instead of full page
   const handleOpenJobsheetDetail = (jobsheetId) => {
     setSelectedJobsheetId(jobsheetId);
     setShowJobsheetDetail(true);
   };
   
-  // Function to close JobsheetDetailView
   const handleCloseJobsheetDetail = () => {
     setShowJobsheetDetail(false);
     setSelectedJobsheetId(null);
-    // Refresh data after closing detail view
     fetchJobsheets(searchTerm, statusFilter);
   };
   
-  // Function to refresh jobsheets after changes
   const handleRefreshJobsheets = () => {
     fetchJobsheets(searchTerm, statusFilter);
   };
-const DateRangeSelector = () => {
-  // Format date as DD/MM/YYYY for display
-  const formatDate = (date) => {
-    return date.toLocaleDateString('en-GB');
-  };
 
-  return (
-    <div style={{ position: "relative" }}>
-      <button
-        onClick={() => setShowDatePicker(!showDatePicker)}
-        style={{
-          padding: "5px 15px",
-          backgroundColor: "#F9FBFF",
-          border: "1px solid #e0e0e0",
-          borderRadius: "10px",
-          display: "flex",
-          alignItems: "center",
-          gap: "5px",
-          height: "35px",
-          fontSize: "14px",
-          color: "#333"
-        }}
-      >
-        <FontAwesomeIcon icon={faCalendarAlt} style={{ color: "#5932EA" }} />
-        {formatDate(startDate)} - {formatDate(endDate)}
-      </button>
-
-      {showDatePicker && (
-        <div style={{
-          position: "absolute",
-          top: "40px",
-          right: "0",
-          zIndex: 1000,
-          backgroundColor: "white",
-          borderRadius: "8px",
-          boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
-          padding: "15px",
-          display: "flex",
-          flexDirection: "column",
-          gap: "10px",
-          width: "280px"
-        }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <h4 style={{ margin: 0 }}>Date Range</h4>
-            <button 
-              onClick={() => setShowDatePicker(false)}
-              style={{ 
-                background: "none", 
-                border: "none",
-                cursor: "pointer",
-                fontSize: "16px"
-              }}
-            >
-              <FontAwesomeIcon icon={faTimes} />
-            </button>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-            <div>
-              <label style={{ display: "block", marginBottom: "5px", fontSize: "14px" }}>Start Date</label>
-              <input
-                type="date"
-                value={startDate.toISOString().split('T')[0]}
-                onChange={(e) => setStartDate(new Date(e.target.value))}
-                style={{ 
-                  padding: "8px", 
-                  borderRadius: "4px", 
-                  border: "1px solid #ddd",
-                  width: "100%" 
-                }}
-              />
-            </div>
-            <div>
-              <label style={{ display: "block", marginBottom: "5px", fontSize: "14px" }}>End Date</label>
-              <input
-                type="date"
-                value={endDate.toISOString().split('T')[0]}
-                onChange={(e) => setEndDate(new Date(e.target.value))}
-                style={{ 
-                  padding: "8px", 
-                  borderRadius: "4px", 
-                  border: "1px solid #ddd",
-                  width: "100%" 
-                }}
-              />
-            </div>
-          </div>
-
-          <div style={{ display: "flex", justifyContent: "space-between", marginTop: "10px" }}>
-            <button
-              onClick={() => {
-                setStartDate(new Date());
-                setEndDate(new Date());
-              }}
-              style={{
-                padding: "8px 15px",
-                backgroundColor: "#f1f1f1",
-                border: "none",
-                borderRadius: "4px",
-                cursor: "pointer"
-              }}
-            >
-              Today Only
-            </button>
-            <button
-              onClick={() => {
-                fetchJobsheets(searchTerm, statusFilter);
-                setShowDatePicker(false);
-              }}
-              style={{
-                padding: "8px 15px",
-                backgroundColor: "#5932EA",
-                color: "white",
-                border: "none",
-                borderRadius: "4px",
-                cursor: "pointer"
-              }}
-            >
-              Apply Filter
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
- const fetchJobsheets = useCallback(async (search = "", status = "all") => {
-  setLoading(true);
-  const token = localStorage.getItem("token");
-  if (!token) {
-    console.error("No token found");
-    setLoading(false);
-    return;
-  }
-
-  try {
-    // If there's a search term, try loading all for local filtering
-    if (search && search.trim() !== "") {
-      await fetchJobsheetsForLocalSearch(status, search);
+  const fetchJobsheets = useCallback(async (search = "", status = "all") => {
+    setLoading(true);
+    const token = localStorage.getItem("token");
+    if (!token) {
+      console.error("No token found");
+      setLoading(false);
       return;
     }
 
-    // Format dates for API query
-    const startDateFormatted = startDate.toISOString().split('T')[0];
-    const endDateFormatted = endDate.toISOString().split('T')[0];
+    try {
+      if (search && search.trim() !== "") {
+        await fetchJobsheetsForLocalSearch(status, search);
+        return;
+      }
 
-    // For requests without search, use the normal endpoint with date range
-    let url = `${API_URL}/jobsheets?start_date=${startDateFormatted}&end_date=${endDateFormatted}`;
-    
-    if (status && status !== "all") {
-      url += `&state=${encodeURIComponent(status)}`;
-    }
+      const startDateFormatted = startDate.toISOString().split('T')[0];
+      const endDateFormatted = endDate.toISOString().split('T')[0];
 
-    console.log("Requesting URL:", url);
+      let url = `${API_URL}/jobsheets?start_date=${startDateFormatted}&end_date=${endDateFormatted}`;
+      
+      if (status && status !== "all") {
+        url += `&state=${encodeURIComponent(status)}`;
+      }
 
-    const response = await fetch(url, {
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    if (response.ok) {
-      const jobsheetData = await response.json();
-      console.log("Data received:", jobsheetData);
-      setJobsheets(jobsheetData);
-    } else {
-      console.error("Server error:", response.status);
-      setJobsheets([]);
-    }
-  } catch (error) {
-    console.error("Error in fetchJobsheets:", error);
-    setJobsheets([]);
-  } finally {
-    setLoading(false);
-  }
-}, [API_URL, startDate, endDate]); // Add dependencies
-
-  // Function to load jobsheets and perform local search
-  const fetchJobsheetsForLocalSearch = async (status, searchTerm) => {
-  const token = localStorage.getItem("token");
-  if (!token) return;
-
-  try {
-    // Format dates for API query
-    const startDateFormatted = startDate.toISOString().split('T')[0];
-    const endDateFormatted = endDate.toISOString().split('T')[0];
-    
-    // Load jobsheets with date range and optional state filter
-    let url = `${API_URL}/jobsheets?start_date=${startDateFormatted}&end_date=${endDateFormatted}`;
-    
-    if (status && status !== "all") {
-      url += `&state=${encodeURIComponent(status)}`;
-    }
-
-    const response = await fetch(url, {
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    if (response.ok) {
-      const allJobsheets = await response.json();
-
-      // Filter locally by search term
-      const searchTermLower = searchTerm.toLowerCase();
-      const filtered = allJobsheets.filter((js) => {
-        // Search in ID
-        if (js.id.toString().includes(searchTermLower)) return true;
-
-        // Search in customer name
-        if (js.customer_name?.toLowerCase().includes(searchTermLower))
-          return true;
-
-        // Search in vehicle model or plate
-        if (js.vehicle_model?.toLowerCase().includes(searchTermLower))
-          return true;
-        if (js.license_plate?.toLowerCase().includes(searchTermLower))
-          return true;
-
-        return false;
+      const response = await fetch(url, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
       });
 
-      console.log(
-        `Local search: found ${filtered.length} of ${allJobsheets.length} jobsheets`
-      );
-      setJobsheets(filtered);
+      if (response.ok) {
+        const jobsheetData = await response.json();
+        setJobsheets(jobsheetData);
+      } else {
+        console.error("Server error:", response.status);
+        setJobsheets([]);
+      }
+    } catch (error) {
+      console.error("Error in fetchJobsheets:", error);
+      setJobsheets([]);
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    console.error("Error in local search:", error);
-  }
-};
+  }, [API_URL, startDate, endDate]);
+
+  const fetchJobsheetsForLocalSearch = async (status, searchTerm) => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    try {
+      const startDateFormatted = startDate.toISOString().split('T')[0];
+      const endDateFormatted = endDate.toISOString().split('T')[0];
+      
+      let url = `${API_URL}/jobsheets?start_date=${startDateFormatted}&end_date=${endDateFormatted}`;
+      
+      if (status && status !== "all") {
+        url += `&state=${encodeURIComponent(status)}`;
+      }
+
+      const response = await fetch(url, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const allJobsheets = await response.json();
+
+        const searchTermLower = searchTerm.toLowerCase();
+        const filtered = allJobsheets.filter((js) => {
+          if (js.id.toString().includes(searchTermLower)) return true;
+          if (js.customer_name?.toLowerCase().includes(searchTermLower))
+            return true;
+          if (js.vehicle_model?.toLowerCase().includes(searchTermLower))
+            return true;
+          if (js.license_plate?.toLowerCase().includes(searchTermLower))
+            return true;
+
+          return false;
+        });
+
+        setJobsheets(filtered);
+      }
+    } catch (error) {
+      console.error("Error in local search:", error);
+    }
+  };
 
   const StatusFilterButton = () => {
     const statuses = [
@@ -511,7 +399,7 @@ const DateRangeSelector = () => {
     };
 
     let color = "#666";
-   if (statusFilter === "completed") color = "#00C853";
+    if (statusFilter === "completed") color = "#00C853";
     else if (statusFilter === "in progress") color = "#2979FF";
     else if (statusFilter === "cancelled") color = "#F44336";
 
@@ -525,12 +413,16 @@ const DateRangeSelector = () => {
             statusFilter === "all" ? "#F9FBFF" : `${color}40`
           }`,
           borderRadius: "10px",
-          padding: "5px 15px",
-          height: "35px",
-          fontSize: "14px",
+          padding: isTouchDevice ? "12px 15px" : "5px 15px",
+          height: isTouchDevice ? "46px" : "35px",
+          fontSize: isTouchDevice ? "16px" : "14px",
           fontWeight: "500",
           cursor: "pointer",
           textTransform: "capitalize",
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center"
         }}
       >
         {statusFilter === "all" ? "All States" : statusFilter}
@@ -539,29 +431,17 @@ const DateRangeSelector = () => {
   };
 
   const handleStatusChange = async (id, currentStatus) => {
-    // Define status cycle
     const statusCycle = ["in progress"];
-    if (currentStatus === "completed") {
+    if (currentStatus === "completed" || currentStatus === "cancelled") {
       setNotification({
         show: true,
-        message: "Completed jobs cannot be reverted to another status",
-        type: "error",
-      });
-      setTimeout(() => setNotification({ show: false }), 3000);
-      return;
-    }
-    if (currentStatus === "cancelled") {
-      setNotification({
-        show: true,
-        message: "Cancelled jobs cannot be reverted to another status",
+        message: "Completed or cancelled jobs cannot be reverted to another status",
         type: "error",
       });
       setTimeout(() => setNotification({ show: false }), 3000);
       return;
     }
     const currentIndex = statusCycle.indexOf(currentStatus);
-
-    // Calculate next state (go back to start if at the end)
     const nextStatus = statusCycle[(currentIndex + 1) % statusCycle.length];
 
     try {
@@ -579,10 +459,7 @@ const DateRangeSelector = () => {
       });
 
       if (!getResponse.ok) {
-        console.error(
-          "Error getting jobsheet data:",
-          getResponse.status
-        );
+        console.error("Error getting jobsheet data:", getResponse.status);
         return;
       }
 
@@ -604,7 +481,6 @@ const DateRangeSelector = () => {
       });
 
       if (response.ok) {
-        console.log("State successfully updated!");
         fetchJobsheets(searchTerm, statusFilter);
       } else {
         const errorText = await response.text();
@@ -615,7 +491,6 @@ const DateRangeSelector = () => {
     }
   };
 
-  // Fetch customers for dropdown
   const fetchCustomers = async () => {
     const token = localStorage.getItem("token");
     if (!token) {
@@ -642,7 +517,6 @@ const DateRangeSelector = () => {
     }
   };
 
-  // Fetch vehicles for dropdown
   const fetchVehicles = async (customerId = null) => {
     const token = localStorage.getItem("token");
     if (!token) {
@@ -674,21 +548,19 @@ const DateRangeSelector = () => {
     }
   };
 
-useEffect(() => {
-  // Set default to today's date
-  const today = new Date();
-  setStartDate(today);
-  setEndDate(today);
-  
-  // Llamar a las funciones iniciales
-  const initialFetch = async () => {
-    await fetchJobsheets(searchTerm, statusFilter);
-    fetchCustomers();
-    fetchVehicles();
-  };
-  
-  initialFetch();
-}, []); 
+  useEffect(() => {
+    const today = new Date();
+    setStartDate(today);
+    setEndDate(today);
+    
+    const initialFetch = async () => {
+      await fetchJobsheets(searchTerm, statusFilter);
+      fetchCustomers();
+      fetchVehicles();
+    };
+    
+    initialFetch();
+  }, []); 
 
   const handleSearch = (e) => {
     const value = e.target.value;
@@ -699,12 +571,10 @@ useEffect(() => {
     }
 
     searchTimeout.current = setTimeout(() => {
-      console.log("Searching for:", value);
       fetchJobsheets(value, statusFilter);
     }, 500);
   };
 
-  // Handle all other form inputs
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData({
@@ -787,12 +657,10 @@ useEffect(() => {
     setCustomerSearchTerm(value);
     setShowCustomerResults(true);
 
-    // Clear previous timeout
     if (customerSearchTimeout.current) {
       clearTimeout(customerSearchTimeout.current);
     }
 
-    // Set new timeout for search
     customerSearchTimeout.current = setTimeout(async () => {
       if (value.trim() === "") {
         setFilteredCustomers([]);
@@ -806,7 +674,6 @@ useEffect(() => {
       }
 
       try {
-        // Use the correct endpoint - this matches what your backend expects
         const response = await fetch(
           `${API_URL}/customers?search=${encodeURIComponent(value)}`,
           {
@@ -819,15 +686,9 @@ useEffect(() => {
 
         if (response.ok) {
           const results = await response.json();
-          console.log("Customer search results:", results);
           setFilteredCustomers(results);
-
-          // Make sure the results dropdown is shown
           setShowCustomerResults(true);
         } else {
-          console.error("Error searching customers:", response.status);
-
-          // Fallback: filter locally from already loaded customers
           const searchTermLower = value.toLowerCase();
           const filtered = customers.filter((customer) => {
             const fullName = `${customer.first_name || ""} ${
@@ -838,9 +699,6 @@ useEffect(() => {
           setFilteredCustomers(filtered);
         }
       } catch (error) {
-        console.error("Error searching customers:", error);
-
-        // Fallback: filter locally from already loaded customers
         const searchTermLower = value.toLowerCase();
         const filtered = customers.filter((customer) => {
           const fullName = `${customer.first_name || ""} ${
@@ -854,22 +712,17 @@ useEffect(() => {
   };
 
   const handleSelectCustomer = (customer) => {
-    // Update form data with customer ID
     setFormData({
       ...formData,
       customer_id: customer.id,
-      vehicle_id: "", // Reset vehicle when customer changes
+      vehicle_id: "",
     });
 
-    // Handle different customer object structures
     let customerDisplayName = "Unknown Customer";
 
-    // Try to get the name based on possible object structures
     if (customer.name) {
-      // If customer has a single name field
       customerDisplayName = customer.name;
     } else if (customer.first_name || customer.last_name) {
-      // If customer has separate first_name/last_name fields
       customerDisplayName = `${customer.first_name || ""} ${
         customer.last_name || ""
       }`.trim();
@@ -880,8 +733,6 @@ useEffect(() => {
     setCustomerSearchTerm("");
 
     fetchVehicles(customer.id);
-
-    console.log("Selected customer:", customer);
   };
 
   const handleEdit = (jobsheet) => {
@@ -889,11 +740,148 @@ useEffect(() => {
     setShowJobsheetDetail(true);
   };
 
-  // Modified function to open JobsheetDetailView for creating a new jobsheet
   const handleOpenNewModal = () => {
-    // Set selectedJobsheetId to null to indicate we want to create a new jobsheet
     setSelectedJobsheetId(null);
     setShowJobsheetDetail(true);
+  };
+
+  const DateRangeSelector = () => {
+    const formatDate = (date) => {
+      return date.toLocaleDateString('en-GB');
+    };
+
+    return (
+      <div style={{ position: "relative", width: "100%" }}>
+        <button
+          onClick={() => setShowDatePicker(!showDatePicker)}
+          style={{
+            padding: isTouchDevice ? "12px 15px" : "5px 15px",
+            backgroundColor: "#F9FBFF",
+            border: "1px solid #e0e0e0",
+            borderRadius: "10px",
+            display: "flex",
+            alignItems: "center",
+            gap: "5px",
+            height: isTouchDevice ? "46px" : "35px",
+            fontSize: isTouchDevice ? "16px" : "14px",
+            color: "#333",
+            width: "100%",
+            justifyContent: "center"
+          }}
+        >
+          <FontAwesomeIcon icon={faCalendarAlt} style={{ color: "#5932EA" }} />
+          {formatDate(startDate)} - {formatDate(endDate)}
+        </button>
+
+        {showDatePicker && (
+          <div style={{
+            position: "absolute",
+            top: "50px",
+            right: isVerticalOrientation ? 0 : "0",
+            left: isVerticalOrientation ? 0 : "auto",
+            zIndex: 1000,
+            backgroundColor: "white",
+            borderRadius: "8px",
+            boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
+            padding: "15px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "10px",
+            width: isVerticalOrientation ? "100%" : "280px"
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h4 style={{ margin: 0, marginBottom: 16, fontSize: isTouchDevice ? 18 : 16 }}>Date Range</h4>
+              <button 
+                onClick={() => setShowDatePicker(false)}
+                style={{ 
+                  background: "none", 
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: isTouchDevice ? 22 : 16,
+                  padding: isTouchDevice ? 10 : 0,
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  width: isTouchDevice ? 40 : 30,
+                  height: isTouchDevice ? 40 : 30
+                }}
+              >
+                <FontAwesomeIcon icon={faTimes} />
+              </button>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <div>
+                <label style={{ display: "block", marginBottom: "5px", fontSize: isTouchDevice ? 16 : 14 }}>Start Date</label>
+                <input
+                  type="date"
+                  value={startDate.toISOString().split('T')[0]}
+                  onChange={(e) => setStartDate(new Date(e.target.value))}
+                  style={{ 
+                    padding: isTouchDevice ? "12px 8px" : "8px", 
+                    borderRadius: "4px", 
+                    border: "1px solid #ddd",
+                    width: "100%",
+                    fontSize: isTouchDevice ? 16 : "inherit"
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", marginBottom: "5px", fontSize: isTouchDevice ? 16 : 14 }}>End Date</label>
+                <input
+                  type="date"
+                  value={endDate.toISOString().split('T')[0]}
+                  onChange={(e) => setEndDate(new Date(e.target.value))}
+                  style={{ 
+                    padding: isTouchDevice ? "12px 8px" : "8px", 
+                    borderRadius: "4px", 
+                    border: "1px solid #ddd",
+                    width: "100%",
+                    fontSize: isTouchDevice ? 16 : "inherit"
+                  }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: "10px" }}>
+              <button
+                onClick={() => {
+                  setStartDate(new Date());
+                  setEndDate(new Date());
+                }}
+                style={{
+                  padding: isTouchDevice ? "12px 15px" : "8px 15px",
+                  backgroundColor: "#f1f1f1",
+                  border: "none",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  fontSize: isTouchDevice ? 16 : "inherit"
+                }}
+              >
+                Today Only
+              </button>
+              <button
+                onClick={() => {
+                  fetchJobsheets(searchTerm, statusFilter);
+                  setShowDatePicker(false);
+                }}
+                style={{
+                  padding: isTouchDevice ? "12px 15px" : "8px 15px",
+                  backgroundColor: "#5932EA",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  fontSize: isTouchDevice ? 16 : "inherit"
+                }}
+              >
+                Apply Filter
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -903,74 +891,97 @@ useEffect(() => {
           height: "100%",
           display: "flex",
           flexDirection: "column",
-          borderRadius: "30px",
+          borderRadius: isDesktopView ? "30px" : isTouchDevice ? "16px" : "24px",
           overflow: "hidden",
           backgroundColor: "#ffffff",
           boxSizing: "border-box",
-          padding: "20px",
-          position: "relative", // Add this to ensure modals position correctly relative to this container
+          padding: isDesktopView ? "24px" : isTouchDevice ? "15px" : "20px",
+          position: "relative",
+          touchAction: "pan-y",
+          WebkitOverflowScrolling: "touch"
         }}
       >
-        {/* Header, filters and button to add */}
         <div
           style={{
             display: "flex",
+            flexDirection: isVerticalOrientation ? "column" : "row",
             justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: "10px",
+            alignItems: isVerticalOrientation ? "stretch" : "center",
+            marginBottom: isTouchDevice ? "15px" : "10px",
+            gap: isTouchDevice ? "10px" : "0"
           }}
         >
-          {/* Elementos de filtro a la izquierda */}
-          <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-            <div style={{ position: "relative" }}>
+          <div style={{ 
+            display: "flex", 
+            flexDirection: isVerticalOrientation ? "column" : "row",
+            width: "100%",
+            gap: "10px", 
+            alignItems: isVerticalOrientation ? "stretch" : "center"
+          }}>
+            <div style={{ 
+              position: "relative", 
+              width: "100%" 
+            }}>
               <input
                 type="text"
                 placeholder="Search jobsheets..."
                 value={searchTerm}
                 onChange={handleSearch}
                 style={{
-                  padding: "5px 30px 5px 10px",
-                  width: "216px",
+                  padding: isTouchDevice ? "12px 35px 12px 12px" : "5px 30px 5px 10px",
+                  width: "100%",
                   borderRadius: "10px",
                   border: "1px solid white",
                   backgroundColor: "#F9FBFF",
-                  height: "25px",
+                  height: isTouchDevice ? "46px" : "25px",
+                  fontSize: isTouchDevice ? "16px" : "inherit",
+                  boxSizing: "border-box"
                 }}
               />
               <FontAwesomeIcon
                 icon={faSearch}
                 style={{
                   position: "absolute",
-                  right: "10px",
+                  right: "12px",
                   top: "50%",
                   transform: "translateY(-50%)",
                   color: loading ? "#4321C9" : "gray",
                   cursor: "pointer",
+                  fontSize: isTouchDevice ? "18px" : "inherit"
                 }}
               />
             </div>
 
-            <DateRangeSelector />
-
-            <StatusFilterButton />
+            <div style={{ 
+              display: "flex",
+              flexDirection: isVerticalOrientation ? "column" : "row",
+              gap: "10px",
+              width: "100%"
+            }}>
+              <DateRangeSelector />
+              <StatusFilterButton />
+            </div>
           </div>
 
-          {/* Botón "Add Job Sheet" */}
           <button
             onClick={handleOpenNewModal}
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
             style={{
-              padding: "10px 20px",
+              padding: isTouchDevice ? "14px 20px" : "10px 20px",
               backgroundColor: isHovered ? "#4321C9" : "#5932EA",
               color: "white",
               border: "none",
-              borderRadius: "5px",
+              borderRadius: "8px",
               cursor: "pointer",
               transition: "background-color 0.3s ease",
               display: "flex",
               alignItems: "center",
-              gap: "8px"
+              gap: "8px",
+              fontSize: isTouchDevice ? "16px" : "inherit",
+              width: "100%",
+              justifyContent: "center",
+              marginTop: isVerticalOrientation ? "5px" : "0"
             }}
           >
             <FontAwesomeIcon icon={faPlus} />
@@ -978,17 +989,23 @@ useEffect(() => {
           </button>
         </div>
 
-        {/* Grid with same style as InventoryView */}
-        <div style={{ flex: 1, position: "relative" }}>
+        <div style={{ 
+          flex: 1, 
+          position: "relative",
+          WebkitOverflowScrolling: "touch",
+          overscrollBehavior: "contain",
+          touchAction: "pan-y"
+        }}>
           <div
-            className="ag-theme-alpine inventory-view"
+            className="ag-theme-alpine inventory-view touch-enabled-grid"
             style={{
               width: "100%",
-              height: "100%",
-              overflowX: "hidden",
-              overflowY: "auto",
+              height: "100%", 
+              overflow: "auto",
               opacity: loading ? 0.6 : 1,
               transition: "opacity 0.3s ease",
+              WebkitOverflowScrolling: "touch",
+              msOverflowStyle: "-ms-autohiding-scrollbar"
             }}
           >
             <AgGridReact
@@ -1000,42 +1017,22 @@ useEffect(() => {
                 sortable: true,
                 flex: 1,
                 suppressMenu: true,
+                minWidth: isTouchDevice ? 120 : 100,
+                cellClass: isTouchDevice ? 'touch-cell' : ''
               }}
               modules={[ClientSideRowModelModule]}
               pagination={true}
-              paginationPageSize={12}
-              headerHeight={30}
-              rowHeight={50}
-              suppressSizeToFit={true}
-              suppressHorizontalScroll={true}
+              paginationPageSize={isTouchDevice ? 7 : 12}
+              headerHeight={isTouchDevice ? 50 : 30}
+              rowHeight={isTouchDevice ? 65 : 50}
+              suppressSizeToFit={false}
+              suppressHorizontalScroll={false}
               onGridReady={onGridReady}
+              gridOptions={gridOptions}
             />
           </div>
-          {loading && (
-            <div
-              style={{
-                position: "absolute",
-                top: "50%",
-                left: "50%",
-                transform: "translate(-50%, -50%)",
-                zIndex: 1000,
-              }}
-            >
-              <div
-                style={{
-                  width: "40px",
-                  height: "40px",
-                  border: "4px solid rgba(0, 0, 0, 0.1)",
-                  borderLeft: "4px solid #4321C9",
-                  borderRadius: "50%",
-                  animation: "spin 1s linear infinite",
-                }}
-              ></div>
-            </div>
-          )}
         </div>
-        
-        {/* JobsheetDetailView as a modal overlay - Modified to handle both new and existing jobsheets */}
+
         {showJobsheetDetail && (
           <div 
             style={{
@@ -1054,7 +1051,7 @@ useEffect(() => {
             <div
               style={{
                 position: "absolute",
-                top: "60px", // Leave space for navbar
+                top: "60px",
                 left: "50px",
                 right: "50px",
                 bottom: "50px",
@@ -1066,17 +1063,16 @@ useEffect(() => {
               }}
             >
               <JobsheetDetailView
-                jobsheetId={selectedJobsheetId} // This can be null for a new jobsheet
+                jobsheetId={selectedJobsheetId}
                 onClose={handleCloseJobsheetDetail}
                 refreshJobsheets={handleRefreshJobsheets}
                 isModal={true}
-                isNew={selectedJobsheetId === null} // Add this prop to indicate it's a new jobsheet
+                isNew={selectedJobsheetId === null}
               />
             </div>
           </div>
         )}
 
-        {/* Cancellation confirmation modal */}
         {showCancelModal && (
           <div style={{
             position: "fixed",
@@ -1139,7 +1135,6 @@ useEffect(() => {
           </div>
         )}
 
-        {/* Notification */}
         {notification.show && (
           <div
             style={{
@@ -1181,6 +1176,69 @@ useEffect(() => {
             @keyframes spin {
               0% { transform: rotate(0deg);}
               100% { transform: rotate(360deg);}
+            }
+            
+            .touch-enabled-grid {
+              -webkit-overflow-scrolling: touch !important;
+              overflow-scrolling: touch !important;
+              scroll-behavior: smooth !important;
+              overscroll-behavior: contain !important;
+              touch-action: pan-y !important;
+            }
+            
+            .touch-cell {
+              padding: 16px 8px !important;
+            }
+            
+            .ag-theme-alpine .ag-header-cell-label {
+              padding: 5px 8px !important;
+            }
+            
+            .ag-theme-alpine .ag-paging-button {
+              min-width: 40px !important;
+              min-height: 40px !important;
+              padding: 10px !important;
+            }
+            
+            .ag-theme-alpine .ag-body-viewport {
+              -webkit-overflow-scrolling: touch !important;
+            }
+            
+            @media (pointer: coarse) {
+              ::-webkit-scrollbar {
+                width: 6px;
+                height: 6px;
+              }
+              
+              ::-webkit-scrollbar-thumb {
+                background-color: rgba(89, 50, 234, 0.5);
+                border-radius: 6px;
+              }
+              
+              ::-webkit-scrollbar-track {
+                background-color: rgba(0, 0, 0, 0.05);
+              }
+              
+              .status-btn {
+                min-height: 28px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+              }
+              
+              .ag-theme-alpine {
+                user-select: none;
+              }
+            }
+            
+            @media screen and (orientation: portrait) {
+              .ag-theme-alpine .ag-header-cell {
+                padding: 0 5px !important;
+              }
+              
+              .ag-theme-alpine .ag-cell {
+                padding: 10px 5px !important;
+              }
             }
           `}
         </style>
