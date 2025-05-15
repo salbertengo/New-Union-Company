@@ -16,6 +16,29 @@ import {
 ModuleRegistry.registerModules([ClientSideRowModelModule]);
 
 const InventoryView = () => {
+  const GridStyles = () => (
+  <style>
+    {`
+      /* Estilo más fuerte y visible para filas resaltadas */
+      #inventory-grid-container .ag-row.highlight-flash {
+        background-color: #4CAF50 !important; 
+        animation: flashHighlight 2s ease;
+      }
+      
+      /* Animación más visible */
+      @keyframes flashHighlight {
+        0%, 20% { background-color: #4CAF50 !important; }
+        100% { background-color: transparent; }
+      }
+      
+      /* Asegurarnos que el highlight es visible en las celdas */
+      #inventory-grid-container .ag-row.highlight-flash .ag-cell {
+        background-color: transparent !important;
+      }
+    `}
+  </style>
+  );
+
   const [rowData, setRowData] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryTerm, setCategoryTerm] = useState('');
@@ -33,10 +56,13 @@ const InventoryView = () => {
   const searchTimeout = useRef(null);
   const [gridReady, setGridReady] = useState(false);
   const API_URL = process.env.REACT_APP_API_URL;
-
+const [isNewProduct, setIsNewProduct] = useState(false);
   const [showGoodsReceiveModal, setShowGoodsReceiveModal] = useState(false);
   const [suppliers, setSuppliers] = useState([]);
   const [jobsheets, setJobsheets] = useState([]);
+  const [newProductSku, setNewProductSku] = useState('');
+const [newProductCategory, setNewProductCategory] = useState('');
+const [newProductMinStock, setNewProductMinStock] = useState(0);
   const [goodsReceiveData, setGoodsReceiveData] = useState({
     supplier_name: '',
     invoice_number: '',
@@ -58,33 +84,129 @@ const InventoryView = () => {
     type: 'success' // or 'error'
   });
   const modalInitialFocusRef = useRef(null);
+  const [receiveHighlightIndex, setReceiveHighlightIndex] = useState(null);
+  const [highlightedRowIds, setHighlightedRowIds] = useState([]);
+
+useEffect(() => {
+  if (!gridReady || !gridRef.current || highlightedRowIds.length === 0) return;
+  
+  console.log('🔍 Aplicando highlight a productos:', highlightedRowIds);
+
+  // Función para encontrar la página donde está un producto específico
+  const findProductPage = (productId) => {
+    let foundPage = -1;
+    const pageSize = gridRef.current.paginationGetPageSize();
+    const totalRows = gridRef.current.getDisplayedRowCount();
+    const totalPages = Math.ceil(totalRows / pageSize);
+    
+    // Revisar en cada página hasta encontrar el producto
+    for (let page = 0; page < totalPages; page++) {
+      let found = false;
+      
+      // Temporalmente cambiar a esta página para verificar
+      gridRef.current.paginationGoToPage(page);
+      
+      gridRef.current.forEachNodeAfterFilterAndSort(node => {
+        if (node.data && highlightedRowIds.includes(node.data.id.toString())) {
+          foundPage = page;
+          found = true;
+        }
+      });
+      
+      if (found) break;
+    }
+    
+    return foundPage;
+  };
+  
+  // Encontrar la primera página que contiene un producto a resaltar
+  const targetPage = findProductPage(highlightedRowIds[0]);
+  
+  if (targetPage >= 0) {
+    console.log(`🔍 Productos encontrados en página ${targetPage+1}, navegando...`);
+    
+    // Navegar a la página donde está el producto
+    gridRef.current.paginationGoToPage(targetPage);
+    
+    // Esperar a que se complete el cambio de página
+    setTimeout(() => {
+      // Aplicar highlight a los productos visibles en esta página
+      const matchingNodes = [];
+      gridRef.current.forEachNodeAfterFilterAndSort(node => {
+        if (node.data && highlightedRowIds.includes(node.data.id.toString())) {
+          matchingNodes.push(node);
+        }
+      });
+      
+      console.log(`🟢 Encontrados ${matchingNodes.length} productos para highlight en página actual`);
+      
+      // Aplicar estilos a los productos encontrados
+      matchingNodes.forEach(node => {
+        const rowElement = document.querySelector(`#inventory-grid-container .ag-row[row-index="${node.rowIndex}"]`);
+        
+        if (rowElement) {
+          console.log(`✅ Aplicando highlight a fila ${node.rowIndex} (ID=${node.data.id})`);
+          
+          // Efectos visuales
+          rowElement.style.transition = "all 0.3s ease";
+          rowElement.style.backgroundColor = "#4CAF50";
+          rowElement.style.color = "white";
+          rowElement.style.fontWeight = "bold";
+          
+          // Añadir una notificación para informar sobre productos en otras páginas
+          if (highlightedRowIds.length > matchingNodes.length) {
+            setNotification({
+              show: true,
+              type: 'info',
+              message: `${matchingNodes.length} de ${highlightedRowIds.length} productos nuevos visibles en esta página`
+            });
+          }
+          
+          // Animación de flash
+          setTimeout(() => {
+            rowElement.style.backgroundColor = "#90EE90";
+          }, 500);
+        }
+      });
+      
+      // Limpiar después de un tiempo
+      setTimeout(() => {
+        matchingNodes.forEach(node => {
+          const rowElement = document.querySelector(`#inventory-grid-container .ag-row[row-index="${node.rowIndex}"]`);
+          if (rowElement) {
+            rowElement.style.backgroundColor = '';
+            rowElement.style.color = '';
+            rowElement.style.fontWeight = '';
+          }
+        });
+        setHighlightedRowIds([]);
+      }, 3000);
+    }, 300);
+  } else {
+    console.log('❌ No se encontraron productos para highlight en ninguna página');
+    setHighlightedRowIds([]);
+  }
+}, [highlightedRowIds, gridReady]);
 
   const fetchInventoryData = useCallback(async (search = '', category = '') => {
     setLoading(true);
-    const token = localStorage.getItem('token');
-    if (!token) {
-      console.error('No token found');
-      setLoading(false);
-      return;
-    }
-    
     try {
+      const token = localStorage.getItem('token');
       let url = `${API_URL}/inventory`;
       const params = new URLSearchParams();
-      
-      if (search) {
-        params.append('search', search);
+
+      if (search.trim()) {
+        params.append('search', search.trim());
       }
-      
       if (category) {
         params.append('category', category);
       }
-      
-      const queryString = params.toString();
-      if (queryString) {
-        url = `${url}?${queryString}`;
+
+      const query = params.toString();
+      if (query) {
+        url += `?${query}`;
       }
-      
+
       const response = await fetch(url, {
         method: 'GET',
         headers: {
@@ -92,16 +214,22 @@ const InventoryView = () => {
           'Authorization': `Bearer ${token}`,
         },
       });
-      
-      if (!response.ok) throw new Error('Error fetching inventory');
+      if (!response.ok) {
+        throw new Error(`Error fetching inventory: ${response.status}`);
+      }
+
       const data = await response.json();
       setRowData(data);
+      return data;
     } catch (error) {
       console.error('Error fetching inventory:', error);
+      // opcional: podrías setear una notificación de error aquí
     } finally {
       setLoading(false);
     }
-  }, []);
+  },
+  [API_URL]
+);
 
   const fetchSuppliers = useCallback(async () => {
     try {
@@ -133,9 +261,7 @@ const fetchJobsheets = useCallback(async () => {
       return;
     }
     
-    // Change the parameter format to what the backend expects
-    // Use 'pending' state only, or modify backend to support multiple states
-    const url = `${API_URL}/jobsheets?state=pending`;
+    const url = `${API_URL}/jobsheets?state=${encodeURIComponent("in progress")}`;
     console.log(`Fetching jobsheets from: ${url}`);
     
     const response = await fetch(url, {
@@ -199,7 +325,9 @@ const fetchJobsheets = useCallback(async () => {
   };
 
   useEffect(() => {
-    fetchInventoryData();
+    fetchInventoryData().then(() => {
+      // rowData ya actualizado
+    });
     
     return () => {
       if (searchTimeout.current) {
@@ -238,7 +366,6 @@ const fetchJobsheets = useCallback(async () => {
  const handleOpenGoodsReceiveModal = async () => {
   setShowGoodsReceiveModal(true);
   
-  // Reset form data
   setGoodsReceiveData({
     supplier_name: '',
     invoice_number: '',
@@ -246,12 +373,10 @@ const fetchJobsheets = useCallback(async () => {
     items: []
   });
   
-  // Show a loading state for jobsheets table
   setJobsheets([]);
   setLoading(true);
   
   try {
-    // Fetch data in parallel
     await Promise.all([
       fetchSuppliers(),
       fetchJobsheets()
@@ -260,7 +385,6 @@ const fetchJobsheets = useCallback(async () => {
     console.error("Error initializing goods receive modal:", error);
   }
   
-  // Set focus after modal opens and data is loaded
   setTimeout(() => {
     if (modalInitialFocusRef.current) {
       modalInitialFocusRef.current.focus();
@@ -277,26 +401,57 @@ const fetchJobsheets = useCallback(async () => {
   };
 
   const handleNewReceiveItemChange = (e) => {
-    const { name, value } = e.target;
-    setNewReceiveItem({
-      ...newReceiveItem,
-      [name]: value
-    });
-    
-    if (name === 'product_id' && value) {
-      const product = rowData.find(p => p.id === parseInt(value));
-      if (product) {
-        setNewReceiveItem({
-          ...newReceiveItem,
-          product_id: value,
-          product_name: product.name,
-          cost_price: product.cost || 0
-        });
-      }
+  const { name, value } = e.target;
+  
+  // Update the field value first
+  setNewReceiveItem({
+    ...newReceiveItem,
+    [name]: value
+  });
+  
+  // Only check for new product if the product name field is being changed
+  // and only after user has stopped typing
+  if (name === 'product_name') {
+    // Clear any existing timeout
+    if (searchTimeout.current) {
+      clearTimeout(searchTimeout.current);
     }
-  };
-
-  const addItemToReceive = () => {
+    
+    // Set new timeout to check for product existence
+    // This helps prevent UI disruption while typing
+    searchTimeout.current = setTimeout(() => {
+      if (value.trim() === '') {
+        setIsNewProduct(false);
+        return;
+      }
+      
+      // Search for exact matches first
+      const exactProduct = rowData.find(p => 
+        p.name.toLowerCase() === value.toLowerCase() || 
+        `${p.sku} - ${p.name}`.toLowerCase() === value.toLowerCase()
+      );
+      
+      if (exactProduct) {
+        // Product exists in inventory
+        setIsNewProduct(false);
+        setNewReceiveItem(prev => ({
+          ...prev,
+          product_id: exactProduct.id,
+          cost_price: exactProduct.cost || 0,
+          sale_price: exactProduct.sale || 0
+        }));
+      } else {
+        // For new products, don't immediately activate new product mode
+        // Only set if the name has at least 3 characters to avoid accidental triggers
+        if (value.trim().length >= 3) {
+          setIsNewProduct(true);
+        }
+      }
+    }, 500); // Wait 500ms after user stops typing
+  }
+};
+const addItemToReceive = () => {
+    // Validate required fields
     if (!newReceiveItem.product_name || !newReceiveItem.quantity || 
         !newReceiveItem.cost_price || !newReceiveItem.sale_price) {
       setNotification({
@@ -307,17 +462,58 @@ const fetchJobsheets = useCallback(async () => {
       return;
     }
 
+    // Additional validation for new products
+    if (isNewProduct) {
+      if (!newProductSku) {
+        setNotification({
+          show: true,
+          type: 'error',
+          message: 'Please enter an SKU for the new product'
+        });
+        return;
+      }
+      
+      // Validate SKU uniqueness
+      const skuExists = rowData.some(p => p.sku.toLowerCase() === newProductSku.toLowerCase());
+      if (skuExists) {
+        setNotification({
+          show: true,
+          type: 'error',
+          message: 'This SKU already exists. Please choose a different one'
+        });
+        return;
+      }
+    }
+
+    const itemToAdd = { ...newReceiveItem };
+    
+    // Add additional info for new products
+    if (isNewProduct) {
+      itemToAdd._isNew = true;
+      itemToAdd.sku = newProductSku;
+      itemToAdd.name = newReceiveItem.product_name;
+      itemToAdd.product_id = null;
+      itemToAdd.category = newProductCategory;
+      itemToAdd.min = parseInt(newProductMinStock) || 0;
+    }
+
+    // Add item to the list
+    const prevLen = goodsReceiveData.items.length;
     setGoodsReceiveData({
       ...goodsReceiveData,
-      items: [...goodsReceiveData.items, { ...newReceiveItem }]
+      items: [...goodsReceiveData.items, itemToAdd]
     });
-    
+    setReceiveHighlightIndex(prevLen);
+    setTimeout(() => setReceiveHighlightIndex(null), 3000);
+
+    // Show success notification
     setNotification({
       show: true,
       type: 'success',
-      message: 'Item added successfully'
+      message: isNewProduct ? 'New product added successfully' : 'Item added successfully'
     });
     
+    // Reset form fields
     setNewReceiveItem({
       product_id: '',
       product_name: '',
@@ -327,12 +523,15 @@ const fetchJobsheets = useCallback(async () => {
       jobsheet_id: '',
       license_plate: ''
     });
+    setIsNewProduct(false);
+    setNewProductSku('');
+    setNewProductCategory('');
+    setNewProductMinStock(0);
     
-    // Focus back on product field for fast entry
+    // Focus on product field for next entry
     const productField = document.querySelector('input[name="product_name"]');
     if (productField) productField.focus();
-  };
-
+};
   const removeReceiveItem = (index) => {
     const newItems = [...goodsReceiveData.items];
     newItems.splice(index, 1);
@@ -342,61 +541,67 @@ const fetchJobsheets = useCallback(async () => {
       items: newItems
     });
   };
+const handleSubmitGoodsReceive = async () => {
+  if (!goodsReceiveData.supplier_name || !goodsReceiveData.items.length) {
+    setNotification({
+      show: true,
+      type: 'error',
+      message: 'Please enter supplier name and add at least one item'
+    });
+    return;
+  }
 
-  const handleSubmitGoodsReceive = async () => {
-    if (!goodsReceiveData.supplier_name || !goodsReceiveData.items.length) {
-      setNotification({
-        show: true,
-        type: 'error',
-        message: 'Please enter supplier name and add at least one item'
-      });
-      return;
-    }
-    
-    try {
-      const token = localStorage.getItem('token');
-      // Update to the correct endpoint
-      const response = await fetch(`${API_URL}/suppliers`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(goodsReceiveData)
-      });
+  try {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/suppliers`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(goodsReceiveData)
+    });
       
-      if (response.ok) {
-        setNotification({
-          show: true,
-          type: 'success',
-          message: 'Goods receipt successfully registered'
-        });
-        setShowGoodsReceiveModal(false);
-        setRefreshInventory(!refreshInventory);
-      } else {
-        try {
-          const errorData = await response.json();
-          setNotification({
-            show: true,
-            type: 'error',
-            message: `Error: ${errorData.error || 'Could not register receipt'}`
-          });
-        } catch (parseError) {
-          setNotification({
-            show: true,
-            type: 'error',
-            message: `Error ${response.status}: Request could not be processed`
-          });
-        }
-      }
-    } catch (error) {
+    if (response.ok) {
+      // Guardamos los IDs de los productos recién recibidos
+      // Aquí solo incluimos los IDs de productos existentes, no los nuevos (ya que sus IDs reales
+      // serán generados por el servidor)
+      const productIds = goodsReceiveData.items
+        .filter(i => !i._isNew)
+        .map(i => i.product_id.toString());
+      
+      // Recargamos los datos y esperamos a que termine
+      await fetchInventoryData(searchTerm, categoryTerm);
+      
+      // Esperar a que React actualice el DOM antes de intentar actualizar highlightedRowIds
+      setTimeout(() => {
+        console.log(`🔄 Aplicando highlight a ${productIds.length} productos recibidos`);
+        setHighlightedRowIds(productIds);
+      }, 500);
+
+      setNotification({
+        show: true,
+        type: 'success',
+        message: 'Goods receipt successfully registered'
+      });
+      setShowGoodsReceiveModal(false);
+    } else {
+      const errorData = await response.json();
       setNotification({
         show: true,
         type: 'error',
-        message: 'Connection error when registering receipt'
+        message: errorData.message || 'Error registering goods receipt'
       });
     }
-  };
+  } catch (error) {
+    console.error("Error submitting goods receive:", error);
+    setNotification({
+      show: true,
+      type: 'error',
+      message: 'Network error when submitting goods receipt'
+    });
+  }
+};
 
   const defaultColDef = {
     resizable: false,
@@ -489,34 +694,52 @@ const fetchJobsheets = useCallback(async () => {
   };
 
   const columnDefs = useMemo(() => [
-    { headerName: 'SKU', field: 'sku', width: 250, headerClass: 'custom-header-inventory', suppressMenu: true },
-    { 
-      headerName: 'Name', 
-      field: 'name', 
-      width: 400,
-      autoHeight: true,
-      wrapText: true,
-      cellClass: 'cell-name',
-      headerClass: 'custom-header-inventory', 
-      suppressMenu: true,
-      cellRenderer: params => {
-        const cellValue = params.value || '';
-        return (
-          <div title={cellValue}>
-            {cellValue}
+    { headerName: 'SKU', field: 'sku', flex: 1, headerClass: 'custom-header-inventory', suppressMenu: true },
+   { 
+  headerName: 'Name', 
+  field: 'name', 
+  flex: 3,
+  autoHeight: true,
+  wrapText: true,
+  cellClass: 'cell-name',
+  headerClass: 'custom-header-inventory', 
+  suppressMenu: true,
+  cellRenderer: params => {
+    // Verificar si este producto está en la lista de destacados
+    const isHighlighted = highlightedRowIds.includes(params.data.id.toString());
+    
+    return (
+      <div title={params.value} style={{ display: 'flex', alignItems: 'center' }}>
+        {params.value}
+        
+        {isHighlighted && (
+          <div style={{
+            backgroundColor: '#4CAF50',
+            color: 'white',
+            padding: '2px 8px',
+            borderRadius: '12px',
+            fontSize: '11px',
+            fontWeight: 'bold',
+            marginLeft: '8px',
+            display: 'inline-flex',
+            alignItems: 'center'
+          }}>
+            NEW
           </div>
-        );
-      },
-    },   
-    { headerName: 'Category', field: 'category', width: 80, headerClass: 'custom-header-inventory', suppressMenu: true },
-    { headerName: 'Brand', field: 'brand', width: 120, headerClass: 'custom-header-inventory', suppressMenu: true },
-    { headerName: 'Stock', field: 'stock', width: 80, headerClass: 'custom-header-inventory', suppressMenu: true },
-    { headerName: 'Min', field: 'min', width: 80, headerClass: 'custom-header-inventory', suppressMenu: true },
-    { headerName: 'Cost', field: 'cost', width: 80, headerClass: 'custom-header-inventory', suppressMenu: true },
-    { headerName: 'Sale', field: 'sale', width: 80, headerClass: 'custom-header-inventory', suppressMenu: true },
+        )}
+      </div>
+    );
+  },
+},   
+    { headerName: 'Category', field: 'category', flex: 1, headerClass: 'custom-header-inventory', suppressMenu: true },
+    { headerName: 'Brand', field: 'brand', flex: 1, headerClass: 'custom-header-inventory', suppressMenu: true },
+    { headerName: 'Stock', field: 'stock', flex: 1, headerClass: 'custom-header-inventory', suppressMenu: true },
+    { headerName: 'Min', field: 'min', flex: 1, headerClass: 'custom-header-inventory', suppressMenu: true },
+    { headerName: 'Cost', field: 'cost', flex: 1, headerClass: 'custom-header-inventory', suppressMenu: true },
+    { headerName: 'Sale', field: 'sale', flex: 1, headerClass: 'custom-header-inventory', suppressMenu: true },
     {
       headerName: 'Actions',
-      width: 160,
+      flex: 1,
       sortable: false,
       filter: false,
       suppressMenu: true,
@@ -687,15 +910,10 @@ const fetchJobsheets = useCallback(async () => {
     }
   };
 
-  const onGridReady = (params) => {
+  const onGridReady = params => {
     gridRef.current = params.api;
-    
-    setTimeout(() => {
-      if (gridRef.current && !gridRef.current.isDestroyed()) {
-        gridRef.current.sizeColumnsToFit();
-        setGridReady(true);
-      }
-    }, 100);
+    params.api.sizeColumnsToFit();
+    setGridReady(true);
   };
 
   const Notification = ({ show, message, type, onClose }) => {
@@ -788,6 +1006,7 @@ const fetchJobsheets = useCallback(async () => {
         padding: '20px'
       }}
     >
+      <GridStyles />
       <div
         style={{
           display: 'flex',
@@ -892,7 +1111,9 @@ const fetchJobsheets = useCallback(async () => {
       </div>
 
       <div style={{ flex: 1, position: 'relative' }}>
-        <div className="ag-theme-alpine inventory-view" 
+        <div 
+          id="inventory-grid-container" 
+          className="ag-theme-alpine inventory-view" 
           style={{ 
             width: '100%', 
             height: '100%',
@@ -901,20 +1122,25 @@ const fetchJobsheets = useCallback(async () => {
             opacity: loading ? 0.6 : 1,
             transition: 'opacity 0.3s ease'
           }}>
-          <AgGridReact
-            ref={gridRef}
-            rowData={rowData}
-            columnDefs={columnDefs}
-            defaultColDef={defaultColDef} 
-            modules={[ClientSideRowModelModule]}
-            pagination={true}
-            paginationPageSize={12}
-            headerHeight={30}
-            rowHeight={50}
-            suppressSizeToFit={false}
-            suppressHorizontalScroll={false}
-            onGridReady={onGridReady}
-          />
+   <AgGridReact
+  ref={gridRef}
+  rowData={rowData}
+  columnDefs={columnDefs}
+  defaultColDef={defaultColDef}
+  modules={[ClientSideRowModelModule]}
+  pagination
+  paginationPageSize={12}
+  headerHeight={30}
+  rowHeight={50}
+  suppressSizeToFit={false}
+  suppressHorizontalScroll={false}
+  onGridReady={onGridReady}
+  getRowNodeId={data => data.id.toString()}
+  rowClassRules={{
+    'inventory-highlight-row': params => 
+      highlightedRowIds.includes(params.data.id.toString())
+  }}
+/>
         </div>
         {loading && (
           <div style={{
@@ -963,9 +1189,6 @@ const fetchJobsheets = useCallback(async () => {
             zIndex: 1000,
             animation: "fadeIn 0.2s ease",
           }}
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setShowModal(false);
-          }}
         >
           <div
             style={{
@@ -980,7 +1203,6 @@ const fetchJobsheets = useCallback(async () => {
               overflow: "visible",
               animation: "modalFadeIn 0.3s ease",
             }}
-            onClick={(e) => e.stopPropagation()}
           >
             {/* NUEVO DISEÑO DE HEADER - Completamente rediseñado con altura fija */}
             <div
@@ -1203,87 +1425,81 @@ const fetchJobsheets = useCallback(async () => {
                   </h3>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
                     <div>
-                      <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
-                        Cost Price *
-                      </label>
-                      <div style={{ position: "relative" }}>
-  <span style={{ 
-    position: "absolute", 
-    left: "12px", 
-    top: "50%", 
-    transform: "translateY(-50%)",
-    color: "#666",
-    fontSize: "14px",
-    pointerEvents: "none"
-  }}>$</span>
- <input
-  type="text"
-  value={editItem.cost === 0 ? '' : editItem.cost}
-  onChange={(e) => {
-    const val = e.target.value;
-    if (val === '' || /^\d*\.?\d*$/.test(val)) {
-      setEditItem({ ...editItem, cost: val === '' ? 0 : val });
-    }
-  }}
-  onBlur={(e) => {
-    setEditItem({ ...editItem, cost: parseFloat(editItem.cost) || 0 });
-  }}
-  style={{
-    width: "100%",
-    padding: "12px 12px 12px 30px",
-    borderRadius: "8px",
-    border: "1px solid #e0e0e0",
-    backgroundColor: "#fff",
-    fontSize: "14px",
-    transition: "border-color 0.2s",
-    outline: "none",
-    boxSizing: "border-box"
-  }}
-  placeholder="0.00"
-/>
-
-</div>
+  <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
+    Cost Price *
+  </label>
+  <div style={{ position: "relative" }}>
+    <span style={{
+      position: "absolute",
+      left: "12px",
+      top: "50%",
+      transform: "translateY(-50%)",
+      color: "#666",
+      fontSize: "14px",
+      pointerEvents: "none"
+    }}>$</span>
+    <input
+      type="number"
+      step="0.01"
+      min="0"
+      name="cost_price"
+      value={newReceiveItem.cost_price}
+      onChange={e => setNewReceiveItem({
+        ...newReceiveItem,
+        cost_price: parseFloat(e.target.value) || 0
+      })}
+      style={{
+        width: "100%",
+        padding: "12px 12px 12px 30px",
+        borderRadius: "8px",
+        border: "1px solid #e0e0e0",
+        backgroundColor: "#fff",
+        fontSize: "14px",
+        outline: "none",
+        boxSizing: "border-box"
+      }}
+      placeholder="0.00"
+      required
+    />
+  </div>
                     </div>
-                    <div>
-                      <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
-                        Sale Price *
-                      </label>
-                      <div style={{ position: "relative" }}>
-  <span style={{ 
-    position: "absolute", 
-    left: "12px", 
-    top: "50%", 
-    transform: "translateY(-50%)",
-    color: "#666",
-    fontSize: "14px",
-    pointerEvents: "none"
-  }}>$</span>
- <input
-  type="text"
-  value={editItem.sale === 0 ? '' : editItem.sale}
-  onChange={(e) => {
-    const val = e.target.value;
-    // Expresión regular simplificada
-    if (val === '' || /^\d*\.?\d*$/.test(val)) {
-      setEditItem({ ...editItem, sale: val === '' ? 0 : val });
-    }
-  }}
-  onBlur={(e) => {
-    setEditItem({ ...editItem, sale: parseFloat(editItem.sale) || 0 });
-  }}
-  style={{
-    width: "100%",
-    padding: "12px 12px 12px 30px",
-    borderRadius: "8px",
-    border: "1px solid #e0e0e0",
-    backgroundColor: "#fff",
-    fontSize: "14px",
-    transition: "border-color 0.2s",
-    outline: "none",
-    boxSizing: "border-box"
-  }}
-  placeholder="0.00"
-/>
+                   <div>
+  <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
+    Sale Price *
+  </label>
+  <div style={{ position: "relative" }}>
+    <span style={{
+      position: "absolute",
+      left: "12px",
+      top: "50%",
+      transform: "translateY(-50%)",
+      color: "#666",
+      fontSize: "14px",
+      pointerEvents: "none"
+    }}>$</span>
+    <input
+      type="number"
+      step="0.01"
+      min="0"
+      name="sale_price"
+      value={newReceiveItem.sale_price}
+      onChange={e => setNewReceiveItem({
+        ...newReceiveItem,
+        sale_price: parseFloat(e.target.value) || 0
+      })}
+      style={{
+        width: "100%",
+        padding: "12px 12px 12px 30px",
+        borderRadius: "8px",
+        border: "1px solid #e0e0e0",
+        backgroundColor: "#fff",
+        fontSize: "14px",
+        outline: "none",
+        boxSizing: "border-box"
+      }}
+      placeholder="0.00"
+      required
+    />
 </div>
                       {editItem.cost > 0 && editItem.sale > 0 && (
                         <div style={{ 
@@ -1613,9 +1829,6 @@ const fetchJobsheets = useCallback(async () => {
             zIndex: 1000,
             animation: "fadeIn 0.2s ease",
           }}
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setShowCompatibilityModal(false);
-          }}
         >
 
           
@@ -1633,7 +1846,6 @@ const fetchJobsheets = useCallback(async () => {
                 overflow: "hidden",
                 animation: "modalFadeIn 0.3s ease",
               }}
-              onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
               <div
@@ -1968,9 +2180,6 @@ const fetchJobsheets = useCallback(async () => {
       zIndex: 1000,
       animation: "fadeIn 0.2s ease",
     }}
-    onClick={(e) => {
-      if (e.target === e.currentTarget) setShowGoodsReceiveModal(false);
-    }}
   >
     <div
       style={{
@@ -1985,7 +2194,6 @@ const fetchJobsheets = useCallback(async () => {
         overflow: "hidden",
         animation: "modalFadeIn 0.3s ease",
       }}
-      onClick={(e) => e.stopPropagation()}
     >
       {/* Header */}
       <div
@@ -2161,20 +2369,9 @@ const fetchJobsheets = useCallback(async () => {
                 type="text"
                 list="products-list"
                 name="product_name"
-                value={newReceiveItem.product_name || ""}
-                onChange={(e) => {
-                  const product = rowData.find(p => 
-                    p.name === e.target.value || 
-                    `${p.sku} - ${p.name}` === e.target.value
-                  );
-                  setNewReceiveItem({
-                    ...newReceiveItem,
-                    product_id: product ? product.id : '',
-                    product_name: e.target.value,
-                    cost_price: product ? product.cost : newReceiveItem.cost_price,
-                    sale_price: product ? product.sale : newReceiveItem.sale_price
-                  });
-                }}
+  value={newReceiveItem.product_name || ""}
+                onChange={handleNewReceiveItemChange}
+
                 style={{
                   width: "100%",
                   padding: "12px",
@@ -2194,7 +2391,125 @@ const fetchJobsheets = useCallback(async () => {
                 ))}
               </datalist>
             </div>
-            
+            {isNewProduct && (
+  <div style={{ 
+    gridColumn: "1 / -1",  // Span across all columns
+    marginTop: "12px",
+    padding: "15px", 
+    backgroundColor: "#fff8e1", 
+    borderRadius: "8px",
+    border: "1px solid #ffe0b2",
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr 1fr",
+    gap: "16px"
+  }}>
+    <div style={{ 
+      gridColumn: "1 / -1",
+      display: "flex", 
+      alignItems: "center", 
+      gap: "8px", 
+      marginBottom: "8px",
+      fontSize: "14px",
+      color: "#f57c00"
+    }}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 9V11M12 15H12.01M5.07183 19H18.9282C20.4678 19 21.4301 17.3333 20.6603 16L13.7321 4C12.9623 2.66667 11.0377 2.66667 10.2679 4L3.33975 16C2.56998 17.3333 3.53223 19 5.07183 19Z" stroke="#f57c00" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+      <span style={{ fontWeight: "600" }}>
+        New product will be created
+      </span>
+      <button
+        onClick={() => setIsNewProduct(false)}
+        style={{
+          background: "none",
+          border: "none",
+          marginLeft: "auto",
+          color: "#666",
+          cursor: "pointer",
+          fontSize: "13px",
+          textDecoration: "underline"
+        }}
+      >
+        Cancel
+      </button>
+    </div>
+    
+    <div>
+      <label style={{ display: "block", marginBottom: "6px", fontSize: "13px", fontWeight: "500", color: "#555" }}>
+        SKU for new product *
+      </label>
+      <input
+        type="text"
+        value={newProductSku}
+        onChange={(e) => setNewProductSku(e.target.value)}
+        style={{
+          width: "100%",
+          padding: "10px",
+          borderRadius: "6px",
+          border: "1px solid #e0e0e0",
+          backgroundColor: "#fff",
+          fontSize: "14px",
+          outline: "none",
+          boxSizing: "border-box"
+        }}
+        placeholder="Enter unique SKU"
+        required
+      />
+    </div>
+    
+    <div>
+      <label style={{ display: "block", marginBottom: "6px", fontSize: "13px", fontWeight: "500", color: "#555" }}>
+        Category (optional)
+      </label>
+      <input
+        type="text"
+        list="category-options"
+        value={newProductCategory}
+        onChange={(e) => setNewProductCategory(e.target.value)}
+        style={{
+          width: "100%",
+          padding: "10px",
+          borderRadius: "6px",
+          border: "1px solid #e0e0e0",
+          backgroundColor: "#fff",
+          fontSize: "14px",
+          outline: "none",
+          boxSizing: "border-box"
+        }}
+        placeholder="Select category"
+      />
+      <datalist id="category-options">
+        {uniqueCategories.map(cat => (
+          <option key={cat} value={cat} />
+        ))}
+      </datalist>
+    </div>
+    
+    <div>
+      <label style={{ display: "block", marginBottom: "6px", fontSize: "13px", fontWeight: "500", color: "#555" }}>
+        Minimum Stock Level *
+      </label>
+      <input
+        type="number"
+        min="0"
+        value={newProductMinStock}
+        onChange={(e) => setNewProductMinStock(e.target.value)}
+        style={{
+          width: "100%",
+          padding: "10px",
+          borderRadius: "6px",
+          border: "1px solid #e0e0e0",
+          backgroundColor: "#fff",
+          fontSize: "14px",
+          outline: "none",
+          boxSizing: "border-box"
+        }}
+        placeholder="0"
+        required
+      />
+    </div>
+  </div>
+)}
             <div>
               <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
                 Quantity *
@@ -2219,93 +2534,85 @@ const fetchJobsheets = useCallback(async () => {
               />
             </div>
             
-            <div>
-              <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
-                Cost Price *
-              </label>
-              <div style={{ position: "relative" }}>
-                <span style={{ 
-                  position: "absolute", 
-                  left: "12px", 
-                  top: "50%", 
-                  transform: "translateY(-50%)",
-                  color: "#666",
-                  fontSize: "14px",
-                  pointerEvents: "none"
-                }}>$</span>
-                <input
-                  type="text"
-                  value={newReceiveItem.cost_price === 0 ? '' : newReceiveItem.cost_price}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                      setNewReceiveItem({
-                        ...newReceiveItem,
-                        cost_price: val === '' ? 0 : parseFloat(val)
-                      });
-                    }
-                  }}
-                  min="0"
-                  step="0.01"
-                  style={{
-                    width: "100%",
-                    padding: "12px 12px 12px 30px",
-                    borderRadius: "8px",
-                    border: "1px solid #e0e0e0",
-                    backgroundColor: "#fff",
-                    fontSize: "14px",
-                    outline: "none",
-                    boxSizing: "border-box"
-                  }}
-                  placeholder="0.00"
-                  required
-                />
-              </div>
-            </div>
+         <div>
+  <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
+    Cost Price *
+  </label>
+  <div style={{ position: "relative" }}>
+    <span style={{
+      position: "absolute",
+      left: "12px",
+      top: "50%",
+      transform: "translateY(-50%)",
+      color: "#666",
+      fontSize: "14px",
+      pointerEvents: "none"
+    }}>$</span>
+    <input
+      type="number"
+      step="0.01"
+      min="0"
+      name="cost_price"
+  value={newReceiveItem.cost_price || ''}
+      onChange={e => setNewReceiveItem({
+        ...newReceiveItem,
+        cost_price: parseFloat(e.target.value) || 0
+      })}
+      style={{
+        width: "100%",
+        padding: "12px 12px 12px 30px",
+        borderRadius: "8px",
+        border: "1px solid #e0e0e0",
+        backgroundColor: "#fff",
+        fontSize: "14px",
+        outline: "none",
+        boxSizing: "border-box"
+      }}
+      placeholder="0.00"
+      required
+    />
+  </div>
+</div>
             
-            <div>
-              <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
-                Sale Price *
-              </label>
-              <div style={{ position: "relative" }}>
-                <span style={{ 
-                  position: "absolute", 
-                  left: "12px", 
-                  top: "50%", 
-                  transform: "translateY(-50%)",
-                  color: "#666",
-                  fontSize: "14px",
-                  pointerEvents: "none"
-                }}>$</span>
-                <input
-                  type="text"
-                  value={newReceiveItem.sale_price === 0 ? '' : newReceiveItem.sale_price}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                      setNewReceiveItem({
-                        ...newReceiveItem,
-                        sale_price: val === '' ? 0 : parseFloat(val)
-                      });
-                    }
-                  }}
-                  min="0"
-                  step="0.01"
-                  style={{
-                    width: "100%",
-                    padding: "12px 12px 12px 30px",
-                    borderRadius: "8px",
-                    border: "1px solid #e0e0e0",
-                    backgroundColor: "#fff",
-                    fontSize: "14px",
-                    outline: "none",
-                    boxSizing: "border-box"
-                  }}
-                  placeholder="0.00"
-                  required
-                />
-              </div>
-            </div>
+           <div>
+  <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
+    Sale Price *
+  </label>
+  <div style={{ position: "relative" }}>
+    <span style={{
+      position: "absolute",
+      left: "12px",
+      top: "50%",
+      transform: "translateY(-50%)",
+      color: "#666",
+      fontSize: "14px",
+      pointerEvents: "none"
+    }}>$</span>
+    <input
+      type="number"
+      step="0.01"
+      min="0"
+      name="sale_price"
+  value={newReceiveItem.sale_price || ''}
+      onChange={e => setNewReceiveItem({
+        ...newReceiveItem,
+        sale_price: parseFloat(e.target.value) || 0
+      })}
+      style={{
+        width: "100%",
+        padding: "12px 12px 12px 30px",
+        borderRadius: "8px",
+        border: "1px solid #e0e0e0",
+        backgroundColor: "#fff",
+        fontSize: "14px",
+        outline: "none",
+        boxSizing: "border-box"
+      }}
+      placeholder="0.00"
+      required
+    />
+  </div>
+</div>
             
             <div>
   <label style={{ 
@@ -2579,9 +2886,10 @@ const fetchJobsheets = useCallback(async () => {
                     gap: "12px",
                     alignItems: "center",
                     padding: "12px 16px",
-                    backgroundColor: "#fff",
                     borderRadius: "8px",
                     border: "1px solid #e0e0e0",
+                    backgroundColor: index === receiveHighlightIndex ? "#e7fbe9" : "#fff",
+                    transition: "background-color 1s ease"
                   }}
                 >
                   <div style={{ fontSize: "14px", fontWeight: "500" }}>{item.product_name}</div>
@@ -2729,6 +3037,8 @@ const fetchJobsheets = useCallback(async () => {
     </div>
   </div>
 )}
+
+
 {notification.show && (
   <Notification
     show={notification.show}
@@ -2738,7 +3048,10 @@ const fetchJobsheets = useCallback(async () => {
   />
 )}
     </div>
+    
   );
+  
 };
 
 export default InventoryView;
+

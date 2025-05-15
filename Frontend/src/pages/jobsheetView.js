@@ -48,7 +48,7 @@ const [vehicles, setVehicles] = useState([]);  const [currentJobsheet, setCurren
     customer_id: "",
     vehicle_id: "",
     description: "",
-    state: "pending",
+    state: "in_progress",
     date_created: new Date().toISOString().split("T")[0],
   });
 
@@ -498,7 +498,6 @@ const DateRangeSelector = () => {
   const StatusFilterButton = () => {
     const statuses = [
       "all",
-      "pending",
       "in progress",
       "completed",
       "cancelled",
@@ -512,8 +511,7 @@ const DateRangeSelector = () => {
     };
 
     let color = "#666";
-    if (statusFilter === "pending") color = "#FF9500";
-    else if (statusFilter === "completed") color = "#00C853";
+   if (statusFilter === "completed") color = "#00C853";
     else if (statusFilter === "in progress") color = "#2979FF";
     else if (statusFilter === "cancelled") color = "#F44336";
 

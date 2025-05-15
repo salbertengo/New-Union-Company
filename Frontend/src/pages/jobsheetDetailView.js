@@ -6,7 +6,6 @@ import {
   faArrowLeft, faSearch, faExclamationCircle, 
   faCheckCircle, faCar, faSave, faUser, faStore
 } from "@fortawesome/free-solid-svg-icons";
-import Invoice from "../components/invoice";
 
 const WORKFLOW_KEYWORDS = {
   "deposit": { id: "2", defaultDescription: "Deposit for Bike Sale" },
@@ -92,10 +91,22 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
   
   const printableContentRef = useRef(null);
   const API_URL = process.env.REACT_APP_API_URL;
+  const [showExitConfirmation, setShowExitConfirmation] = useState(false);
 
   const effectiveJobsheetId = internalJobsheetId || propJobsheetId;
   const effectiveIsNew = internalIsNew && !internalJobsheetId;
+const [deletedItemIds, setDeletedItemIds] = useState([]);
+const [deletedLaborIds, setDeletedLaborIds] = useState([]);
+const [pendingJobsheetUpdates, setPendingJobsheetUpdates] = useState({});
+const [hasPendingChanges, setHasPendingChanges] = useState(false);
 
+// Reset these when jobsheet ID changes
+useEffect(() => {
+  setDeletedItemIds([]);
+  setDeletedLaborIds([]);
+  setPendingJobsheetUpdates({});
+  setHasPendingChanges(false);
+}, [effectiveJobsheetId, effectiveIsNew]);
   const allItems = [...items, ...labors.map(labor => ({
     id: `labor-${labor.id}`,
     name: labor.description || "Labor",
@@ -184,6 +195,19 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
       setCurrentWorkflowKeywordInfo(null);
     }
   }, [effectiveJobsheetId]);
+  const handleExitClick = () => {
+    if (hasPendingChanges) {
+      setShowExitConfirmation(true);
+    } else {
+      onClose();
+    }
+  };
+
+  // Add this function to handle confirmed exit
+  const handleConfirmedExit = () => {
+    setShowExitConfirmation(false);
+    onClose();
+  };
 
   const fetchItems = async (token, id = null) => {
     const idToUse = id || effectiveJobsheetId;
@@ -248,97 +272,77 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
     return colors[type] || "#757575"; // Default to Grey 600
   };
 
-  const handleUpdateJobsheetCustomer = async () => {
-    if (!selectedCustomerId) {
-      showNotification("No customer selected", "error");
-      return;
-    }
-    
-    setIsLoading(true);
+ const handleUpdateJobsheetCustomer = async () => {
+  if (!selectedCustomerId) {
+    showNotification("No customer selected", "error");
+    return;
+  }
+  
+  // Update local jobsheet state for UI feedback
+  if (selectedCustomer) {
+    setJobsheet(prevJobsheet => ({
+      ...prevJobsheet, 
+      customer_id: selectedCustomerId,
+      customer_name: selectedCustomer.name,
+      customer_contact: selectedCustomer.contact,
+      customer_email: selectedCustomer.email
+    }));
+  }
+  
+  // Track pending update
+  setPendingJobsheetUpdates(prev => ({
+    ...prev, 
+    customer_id: selectedCustomerId
+  }));
+  
+  setHasPendingChanges(true);
+  setShowCustomerModal(false);
+  showNotification("Customer assigned locally. Click Save & Exit to persist changes.", "info");
+};
+
+  const handleLicensePlateSearch = async (e) => {
+  const value = e.target.value;
+  setLicensePlate(value);
+  setNewVehicleDetails({
+    ...newVehicleDetails,
+    plate: value
+  });
+
+  // Check for walk-in keyword but don't return early
+  if (value.toLowerCase().includes('walk')) {
+    console.log("Detected walk-in request");
+    setPlateSearchResults([]);
+    // Continue execution to ensure state updates properly
+  } else if (value.length >= 2) {
     try {
       const token = localStorage.getItem("token");
       if (!token) return;
-      
-      const updateData = {
-        ...jobsheet,
-        customer_id: selectedCustomerId
-      };
-      
-      const response = await fetch(`${API_URL}/jobsheets/${effectiveJobsheetId}`, {
-        method: "PUT",
-        headers: {
+
+      const response = await fetch(`${API_URL}/vehicles?search=${encodeURIComponent(value)}`, {
+        headers: { 
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${token}` 
         },
-        body: JSON.stringify(updateData),
       });
-      
+
       if (response.ok) {
-        await loadJobsheetData();
-        setShowCustomerModal(false);
-        setSelectedCustomer(null);
-        setSelectedCustomerId(null);
-        showNotification("Customer assigned successfully", "success");
-      } else {
-        const errorText = await response.text();
-        let errorMessage = "Failed to update customer";
-        try {
-          const errorData = JSON.parse(errorText);
-          errorMessage = errorData.error || errorData.message || errorMessage;
-        } catch (e) {}
-        showNotification(errorMessage, "error");
-      }
-    } catch (error) {
-      console.error("Error updating customer:", error);
-      showNotification("Error updating customer: " + error.message, "error");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleLicensePlateSearch = async (e) => {
-    const value = e.target.value;
-    setLicensePlate(value);
-    setNewVehicleDetails({
-      ...newVehicleDetails,
-      plate: value
-    });
-
-    if (value.toLowerCase().includes('walk')) {
-      setPlateSearchResults([]);
-      return;
-    }
-
-    if (value.length >= 2) {
-      try {
-        const token = localStorage.getItem("token");
-        if (!token) return;
-
-        const response = await fetch(`${API_URL}/vehicles?search=${encodeURIComponent(value)}`, {
-          headers: { 
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}` 
-          },
+        const vehicles = await response.json();
+        const filteredResults = vehicles.filter(vehicle => {
+          const plateValue = vehicle.plate || vehicle.license_plate || "";
+          return plateValue.toLowerCase().includes(value.toLowerCase());
         });
 
-        if (response.ok) {
-          const vehicles = await response.json();
-          const filteredResults = vehicles.filter(vehicle => {
-            const plateValue = vehicle.plate || vehicle.license_plate || "";
-            return plateValue.toLowerCase().includes(value.toLowerCase());
-          });
-
-          setPlateSearchResults(filteredResults);
-        } else {
-          console.error("Error searching vehicles:", response.status);
-        }
-      } catch (error) {
-        console.error("Error searching vehicles:", error);
+        setPlateSearchResults(filteredResults);
+      } else {
+        console.error("Error searching vehicles:", response.status);
       }
-    } else {
-      setPlateSearchResults([]);
+    } catch (error) {
+      console.error("Error searching vehicles:", error);
     }
-  };
+  } else {
+    setPlateSearchResults([]);
+  }
+};
 
   const handleSelectVehicle = async (vehicle) => {
     if (!vehicle || !vehicle.id) {
@@ -572,7 +576,7 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
     const jobsheetData = {
       vehicle_id: vehicleId,
       customer_id: null,
-      state: "pending",
+      state: "in progress",
       description: "",
       service_notes: "",
       user_id: userId
@@ -640,29 +644,70 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
   }
 };
 
-  const handleWalkInJobsheet = async () => {
+ const handleWalkInJobsheet = async () => {
+  console.log("Creating walk-in jobsheet...");
   setIsLoading(true);
   try {
     const token = localStorage.getItem("token");
-    if (!token) return;
+    if (!token) {
+      console.error("No token found");
+      showNotification("Authentication error: Please login again", "error");
+      return;
+    }
 
-    // Get the current user ID from localStorage or context
-    const userData = JSON.parse(localStorage.getItem("user") || "{}");
-    const userId = userData.id;
+    // Get the current user ID from localStorage (try multiple approaches)
+    let userId = null;
+    
+    // Try from user object
+    try {
+      const userStr = localStorage.getItem("user");
+      if (userStr) {
+        const userData = JSON.parse(userStr);
+        userId = userData.id;
+        console.log("Found user ID:", userId);
+      }
+    } catch (e) {
+      console.error("Error parsing user data:", e);
+    }
+    
+    // Try direct userId
+    if (!userId) {
+      userId = localStorage.getItem("userId");
+      console.log("Using direct userId:", userId);
+    }
+    
+    // Try from token (if JWT)
+    if (!userId && token) {
+      try {
+        const base64Url = token.split('.')[1];
+        if (base64Url) {
+          const jsonPayload = atob(base64Url);
+          const tokenData = JSON.parse(jsonPayload);
+          userId = tokenData.id || tokenData.sub;
+          console.log("Extracted user ID from token:", userId);
+        }
+      } catch (e) {
+        console.error("Error extracting user ID from token:", e);
+      }
+    }
 
     if (!userId) {
       showNotification("User session not found. Please log in again.", "error");
       return;
     }
 
+    console.log("Creating walk-in sale with user ID:", userId);
+    
     const jobsheetData = {
       vehicle_id: null,
       customer_id: null,
-      state: "pending",
+      state: "in progress",
       description: "Walk-in Sale",
       service_notes: "",
-      user_id: userId  // Add the user ID here
+      user_id: userId
     };
+
+    console.log("Sending data:", jobsheetData);
 
     const response = await fetch(`${API_URL}/jobsheets`, {
       method: "POST",
@@ -673,10 +718,14 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
       body: JSON.stringify(jobsheetData),
     });
 
+    console.log("Response status:", response.status);
+    
     if (response.ok) {
       const newJobsheet = await response.json();
+      console.log("Jobsheet created:", newJobsheet);
       showNotification("Walk-in jobsheet created successfully", "success");
       
+      // Wait a moment before refreshing to ensure server processing completes
       setTimeout(() => {
         if (refreshJobsheets) refreshJobsheets();
         setInternalIsNew(false);
@@ -684,9 +733,9 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
         loadJobsheetData(newJobsheet.id);
       }, 500);
     } else {
-      const errorData = await response.text();
-      console.error("Error creating walk-in jobsheet:", errorData);
-      showNotification("Error creating walk-in jobsheet: " + errorData, "error");
+      const errorText = await response.text();
+      console.error("Error response:", errorText);
+      showNotification("Error creating walk-in jobsheet: " + errorText, "error");
     }
   } catch (error) {
     console.error("Exception creating walk-in jobsheet:", error);
@@ -703,7 +752,10 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
     setNewMiscPrice(""); 
     setActiveInputMode("search");
     setCurrentWorkflowKeywordInfo(null);
-    
+      setDeletedItemIds([]);
+  setDeletedLaborIds([]);
+  setPendingJobsheetUpdates({});
+  setHasPendingChanges(false);
     setIsLoading(true);
     
     try {
@@ -899,231 +951,210 @@ const calculateTotals = () => {
   };
   
   const handleAddItemToJobsheet = async () => {
-    if (!selectedProductForAdding) {
-      showNotification("Please select a product first", "error");
-      return;
-    }
-    if (isReadOnly) {
-      showNotification(`This order is ${jobsheet?.state} and cannot be modified`, "error");
-      return;
-    }
-    try {
-      const token = localStorage.getItem("token");
-      if (!token) return;
+  if (!selectedProductForAdding) {
+    showNotification("Please select a product first", "error");
+    return;
+  }
+  if (isReadOnly) {
+    showNotification(`This order is ${jobsheet?.state} and cannot be modified`, "error");
+    return;
+  }
   
-      if (!effectiveJobsheetId) {
-        showNotification("Cannot add item: No active jobsheet", "error");
-        return;
+  if (!effectiveJobsheetId) {
+    showNotification("Cannot add item: No active jobsheet", "error");
+    return;
+  }
+  
+  const quantity = parseInt(newItemQuantity) || 1;
+  if (quantity <= 0) {
+    showNotification("Quantity must be at least 1", "error");
+    return;
+  }
+
+  // Create a new item with a temporary ID and action flag
+  const newItem = {
+    id: `temp-item-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+    jobsheet_id: effectiveJobsheetId,
+    product_id: selectedProductForAdding.id,
+    name: selectedProductForAdding.name,
+    description: selectedProductForAdding.description || selectedProductForAdding.name,
+    quantity: quantity,
+    price: selectedProductForAdding.sale,
+    _action: 'create' // Mark as new item to be created on save
+  };
+
+  // Add to local state
+  setItems(prevItems => [...prevItems, newItem]);
+  setHasPendingChanges(true);
+  
+  // Reset input fields and selection
+  setInventorySearchTerm("");
+  setSearchResults([]);
+  setNewItemQuantity(1);
+  setSelectedProductForAdding(null);
+  showNotification("Item added locally. Click Save & Exit to persist changes.", "info");
+};
+
+const handleUpdateItemQuantity = async (itemToUpdate) => {
+  if (isReadOnly || itemToUpdate.isLabor) return;
+
+  const newQuantity = parseInt(editValue);
+
+  if (isNaN(newQuantity) || newQuantity <= 0) {
+    showNotification("Invalid quantity. Must be a number greater than 0.", "error");
+    setEditingCell({ itemId: null, field: null });
+    setEditValue("");
+    return;
+  }
+
+  if (newQuantity === itemToUpdate.quantity) {
+    setEditingCell({ itemId: null, field: null });
+    return;
+  }
+
+  // Update the item in local state
+  setItems(prevItems => prevItems.map(item => {
+    if (item.id === itemToUpdate.id) {
+      // If this is a new item (added in this session but not yet saved)
+      // we can just update it without marking for update
+      if (item._action === 'create') {
+        return { ...item, quantity: newQuantity };
       }
       
-      const quantity = parseInt(newItemQuantity) || 1;
-      if (quantity <= 0) {
-        showNotification("Quantity must be at least 1", "error");
-        return;
-      }
-  
-      const itemData = {
-        jobsheet_id: effectiveJobsheetId,
-        product_id: selectedProductForAdding.id,
-        quantity: quantity,
-        price: selectedProductForAdding.sale,
-        description: selectedProductForAdding.description || selectedProductForAdding.name
+      // For existing items, mark for update
+      return { 
+        ...item, 
+        quantity: newQuantity,
+        _action: 'update' 
       };
+    }
+    return item;
+  }));
   
-      const response = await fetch(`${API_URL}/jobsheets/items`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(itemData),
-      });
+  setHasPendingChanges(true);
+  setEditingCell({ itemId: null, field: null });
+  setEditValue("");
+  showNotification("Quantity updated locally. Click Save & Exit to persist changes.", "info");
+};
+
+ const handleAddLabor = async (description, price, workflowTypeId = "1") => {
+  if (isReadOnly) {
+    showNotification(`This order is ${jobsheet?.state} and cannot be modified.`, "error");
+    return;
+  }
+  if (!description && workflowTypeId === "1") { // Only require description for generic labor
+    showNotification("Labor description is required.", "error");
+    return;
+  }
+  if (!price || parseFloat(price) <= 0) {
+    showNotification("A valid price is required.", "error");
+    return;
+  }
+  if (!effectiveJobsheetId) {
+    showNotification("Cannot add: No active jobsheet.", "error");
+    return;
+  }
+
+  // Create new labor with temporary ID and action flag
+  const newLabor = {
+    id: `temp-labor-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+    jobsheet_id: effectiveJobsheetId,
+    description: description || WORKFLOW_KEYWORDS[Object.keys(WORKFLOW_KEYWORDS).find(key => 
+      WORKFLOW_KEYWORDS[key].id === workflowTypeId)]?.defaultDescription || "Service Charge",
+    price: parseFloat(price),
+    is_completed: 1,
+    is_billed: 1,
+    workflow_type: workflowTypeId,
+    _action: 'create',
+    isLabor: true // For compatibility with allItems
+  };
+
+  // Add to local state
+  setLabors(prevLabors => [...prevLabors, newLabor]);
+  setHasPendingChanges(true);
   
-      if (response.ok) {
-        await fetchItems(token);
-        setInventorySearchTerm("");
-        setSearchResults([]);
-        setNewItemQuantity(1);
-        setSelectedProductForAdding(null);
-        showNotification("Item added successfully", "success");
-      } else {
-        const errorText = await response.text();
-        handleApiError(errorText, "Failed to add item");
-      }
-    } catch (error) {
-      handleApiError(error, "Error adding item");
-    }
-  };
-
-  const handleUpdateItemQuantity = async (itemToUpdate) => {
-    if (isReadOnly || itemToUpdate.isLabor) return;
-
-    const newQuantity = parseInt(editValue);
-
-    if (isNaN(newQuantity) || newQuantity <= 0) {
-      showNotification("Invalid quantity. Must be a number greater than 0.", "error");
-      setEditingCell({ itemId: null, field: null });
-      setEditValue("");
-      return;
-    }
-
-    if (newQuantity === itemToUpdate.quantity) {
-      setEditingCell({ itemId: null, field: null });
-      return;
-    }
-
-    try {
-      const token = localStorage.getItem("token");
-      if (!token) return;
-
-      const response = await fetch(`${API_URL}/jobsheets/items/${itemToUpdate.id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ 
-          quantity: newQuantity,
-          price: itemToUpdate.price
-        }),
-      });
-
-      if (response.ok) {
-        await fetchItems(token);
-        showNotification("Quantity updated successfully", "success");
-      } else {
-        const errorText = await response.text();
-        handleApiError(errorText, "Failed to update quantity");
-      }
-    } catch (error) {
-      handleApiError(error, "Error updating quantity");
-    } finally {
-      setEditingCell({ itemId: null, field: null });
-      setEditValue("");
-    }
-  };
-
-  const handleAddLabor = async (description, price, workflowTypeId = "1") => {
-    if (isReadOnly) {
-      showNotification(`This order is ${jobsheet?.state} and cannot be modified.`, "error");
-      return;
-    }
-    if (!description && workflowTypeId === "1") { // Solo requerir descripción para labor genérico
-      showNotification("Labor description is required.", "error");
-      return;
-    }
-    if (!price || parseFloat(price) <= 0) {
-      showNotification("A valid price is required.", "error");
-      return;
-    }
-    if (!effectiveJobsheetId) {
-      showNotification("Cannot add: No active jobsheet.", "error");
-      return;
-    }
-
-    try {
-      const token = localStorage.getItem("token");
-      if (!token) return;
-
-      const laborData = {
-        jobsheet_id: effectiveJobsheetId,
-        description: description || WORKFLOW_KEYWORDS[Object.keys(WORKFLOW_KEYWORDS).find(key => WORKFLOW_KEYWORDS[key].id === workflowTypeId)]?.defaultDescription || "Service Charge",
-        price: parseFloat(price),
-        is_completed: 1, // Por defecto se marca como completado y facturable
-        is_billed: 1,
-        workflow_type: workflowTypeId,
-      };
-
-      const response = await fetch(`${API_URL}/labor`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(laborData),
-      });
-
-      if (response.ok) {
-        await fetchLabors(token); // Asumiendo que tienes fetchLabors para refrescar
-        showNotification(`${laborData.description} added successfully.`, "success");
-        // Resetear campos específicos del modo
-        setInventorySearchTerm(""); // Limpiar búsqueda para salir del modo labor/workflow
-        setActiveInputMode("search"); // Volver al modo búsqueda
-        setNewMiscName("");
-        setNewMiscPrice("");
-        setCurrentWorkflowKeywordInfo(null);
-      } else {
-        const errorData = await response.json();
-        showNotification(errorData.error || "Failed to add labor/service.", "error");
-      }
-    } catch (error) {
-      console.error("Error adding labor/service:", error);
-      showNotification("Error adding labor/service.", "error");
-    }
-  };
-
-
-  const handleDeleteItem = async (itemId) => {
-    if (isReadOnly) {
-      showNotification(`This order is ${jobsheet?.state} and cannot be modified`, "error");
-      return;
-    }
-    try {
-      const token = localStorage.getItem("token");
-      if (!token) return;
+  // Reset input fields
+  setInventorySearchTerm("");
+  setActiveInputMode("search");
+  setNewMiscName("");
+  setNewMiscPrice("");
+  setCurrentWorkflowKeywordInfo(null);
   
-      const response = await fetch(`${API_URL}/jobsheets/items/${itemId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
+  showNotification(`${newLabor.description} added locally. Click Save & Exit to persist changes.`, "info");
+};
+
+
+const handleDeleteItem = async (itemId) => {
+  if (isReadOnly) {
+    showNotification(`This order is ${jobsheet?.state} and cannot be modified`, "error");
+    return;
+  }
+
+  const itemToDelete = items.find(item => item.id === itemId);
   
-      if (response.ok) {
-        await fetchItems(token);
-        showNotification("Item removed successfully", "success");
-      } else {
-        console.error("Failed to delete item:", response.status);
-        
-        try {
-          const errorText = await response.text();
-          console.error("Error details:", errorText);
-        } catch (e) {
-        }
-        
-        showNotification(`Failed to remove item (${response.status})`, "error");
-      }
-    } catch (error) {
-      console.error("Error deleting item:", error);
-      showNotification("Error removing item", "error");
+  if (itemToDelete) {
+    // Si el ítem es nuevo (no guardado en el servidor)
+    if (itemToDelete._action === 'create') {
+      // Simplemente eliminar del array local
+      setItems(prevItems => prevItems.filter(item => item.id !== itemId));
+    } else {
+      // Para ítems existentes, seguir ID para eliminación y también eliminar de la UI
+      setDeletedItemIds(prev => [...prev, itemId]);
+      setItems(prevItems => prevItems.filter(item => item.id !== itemId));
     }
-  };
+    
+    setHasPendingChanges(true);
+    showNotification("Item removed locally. Click Save & Exit to persist changes.", "info");
+  } else {
+    console.error("Item not found for deletion:", itemId);
+  }
+};
 
-  const handleDeleteLabor = async (laborId) => {
-    if (isReadOnly) {
-      showNotification(`This order is ${jobsheet?.state} and cannot be modified`, "error");
-      return;
+ const handleDeleteLabor = async (laborId) => {
+  if (isReadOnly) {
+    showNotification(`This order is ${jobsheet?.state} and cannot be modified`, "error");
+    return;
+  }
+
+  // No quitar el prefijo "labor-" si es parte de un ID temporal
+  let originalLaborId = laborId.toString();
+  if (!originalLaborId.includes('temp-')) {
+    // Solo quitar el prefijo "labor-" si NO es un ID temporal
+    originalLaborId = originalLaborId.replace('labor-', '');
+  }
+  
+  console.log("Intentando borrar labor:", { 
+    laborId, 
+    originalLaborId, 
+    todosLosLabors: labors.map(l => ({ id: l.id, tipo: typeof l.id }))
+  });
+  
+  // Buscar con el ID correcto
+  const laborToDelete = labors.find(labor => labor.id.toString() === originalLaborId);
+
+  if (laborToDelete) {
+    console.log("Labor encontrado, borrando:", laborToDelete);
+    
+    // Si el elemento es nuevo (no guardado en el servidor)
+    if (laborToDelete._action === 'create') {
+      // Simplemente eliminar del array local
+      setLabors(prevLabors => prevLabors.filter(labor => labor.id !== laborToDelete.id));
+    } else {
+      // Para labores existentes, seguir ID para eliminación y también eliminar de la UI
+      setDeletedLaborIds(prev => [...prev, laborToDelete.id]);
+      setLabors(prevLabors => prevLabors.filter(labor => labor.id !== laborToDelete.id));
     }
-    try {
-      const token = localStorage.getItem("token");
-      if (!token) return;
-
-      const response = await fetch(`${API_URL}/labor/${laborId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (response.ok) {
-        await fetchLabors(token);
-        showNotification("Labor service removed successfully", "success");
-      } else {
-        console.error("Failed to delete labor:", response.status);
-        showNotification("Failed to remove labor service", "error");
-      }
-    } catch (error) {
-      console.error("Error deleting labor:", error);
-      showNotification("Error removing labor service", "error");
-    }
-  };
-
+    
+    setHasPendingChanges(true);
+    showNotification("Labor removed locally. Click Save to persist changes.", "info");
+  } else {
+    console.error(
+      `Labor not found for deletion: ${laborId} (original: ${originalLaborId})`,
+      `Available labors:`, labors.map(l => `${l.id} (${typeof l.id})`)
+    );
+    showNotification(`Error: No se pudo encontrar el elemento para borrar (ID: ${originalLaborId})`, "error");
+  }
+};
   const handlePrint = () => {
     const printWindow = window.open('', '_blank', 'width=800,height=600');
     
@@ -1364,27 +1395,224 @@ const calculateTotals = () => {
     printWindow.document.close();
   };
 
-  const handleAddPayment = async () => {
-    if (isReadOnly) {
-      showNotification(`This order is ${jobsheet?.state} and no additional payments can be added`, "error");
-      return;
+ const handleAddPayment = async () => {
+  if (isReadOnly) {
+    showNotification(`This order is ${jobsheet?.state} and no additional payments can be added`, "error");
+    return;
+  }
+  if (!paymentAmount || parseFloat(paymentAmount) <= 0) {
+    showNotification("Please enter a valid payment amount", "error");
+    return;
+  }
+  if (!effectiveJobsheetId) {
+    showNotification("Cannot add payment: No active jobsheet.", "error");
+    return;
+  }
+
+  // Parse the payment amount as float
+  const paymentAmountFloat = parseFloat(paymentAmount);
+
+  // Create new payment with temporary ID and action flag
+  const newPayment = {
+    id: `temp-payment-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+    jobsheet_id: effectiveJobsheetId,
+    amount: paymentAmountFloat,
+    method: paymentMethod,
+    payment_date: new Date().toISOString().split('T')[0],
+    _action: 'create'
+  };
+
+  // Add to local state
+  setPayments(prevPayments => [...prevPayments, newPayment]);
+  setHasPendingChanges(true);
+  
+  // Reset input field
+  setPaymentAmount("");
+  
+  // Calculate new totals including this payment
+  const newTotals = calculateTotals({ 
+    items, 
+    labors, 
+    payments: [...payments, newPayment]
+  });
+  
+  if (newTotals.balance <= 0 && newTotals.subtotal > 0 && jobsheet?.state !== "completed") {
+    // Don't change the UI to read-only yet, just mark that the jobsheet state will be updated when saved
+    setPendingJobsheetUpdates(prev => ({...prev, state: "completed"}));
+    showNotification("Full payment received. Order will be marked as completed when you save.", "success");
+  } else {
+    showNotification("Payment added locally. Click Save to persist changes.", "info");
+  }
+};
+
+useEffect(() => {
+  const updateJobsheetStatusIfPaid = () => {
+    if (jobsheet && !isLoading) { 
+      const totals = calculateTotals();
+      
+      if (totals.balance <= 0 && 
+          totals.subtotal > 0 && 
+          jobsheet.state !== "completed") {
+        
+        // Don't update the UI state yet - just mark it for update when saved
+        setPendingJobsheetUpdates(prev => ({...prev, state: "completed"}));
+        setHasPendingChanges(true);
+        // Note we're not updating the jobsheet.state here anymore
+      }
     }
-    if (!paymentAmount || parseFloat(paymentAmount) <= 0) {
-      showNotification("Please enter a valid payment amount", "error");
-      return;
+  };
+  
+  updateJobsheetStatusIfPaid();
+}, [jobsheet, items, labors, payments, isLoading]);
+
+    const handleSaveAndExit = async () => {
+  if (!effectiveJobsheetId) {
+    showNotification("No active jobsheet to save.", "error");
+    return;
+  }
+  
+  setIsLoading(true);
+  const token = localStorage.getItem("token");
+  if (!token) {
+    setIsLoading(false);
+    showNotification("Authentication error.", "error");
+    return;
+  }
+  
+  let allSavesSuccessful = true;
+  const errors = [];
+  
+  try {
+    // 1. First, handle jobsheet updates (customer_id, state, etc.)
+    if (Object.keys(pendingJobsheetUpdates).length > 0) {
+      console.log("Saving jobsheet updates:", pendingJobsheetUpdates);
+      const response = await fetch(`${API_URL}/jobsheets/${effectiveJobsheetId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ 
+          ...jobsheet,
+          ...pendingJobsheetUpdates 
+        }),
+      });
+      
+      if (!response.ok) {
+        allSavesSuccessful = false;
+        const errorText = await response.text();
+        errors.push(`Failed to update jobsheet details: ${errorText}`);
+      }
     }
-
-    try {
-      const token = localStorage.getItem("token");
-      if (!token) return;
-
-      const paymentData = {
-        jobsheet_id: effectiveJobsheetId,
-        amount: parseFloat(paymentAmount),
-        method: paymentMethod,
-        payment_date: new Date().toISOString().split('T')[0]
-      };
-
+    
+    // 2. Delete items that were removed
+    for (const itemId of deletedItemIds) {
+      console.log("Deleting item:", itemId);
+      const response = await fetch(`${API_URL}/jobsheets/items/${itemId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      
+      if (!response.ok) {
+        allSavesSuccessful = false;
+        const errorText = await response.text();
+        errors.push(`Failed to delete item ${itemId}: ${errorText}`);
+      }
+    }
+    
+    // 3. Delete labors that were removed
+    for (const laborId of deletedLaborIds) {
+      console.log("Deleting labor:", laborId);
+      const response = await fetch(`${API_URL}/labor/${laborId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      
+      if (!response.ok) {
+        allSavesSuccessful = false;
+        const errorText = await response.text();
+        errors.push(`Failed to delete labor ${laborId}: ${errorText}`);
+      }
+    }
+    
+    // 4. Create new items
+    const itemsToCreate = items.filter(item => item._action === 'create');
+    for (const item of itemsToCreate) {
+      console.log("Creating item:", item);
+      // Remove temporary properties
+      const { _action, id, name, ...itemData } = item;
+      
+      const response = await fetch(`${API_URL}/jobsheets/items`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(itemData),
+      });
+      
+      if (!response.ok) {
+        allSavesSuccessful = false;
+        const errorText = await response.text();
+        errors.push(`Failed to create item: ${errorText}`);
+      }
+    }
+    
+    // 5. Update existing items that were modified
+    const itemsToUpdate = items.filter(item => item._action === 'update');
+    for (const item of itemsToUpdate) {
+      console.log("Updating item:", item);
+      const { _action, ...itemData } = item;
+      
+      const response = await fetch(`${API_URL}/jobsheets/items/${item.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          quantity: itemData.quantity,
+          price: itemData.price
+        }),
+      });
+      
+      if (!response.ok) {
+        allSavesSuccessful = false;
+        const errorText = await response.text();
+        errors.push(`Failed to update item: ${errorText}`);
+      }
+    }
+    
+    // 6. Create new labors
+    const laborsToCreate = labors.filter(labor => labor._action === 'create');
+    for (const labor of laborsToCreate) {
+      console.log("Creating labor:", labor);
+      // Remove temporary properties
+      const { _action, id, isLabor, ...laborData } = labor;
+      
+      const response = await fetch(`${API_URL}/labor`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(laborData),
+      });
+      
+      if (!response.ok) {
+        allSavesSuccessful = false;
+        const errorText = await response.text();
+        errors.push(`Failed to create labor: ${errorText}`);
+      }
+    }
+    
+    // 7. Create new payments
+    const paymentsToCreate = payments.filter(payment => payment._action === 'create');
+    for (const payment of paymentsToCreate) {
+      console.log("Creating payment:", payment);
+      // Remove temporary properties
+      const { _action, id, ...paymentData } = payment;
+      
       const response = await fetch(`${API_URL}/jobsheets/payments`, {
         method: "POST",
         headers: {
@@ -1393,65 +1621,38 @@ const calculateTotals = () => {
         },
         body: JSON.stringify(paymentData),
       });
-
-      if (response.ok) {
-        await fetchPayments(token);
-        setPaymentAmount("");
-        showNotification("Payment added successfully", "success");
-      } else {
-        console.error("Failed to add payment:", response.status);
-        showNotification("Failed to add payment", "error");
+      
+      if (!response.ok) {
+        allSavesSuccessful = false;
+        const errorText = await response.text();
+        errors.push(`Failed to create payment: ${errorText}`);
       }
-    } catch (error) {
-      console.error("Error adding payment:", error);
-      showNotification("Error adding payment", "error");
     }
-  };
-
-  useEffect(() => {
-    const updateJobsheetStatusIfPaid = async () => {
-      if (jobsheet && !isLoading) { 
-        const totals = calculateTotals();
-        
-        if (totals.balance <= 0 && 
-            totals.subtotal > 0 && 
-            jobsheet.state !== "completed") {
-          try {
-            const token = localStorage.getItem("token");
-            if (!token) return;
-            
-            const updateData = {
-              ...jobsheet,
-              state: "completed"
-            };
-            
-            const response = await fetch(`${API_URL}/jobsheets/${effectiveJobsheetId}`, {
-              method: "PUT",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token}`,
-              },
-              body: JSON.stringify(updateData),
-            });
-            
-            if (response.ok) {
-              setJobsheet(prevJobsheet => ({...prevJobsheet, state: "completed"}));
-              showNotification("Order marked as completed as it is fully paid", "success");
-            } else {
-              const errorText = await response.text();
-              console.error("Failed to update jobsheet state to completed:", errorText);
-              showNotification("Could not automatically update order status.", "error");
-            }
-          } catch (error) {
-            console.error("Error updating jobsheet status:", error);
-            showNotification("Error automatically updating order status.", "error");
-          }
-        }
-      }
-    };
     
-    updateJobsheetStatusIfPaid();
-  }, [jobsheet, items, labors, payments, isLoading, effectiveJobsheetId, API_URL, taxRate]);
+  } catch (error) {
+    console.error("Error saving changes:", error);
+    allSavesSuccessful = false;
+    errors.push(error.message);
+  } finally {
+    setIsLoading(false);
+  }
+  
+  if (allSavesSuccessful) {
+    showNotification("All changes saved successfully", "success");
+    // Clear tracking of pending changes
+    setDeletedItemIds([]);
+    setDeletedLaborIds([]);
+    setPendingJobsheetUpdates({});
+    setHasPendingChanges(false);
+    
+    // Refresh local data and exit
+    if (refreshJobsheets) refreshJobsheets();
+    onClose();
+  } else {
+    showNotification(`Error saving changes: ${errors.join("; ")}`, "error");
+    console.error("Failed to save changes:", errors);
+  }
+};
 
   const handleCustomerSearch = async (e) => {
     const term = e.target.value;
@@ -1555,8 +1756,10 @@ const calculateTotals = () => {
     }
   };
 
-  const isReadOnly = effectiveJobsheetId && (jobsheet?.state === "completed" || jobsheet?.state === "cancelled");
-
+const isReadOnly = effectiveJobsheetId && 
+                  // Only consider the actual jobsheet.state (server state), not pending updates
+                  (jobsheet?.state === "completed" || jobsheet?.state === "cancelled") 
+                  // And ensure we're not in the middle of saving a completion state
   if (isLoading) {
     return <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh" }}>
       <div style={{
@@ -1576,53 +1779,79 @@ const calculateTotals = () => {
     </div>;
   }
 
-  if (effectiveIsNew) {
-    return (
-      <div style={{
+ if (effectiveIsNew) {
+   return (
+      <div style={{ // Contenedor principal del modal/vista de página completa
         position: isModal ? "relative" : "fixed",
         top: isModal ? "auto" : 0,
-        left: isModal ? "auto" : 0, 
-        right: isModal ? "auto" : 0,
+        // Para el caso !isModal (vista de página completa), centramos y hacemos más angosto
+        left: isModal ? "auto" : "50%",
+        right: isModal ? "auto" : "auto", // Necesario para que left y width controlen la posición
         bottom: isModal ? "auto" : 0,
-        height: isModal ? "100%" : "auto",
-        width: isModal ? "100%" : "auto",
+        transform: isModal ? undefined : "translateX(-50%)",
+        
+        height: isModal ? "100%" : "100vh", // Usar 100vh para asegurar altura completa en modo fixed
+        width: isModal ? "100%" : "80%",    // Ancho base para la vista de página
+        maxWidth: isModal ? undefined : "900px", // Ancho máximo para la vista de página
+
         backgroundColor: "#f0f2f5",
         display: "flex",
         flexDirection: "column",
         zIndex: isModal ? 1 : 1000,
-        padding: "20px",
-        overflow: "hidden"
+        padding: "20px", // El padding se mantiene, el contenido interno se ajustará
+        boxSizing: "border-box" // Asegurar que el padding no aumente el tamaño total más allá de width/maxWidth
       }}>
-        <div style={{
-          backgroundColor: "#5932EA",
-          color: "white",
-          padding: "12px 20px",
-          margin: "-20px -20px 20px -20px",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center"
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <button 
-              onClick={onClose}
-              style={{
-                backgroundColor: "rgba(255,255,255,0.2)",
-                border: "none",
-                color: "white",
-                borderRadius: "50%",
-                width: "26px",
-                height: "26px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                cursor: "pointer"
-              }}
-            >
-              <FontAwesomeIcon icon={faArrowLeft} />
-            </button>
-            <h2 style={{ margin: 0, fontSize: "16px" }}>New Jobsheet</h2>
-          </div>
-        </div>
+<div style={{ // Encabezado (morado)
+  backgroundColor: "#5932EA",
+  color: "white",
+  padding: "12px 20px",
+  margin: "-20px -20px 20px -20px", // Estos márgenes negativos harán que el header ocupe el ancho del padding del padre
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  boxSizing: "border-box"
+}}>
+  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+    <button 
+      onClick={handleExitClick} 
+      style={{
+        backgroundColor: "rgba(255,255,255,0.2)",
+        border: "none",
+        color: "white",
+        borderRadius: "50%",
+        width: "26px",
+        height: "26px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        cursor: "pointer"
+      }}
+    >
+      <FontAwesomeIcon icon={faArrowLeft} />
+    </button>
+    <h2 style={{ margin: 0, fontSize: "16px" }}>New Jobsheet</h2>
+  </div>
+
+  {/* Botón X para cerrar */}
+  <button 
+    onClick={onClose}
+    style={{
+      backgroundColor: "rgba(255,255,255,0.2)",
+      border: "none",
+      color: "white",
+      borderRadius: "50%",
+      width: "26px",
+      height: "26px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      cursor: "pointer"
+    }}
+  >
+    <FontAwesomeIcon icon={faTimes} />
+  </button>
+</div>
+
 
         <div style={{ 
           backgroundColor: "white", 
@@ -1753,24 +1982,35 @@ const calculateTotals = () => {
             </div>
           )}
 
-          {licensePlate.toLowerCase().includes('walk') && (
-            <button
-              onClick={handleWalkInJobsheet}
-              style={{
-                width: "100%",
-                padding: "10px",
-                backgroundColor: "#00C853",
-                color: "white",
-                border: "none",
-                borderRadius: "4px",
-                cursor: "pointer",
-                fontSize: "14px",
-                marginTop: "10px"
-              }}
-            >
-              Create Walk-in Sale
-            </button>
-          )}
+          {licensePlate && licensePlate.toLowerCase().includes('walk') && (
+  <div style={{
+    padding: "15px",
+    backgroundColor: "#e8f5e9",
+    borderRadius: "4px",
+    marginBottom: "15px",
+    border: "1px solid #c8e6c9"
+  }}>
+    <p style={{ margin: "0 0 10px 0", fontSize: "14px" }}>
+      <FontAwesomeIcon icon={faStore} style={{ marginRight: "8px" }} />
+      <strong>Walk-in Sale:</strong> Create a jobsheet without vehicle information
+    </p>
+    <button
+      onClick={handleWalkInJobsheet}
+      style={{
+        width: "100%",
+        padding: "10px",
+        backgroundColor: "#00C853",
+        color: "white",
+        border: "none",
+        borderRadius: "4px",
+        cursor: "pointer",
+        fontSize: "14px"
+      }}
+    >
+      Create Walk-in Sale
+    </button>
+  </div>
+)}
         </div>
       </div>
     );
@@ -1803,7 +2043,7 @@ const calculateTotals = () => {
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <button 
-            onClick={onClose}
+             onClick={handleExitClick}
             style={{
               backgroundColor: "rgba(255,255,255,0.2)",
               border: "none",
@@ -2629,56 +2869,95 @@ const calculateTotals = () => {
               </div>
             </div>
             
-            <div style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "8px"
-            }}>
-              <button 
-                onClick={handlePrint}
-                style={{
-                  width: "100%",
-                  padding: "8px",
-                  backgroundColor: "#5932EA",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "4px",
-                  fontSize: "13px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "6px",
-                  cursor: "pointer"
-                }}
-              >
-                <FontAwesomeIcon icon={faPrint} size="sm" />
-                Print Invoice
-              </button>
-              
-              {jobsheet?.state === "completed" && (
-                <button 
-                  onClick={onClose}
-                  style={{
-                    width: "100%",
-                    padding: "8px",
-                    backgroundColor: "#757575",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "4px",
-                    fontSize: "13px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "6px",
-                    cursor: "pointer",
-                    marginTop: "5px"
-                  }}
-                >
-                  <FontAwesomeIcon icon={faArrowLeft} size="sm" />
-                  Exit
-                </button>
-              )}
-            </div>
+         <div style={{
+  display: "flex",
+  flexDirection: "column",
+  gap: "8px"
+}}>
+  <button 
+    onClick={handlePrint}
+    style={{
+      width: "100%",
+      padding: "8px",
+      backgroundColor: "#5932EA",
+      color: "white",
+      border: "none",
+      borderRadius: "4px",
+      fontSize: "13px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: "6px",
+      cursor: "pointer"
+    }}
+  >
+    <FontAwesomeIcon icon={faPrint} size="sm" />
+    Print Invoice
+  </button>
+  
+{isReadOnly ? (
+    // Read-only mode: only show Exit button
+    <button 
+      onClick={onClose}
+      style={{
+        width: "100%",
+        padding: "8px",
+        backgroundColor: "#757575",
+        color: "white",
+        border: "none",
+        borderRadius: "4px",
+        fontSize: "13px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: "6px",
+        cursor: "pointer",
+        marginTop: "5px"
+      }}
+    >
+      <FontAwesomeIcon icon={faArrowLeft} size="sm" />
+      Exit
+    </button>
+  ) : (
+    // Editable mode: show unified Save/Exit button that changes label based on pending changes
+<button 
+onClick={hasPendingChanges ? handleSaveAndExit : handleExitClick}  disabled={isLoading}
+  style={{
+    width: "100%",
+    padding: "8px",
+    backgroundColor: hasPendingChanges ? "#00C853" : "#757575",
+    color: "white",
+    border: "none",
+    borderRadius: "4px",
+    fontSize: "13px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "6px",
+    cursor: isLoading ? "not-allowed" : "pointer",
+    opacity: isLoading ? 0.7 : 1,
+    marginTop: "5px"
+  }}
+>
+  {isLoading ? (
+    <>
+      <FontAwesomeIcon icon={faSave} size="sm" />
+      Saving...
+    </>
+  ) : hasPendingChanges ? (
+    <>
+      <FontAwesomeIcon icon={faSave} size="sm" />
+      Save
+    </>
+  ) : (
+    <>
+      <FontAwesomeIcon icon={faArrowLeft} size="sm" />
+      Exit
+    </>
+  )}
+</button>
+  )}
+</div>
           </div>
           
           <div style={{ 
@@ -3200,7 +3479,68 @@ const calculateTotals = () => {
           </div>
         </div>
       )}
-
+ {showExitConfirmation && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: "rgba(0,0,0,0.5)",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          zIndex: 1200
+        }}>
+          <div style={{
+            backgroundColor: "white",
+            borderRadius: "8px",
+            width: "90%",
+            maxWidth: "400px",
+            padding: "20px",
+            boxShadow: "0 4px 8px rgba(0,0,0,0.1)"
+          }}>
+            <h3 style={{ margin: "0 0 15px 0", fontSize: "16px", fontWeight: 600 }}>
+              Unsaved Changes
+            </h3>
+            
+            <p style={{ margin: "0 0 20px 0", fontSize: "14px", color: "#555" }}>
+              You have unsaved changes that will be lost if you exit now.
+            </p>
+            
+            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setShowExitConfirmation(false)}
+                style={{
+                  padding: "8px 16px",
+                  backgroundColor: "#f1f1f1",
+                  color: "#333",
+                  border: "1px solid #ddd",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  fontSize: "14px"
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmedExit}
+                style={{
+                  padding: "8px 16px",
+                  backgroundColor: "#F44336",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  fontSize: "14px"
+                }}
+              >
+                Exit Without Saving
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <style jsx="true">{`
         @keyframes fadeIn {
           from { opacity: 0; }

@@ -187,7 +187,10 @@ html, body {
   text-align: left;
   transition: background-color 0.3s ease, transform 0.3s ease;
 }
-
+.ag-theme-alpine .highlight-row {
+  background-color: #34A853 !important;
+  transition: background-color 1s ease;
+}
 .sidebar-button1 {
   gap: 13px;
 }
