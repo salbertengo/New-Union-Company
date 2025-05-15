@@ -1465,7 +1465,7 @@ useEffect(() => {
   updateJobsheetStatusIfPaid();
 }, [jobsheet, items, labors, payments, isLoading]);
 
-    const handleSaveAndExit = async () => {
+   const handleSave = async () => {
   if (!effectiveJobsheetId) {
     showNotification("No active jobsheet to save.", "error");
     return;
@@ -1645,9 +1645,12 @@ useEffect(() => {
     setPendingJobsheetUpdates({});
     setHasPendingChanges(false);
     
-    // Refresh local data and exit
+    // Refresh local data but DO NOT exit
     if (refreshJobsheets) refreshJobsheets();
-    onClose();
+    // Removed onClose() call here
+    
+    // Reload the current jobsheet data to refresh the view
+    loadJobsheetData();
   } else {
     showNotification(`Error saving changes: ${errors.join("; ")}`, "error");
     console.error("Failed to save changes:", errors);
@@ -2921,7 +2924,7 @@ const isReadOnly = effectiveJobsheetId &&
   ) : (
     // Editable mode: show unified Save/Exit button that changes label based on pending changes
 <button 
-onClick={hasPendingChanges ? handleSaveAndExit : handleExitClick}  disabled={isLoading}
+  onClick={hasPendingChanges ? handleSave : handleExitClick}  disabled={isLoading}
   style={{
     width: "100%",
     padding: "8px",
