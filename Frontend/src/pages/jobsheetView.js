@@ -751,138 +751,168 @@ const gridOptions = {
     };
 
     return (
-      <div style={{ position: "relative", width: "100%" }}>
-        <button
-          onClick={() => setShowDatePicker(!showDatePicker)}
-          style={{
-            padding: isTouchDevice ? "12px 15px" : "5px 15px",
-            backgroundColor: "#F9FBFF",
-            border: "1px solid #e0e0e0",
-            borderRadius: "10px",
-            display: "flex",
-            alignItems: "center",
-            gap: "5px",
-            height: isTouchDevice ? "46px" : "35px",
-            fontSize: isTouchDevice ? "16px" : "14px",
-            color: "#333",
-            width: "100%",
-            justifyContent: "center"
-          }}
-        >
-          <FontAwesomeIcon icon={faCalendarAlt} style={{ color: "#5932EA" }} />
-          {formatDate(startDate)} - {formatDate(endDate)}
-        </button>
+    <div style={{ position: "relative", width: "100%" }}>
+      <button
+        onClick={() => setShowDatePicker(!showDatePicker)}
+        style={{
+          padding: isTouchDevice ? "12px 15px" : "5px 15px",
+          backgroundColor: "#F9FBFF",
+          border: "1px solid #e0e0e0",
+          borderRadius: "10px",
+          display: "flex",
+          alignItems: "center",
+          gap: "5px",
+          height: isTouchDevice ? "46px" : "35px",
+          fontSize: isTouchDevice ? "16px" : "14px",
+          color: "#333",
+          width: "100%",
+          justifyContent: "center"
+        }}
+      >
+        <FontAwesomeIcon icon={faCalendarAlt} style={{ color: "#5932EA" }} />
+        {formatDate(startDate)} - {formatDate(endDate)}
+      </button>
 
-        {showDatePicker && (
-          <div style={{
-            position: "absolute",
-            top: "50px",
-            right: isVerticalOrientation ? 0 : "0",
-            left: isVerticalOrientation ? 0 : "auto",
-            zIndex: 1000,
-            backgroundColor: "white",
-            borderRadius: "8px",
-            boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
-            padding: "15px",
-            display: "flex",
-            flexDirection: "column",
-            gap: "10px",
-            width: isVerticalOrientation ? "100%" : "280px"
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h4 style={{ margin: 0, marginBottom: 16, fontSize: isTouchDevice ? 18 : 16 }}>Date Range</h4>
-              <button 
-                onClick={() => setShowDatePicker(false)}
+      {showDatePicker && (
+        <div style={{
+          position: "absolute",
+          top: "50px",
+          right: isVerticalOrientation ? "auto" : "0",
+          left: isVerticalOrientation ? "50%" : "auto",
+          transform: isVerticalOrientation ? "translateX(-50%)" : "none",
+          zIndex: 1000,
+          backgroundColor: "white",
+          borderRadius: "8px",
+          boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
+          padding: isTouchDevice ? "20px" : "15px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "10px",
+          width: isVerticalOrientation ? (isTouchDevice ? "90%" : "95%") : "280px",
+          maxWidth: "500px"
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <h4 style={{ margin: 0, marginBottom: 16, fontSize: isTouchDevice ? 18 : 16 }}>Date Range</h4>
+            <button 
+              onClick={() => setShowDatePicker(false)}
+              style={{ 
+                background: "none", 
+                border: "none",
+                cursor: "pointer",
+                fontSize: isTouchDevice ? 22 : 16,
+                padding: isTouchDevice ? 10 : 0,
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                width: isTouchDevice ? 40 : 30,
+                height: isTouchDevice ? 40 : 30
+              }}
+            >
+              <FontAwesomeIcon icon={faTimes} />
+            </button>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+            <div>
+              <label style={{ 
+                display: "block", 
+                marginBottom: "8px", 
+                fontSize: isTouchDevice ? 16 : 14,
+                fontWeight: "500"
+              }}>
+                Start Date
+              </label>
+              <input
+                type="date"
+                value={startDate.toISOString().split('T')[0]}
+                onChange={(e) => setStartDate(new Date(e.target.value))}
                 style={{ 
-                  background: "none", 
-                  border: "none",
-                  cursor: "pointer",
-                  fontSize: isTouchDevice ? 22 : 16,
-                  padding: isTouchDevice ? 10 : 0,
-                  display: "flex",
-                  justifyContent: "center",
-                  alignItems: "center",
-                  width: isTouchDevice ? 40 : 30,
-                  height: isTouchDevice ? 40 : 30
+                  padding: isTouchDevice ? "14px 12px" : "8px", 
+                  borderRadius: "6px", 
+                  border: "1px solid #ddd",
+                  width: "100%",
+                  fontSize: isTouchDevice ? 16 : "inherit",
+                  minHeight: isTouchDevice ? "48px" : "auto",
+                  boxSizing: "border-box"
                 }}
-              >
-                <FontAwesomeIcon icon={faTimes} />
-              </button>
+              />
             </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-              <div>
-                <label style={{ display: "block", marginBottom: "5px", fontSize: isTouchDevice ? 16 : 14 }}>Start Date</label>
-                <input
-                  type="date"
-                  value={startDate.toISOString().split('T')[0]}
-                  onChange={(e) => setStartDate(new Date(e.target.value))}
-                  style={{ 
-                    padding: isTouchDevice ? "12px 8px" : "8px", 
-                    borderRadius: "4px", 
-                    border: "1px solid #ddd",
-                    width: "100%",
-                    fontSize: isTouchDevice ? 16 : "inherit"
-                  }}
-                />
-              </div>
-              <div>
-                <label style={{ display: "block", marginBottom: "5px", fontSize: isTouchDevice ? 16 : 14 }}>End Date</label>
-                <input
-                  type="date"
-                  value={endDate.toISOString().split('T')[0]}
-                  onChange={(e) => setEndDate(new Date(e.target.value))}
-                  style={{ 
-                    padding: isTouchDevice ? "12px 8px" : "8px", 
-                    borderRadius: "4px", 
-                    border: "1px solid #ddd",
-                    width: "100%",
-                    fontSize: isTouchDevice ? 16 : "inherit"
-                  }}
-                />
-              </div>
-            </div>
-
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: "10px" }}>
-              <button
-                onClick={() => {
-                  setStartDate(new Date());
-                  setEndDate(new Date());
+            <div>
+              <label style={{ 
+                display: "block", 
+                marginBottom: "8px", 
+                fontSize: isTouchDevice ? 16 : 14,
+                fontWeight: "500"
+              }}>
+                End Date
+              </label>
+              <input
+                type="date"
+                value={endDate.toISOString().split('T')[0]}
+                onChange={(e) => setEndDate(new Date(e.target.value))}
+                style={{ 
+                  padding: isTouchDevice ? "14px 12px" : "8px", 
+                  borderRadius: "6px", 
+                  border: "1px solid #ddd",
+                  width: "100%",
+                  fontSize: isTouchDevice ? 16 : "inherit",
+                  minHeight: isTouchDevice ? "48px" : "auto",
+                  boxSizing: "border-box"
                 }}
-                style={{
-                  padding: isTouchDevice ? "12px 15px" : "8px 15px",
-                  backgroundColor: "#f1f1f1",
-                  border: "none",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                  fontSize: isTouchDevice ? 16 : "inherit"
-                }}
-              >
-                Today Only
-              </button>
-              <button
-                onClick={() => {
-                  fetchJobsheets(searchTerm, statusFilter);
-                  setShowDatePicker(false);
-                }}
-                style={{
-                  padding: isTouchDevice ? "12px 15px" : "8px 15px",
-                  backgroundColor: "#5932EA",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                  fontSize: isTouchDevice ? 16 : "inherit"
-                }}
-              >
-                Apply Filter
-              </button>
+              />
             </div>
           </div>
-        )}
-      </div>
-    );
-  };
+
+          <div style={{ 
+            display: "flex", 
+            justifyContent: "space-between", 
+            marginTop: "15px", 
+            gap: "10px" 
+          }}>
+            <button
+              onClick={() => {
+                setStartDate(new Date());
+                setEndDate(new Date());
+              }}
+              style={{
+                padding: isTouchDevice ? "14px" : "8px 15px",
+                backgroundColor: "#f5f5f5",
+                border: "none",
+                borderRadius: "6px",
+                cursor: "pointer",
+                fontSize: isTouchDevice ? 16 : "inherit",
+                flex: "1",
+                minHeight: isTouchDevice ? "48px" : "auto"
+              }}
+            >
+              Today Only
+            </button>
+            <button
+              onClick={() => {
+                fetchJobsheets(searchTerm, statusFilter);
+                setShowDatePicker(false);
+              }}
+              style={{
+                padding: isTouchDevice ? "14px" : "8px 15px",
+                backgroundColor: "#5932EA",
+                color: "white",
+                border: "none",
+                borderRadius: "6px",
+                cursor: "pointer",
+                fontSize: isTouchDevice ? 16 : "inherit",
+                flex: "1",
+                minHeight: isTouchDevice ? "48px" : "auto",
+                fontWeight: "500"
+              }}
+            >
+              Apply Filter
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
   return (
     <>

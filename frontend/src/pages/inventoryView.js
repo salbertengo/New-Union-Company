@@ -630,20 +630,19 @@ const handleSubmitGoodsReceive = async () => {
 };
 
   const defaultColDef = useMemo(() => ({
-    resizable: false,
+    resizable: true,
     sortable: true,
     suppressMenu: true,
-    flex: 1,
-    minWidth: isTouchDevice ? 150 : 120,
+    minWidth: isTouchDevice ? 100 : 60,
     cellStyle: {
-      display: 'flex',
-      alignItems: 'center',
-      paddingLeft: '12px',
-      fontSize: isTouchDevice ? '16px' : '14px',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-      color: '#333',
-      height: '100%'
-    },
+    display: 'flex',
+    alignItems: 'center',
+    paddingLeft: '12px',
+    fontSize: isTouchDevice ? '16px' : '14px',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+    color: '#333',
+    height: '100%'
+  },
     headerClass: 'custom-header',
     cellClass: isTouchDevice ? 'touch-cell' : ''
   }), [isTouchDevice]);
@@ -736,17 +735,27 @@ const handleSubmitGoodsReceive = async () => {
   };
 
   const columnDefs = useMemo(() => [
-    { headerName: 'SKU', field: 'sku', flex: 1, headerClass: 'custom-header-inventory', suppressMenu: true },
-   { 
-  headerName: 'Name', 
-  field: 'name', 
-  flex: 3,
-  autoHeight: true,
-  wrapText: true,
-  cellClass: 'cell-name',
-  headerClass: 'custom-header-inventory', 
-  suppressMenu: true,
-  cellRenderer: params => {
+  { 
+
+    headerName: 'SKU', 
+    field: 'sku',
+    flex: 1,
+    minWidth: isTouchDevice && isVerticalOrientation ? 60 : 80, // Smaller on mobile
+    maxWidth: isTouchDevice && isVerticalOrientation ? 70 : 100,
+    headerClass: 'custom-header-inventory' 
+  },
+  { 
+    headerName: 'Name', 
+    field: 'name', 
+  flex: isTouchDevice && isVerticalOrientation ? 6 : 4, 
+    minWidth: isTouchDevice ? 180 : 220,
+
+    autoHeight: true,
+    wrapText: true,
+    cellClass: 'cell-name',
+    headerClass: 'custom-header-inventory', 
+    suppressMenu: true,
+    cellRenderer: params => { 
     const isHighlighted = highlightedRowIds.includes(params.data.id.toString());
     
     return (
@@ -772,19 +781,58 @@ const handleSubmitGoodsReceive = async () => {
     );
   },
 },   
-    { headerName: 'Category', field: 'category', flex: 1, headerClass: 'custom-header-inventory', suppressMenu: true },
-    { headerName: 'Brand', field: 'brand', flex: 1, headerClass: 'custom-header-inventory', suppressMenu: true },
-    { headerName: 'Stock', field: 'stock', flex: 1, headerClass: 'custom-header-inventory', suppressMenu: true },
-    { headerName: 'Min', field: 'min', flex: 1, headerClass: 'custom-header-inventory', suppressMenu: true },
-    { headerName: 'Cost', field: 'cost', flex: 1, headerClass: 'custom-header-inventory', suppressMenu: true },
-    { headerName: 'Sale', field: 'sale', flex: 1, headerClass: 'custom-header-inventory', suppressMenu: true },
-    {
-      headerName: 'Actions',
-      flex: 1,
-      sortable: false,
-      filter: false,
-      suppressMenu: true,
-      cellRenderer: params => (
+  { 
+    headerName: 'Category', 
+    field: 'category', 
+    flex: 1,
+    minWidth: isTouchDevice && isVerticalOrientation ? 60 : 100, // Smaller on mobile
+    hide: isTouchDevice && isVerticalOrientation && window.innerWidth < 480, 
+    headerClass: 'custom-header-inventory' 
+  },
+  { 
+    headerName: 'Brand', 
+    field: 'brand', 
+    flex: 1,
+    minWidth: isTouchDevice && isVerticalOrientation ? 60 : 100, // Smaller on mobile
+    hide: isTouchDevice && isVerticalOrientation && window.innerWidth < 480, 
+    headerClass: 'custom-header-inventory' 
+  },
+  { 
+    headerName: 'Stock', 
+    field: 'stock', 
+    flex: 1,
+    minWidth: isTouchDevice && isVerticalOrientation ? 50 : 70, // Smaller on mobile
+    headerClass: 'custom-header-inventory' 
+  },
+  { 
+    headerName: 'Min', 
+    field: 'min', 
+    flex: 1,
+    minWidth: isTouchDevice && isVerticalOrientation ? 45 : 70, // Smaller on mobile
+    headerClass: 'custom-header-inventory' 
+  },
+  { 
+    headerName: 'Cost', 
+    field: 'cost',
+    flex: 1,
+    minWidth: isTouchDevice && isVerticalOrientation ? 55 : 80, // Smaller on mobile
+    headerClass: 'custom-header-inventory' 
+  },
+  { 
+    headerName: 'Sale', 
+    field: 'sale',
+    flex: 1,
+    minWidth: isTouchDevice && isVerticalOrientation ? 55 : 80, // Smaller on mobile
+    headerClass: 'custom-header-inventory' 
+  },
+  {
+    headerName: 'Actions',
+    flex: 1,
+    minWidth: isTouchDevice && isVerticalOrientation ? 110 : 130, // Smaller on mobile
+    sortable: false,
+    filter: false,
+    suppressMenu: true,
+    cellRenderer: params => (
         <ActionButtonsContainer>
           <ActionButton
             icon={faEdit}
@@ -807,8 +855,8 @@ const handleSubmitGoodsReceive = async () => {
         </ActionButtonsContainer>
       ),
       headerClass: 'custom-header-inventory'
-    }
-  ], []);
+  }
+], [isTouchDevice, isVerticalOrientation]);
 
 
   const handleAddProduct = () => {
@@ -953,34 +1001,61 @@ const handleSubmitGoodsReceive = async () => {
 
 const onGridReady = params => {
   gridRef.current = params.api;
-  params.api.sizeColumnsToFit();
   setGridReady(true);
   
-  // Ajustar grid para dispositivos táctiles
-  if (isTouchDevice) {
-    // Dar tiempo a la grid para renderizar completamente
-    setTimeout(() => {
-      params.api.sizeColumnsToFit();
-      // Si está en vertical, ajustar ancho para evitar scroll horizontal
-      if (isVerticalOrientation) {
-        // Fix for newer versions of AG Grid
-        if (params.columnApi) {
-          params.columnApi.autoSizeAllColumns();
-        } else if (params.api.autoSizeAllColumns) {
-          params.api.autoSizeAllColumns();
-        } else if (params.api.columnModel && params.api.columnModel.autoSizeAllColumns) {
-          params.api.columnModel.autoSizeAllColumns();
-        } else {
-          // Fallback to manual sizing if autoSizeAllColumns is not available
-          const allColumnIds = [];
-          params.api.getColumns().forEach(column => {
-            allColumnIds.push(column.getId());
-          });
-          params.api.sizeColumnsToFit(allColumnIds);
-        }
+  // Esperar a que el grid se renderice completamente
+  setTimeout(() => {
+    if (!params.columnApi) return;
+    
+    // Paso 1: Establecer anchos específicos para cada tipo de columna
+    const nameCol = params.columnApi.getColumn('name');
+    const skuCol = params.columnApi.getColumn('sku');
+    const actionCol = params.columnApi.getColumn('Actions');
+    
+    if (isTouchDevice && isVerticalOrientation) {
+      // Configuración para móvil en vertical
+      if (nameCol) {
+        params.columnApi.setColumnWidth(nameCol, Math.max(180, window.innerWidth * 0.5));
       }
-    }, 300);
-  }
+      if (skuCol) {
+        params.columnApi.setColumnWidth(skuCol, 80);
+      }
+      if (actionCol) {
+        params.columnApi.setColumnWidth(actionCol, 100);
+      }
+      
+      // Ocultar algunas columnas en pantallas muy pequeñas
+      if (window.innerWidth < 480) {
+        const colsToHide = ['category', 'brand'];
+        colsToHide.forEach(colId => {
+          const col = params.columnApi.getColumn(colId);
+          if (col) params.columnApi.setColumnVisible(col, false);
+        });
+      }
+    } else {
+      // Configuración para desktop o landscape
+      if (nameCol) {
+        params.columnApi.setColumnWidth(nameCol, 250);
+      }
+    }
+    
+    // Paso 2: Distribuir el espacio restante proporcionalmente
+    params.api.sizeColumnsToFit();
+    
+    // Paso 3: Asegurarnos que el ancho de la columna name se mantiene
+    if (nameCol) {
+      const currentWidth = nameCol.getActualWidth();
+      const minDesiredWidth = isTouchDevice && isVerticalOrientation ? 
+        Math.max(180, window.innerWidth * 0.5) : 250;
+      
+      if (currentWidth < minDesiredWidth) {
+        params.columnApi.setColumnWidth(nameCol, minDesiredWidth);
+      }
+    }
+    
+    // Forzar refresh para aplicar cambios
+    params.api.refreshCells({force: true});
+  }, 300);
 };
 
   const Notification = ({ show, message, type, onClose }) => {
@@ -1067,234 +1142,230 @@ const onGridReady = params => {
     );
   };
 
-  return (
+return (
+  <div
+    style={{
+      height: "100%",
+      display: "flex",
+      flexDirection: "column",
+      borderRadius: isTouchDevice ? "16px" : "30px",
+      overflow: "hidden",
+      backgroundColor: "#ffffff",
+      boxSizing: "border-box",
+      padding: isTouchDevice && isVerticalOrientation ? "15px" : "20px",
+      position: "relative",
+      touchAction: "manipulation",
+      WebkitOverflowScrolling: "touch"
+    }}
+  >
+    <GridStyles />
+    
     <div
       style={{
-        height: "100%",
         display: "flex",
-        flexDirection: "column",
-        borderRadius: isTouchDevice ? "16px" : "30px",
-        overflow: "hidden",
-        backgroundColor: "#ffffff",
-        boxSizing: "border-box",
-        padding: isTouchDevice && isVerticalOrientation ? "15px" : "20px",
-        position: "relative",
-        touchAction: "manipulation",
-        WebkitOverflowScrolling: "touch"
+        flexDirection: isTouchDevice && isVerticalOrientation ? "column" : "row",
+        justifyContent: "space-between",
+        alignItems: isTouchDevice && isVerticalOrientation ? "stretch" : "center",
+        marginBottom: isTouchDevice ? "15px" : "10px",
+        gap: isTouchDevice ? "12px" : "10px"
       }}
     >
-      <GridStyles />
-      
-      <div
-        style={{
-          display: "flex",
-          flexDirection: isTouchDevice && isVerticalOrientation ? "column" : "row",
-          justifyContent: "space-between",
-          alignItems: isTouchDevice && isVerticalOrientation ? "stretch" : "center",
-          marginBottom: isTouchDevice ? "15px" : "10px",
-          gap: isTouchDevice ? "12px" : "10px"
-        }}
-      >
+      {/* Título y barra de búsqueda */}
+      <div style={{ 
+        flex: 1,
+        maxWidth: isTouchDevice && isVerticalOrientation ? "100%" : "300px"
+      }}>
         <h2 style={{ 
           margin: 0, 
+          marginBottom: "10px",
           fontSize: isTouchDevice ? "20px" : "18px",
-          marginBottom: isTouchDevice && isVerticalOrientation ? "5px" : 0
+          fontWeight: "600",
+          color: "#333333"
         }}>
-          Inventory View
+          Inventory
         </h2>
         
-        <div style={{ 
-          display: "flex", 
-          flexDirection: isTouchDevice && isVerticalOrientation ? "column" : "row",
-          gap: "10px", 
-          alignItems: isTouchDevice && isVerticalOrientation ? "stretch" : "center",
-          width: isTouchDevice && isVerticalOrientation ? "100%" : "auto"
-        }}>
-          <div style={{ 
-            position: "relative",
-            width: isTouchDevice && isVerticalOrientation ? "100%" : "auto"
-          }}>
-            <input
-              type="text"
-              placeholder="Search by name"
-              style={{
-                padding: isTouchDevice ? "12px 35px 12px 12px" : "5px 30px 5px 10px",
-                width: isTouchDevice && isVerticalOrientation ? "100%" : "216px",
-                borderRadius: "10px",
-                border: "1px solid white",
-                backgroundColor: "#F9FBFF",
-                height: isTouchDevice ? "46px" : "25px",
-                fontSize: isTouchDevice ? "16px" : "inherit",
-                boxSizing: "border-box"
-              }}
-              value={searchTerm}
-              onChange={handleSearchChange}
-            />
-            <FontAwesomeIcon 
-              icon={faSearch} 
-              style={{
-                position: "absolute",
-                right: "12px",
-                top: "50%",
-                transform: "translateY(-50%)",
-                color: loading ? "#4321C9" : "gray",
-                cursor: "pointer",
-                fontSize: isTouchDevice ? "18px" : "14px"
-              }}
-            />
-          </div>
-          
-          <select
-            value={categoryTerm}
-            onChange={handleCategoryChange}
+        <div style={{ position: "relative" }}>
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={handleSearchChange}
+            placeholder="Search inventory..."
             style={{
-              padding: isTouchDevice ? "12px" : "5px",
-              width: isTouchDevice && isVerticalOrientation ? "100%" : "216px",
+              width: "100%",
+              padding: isTouchDevice ? "12px 40px 12px 12px" : "8px 30px 8px 10px",
               borderRadius: "10px",
               border: "1px solid white",
               backgroundColor: "#F9FBFF",
-              height: isTouchDevice ? "46px" : "35px",
-              color: "gray",
-              fontSize: isTouchDevice ? "16px" : "inherit",
-              appearance: "none",
-              backgroundImage: "url('data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polyline points=\"6 9 12 15 18 9\"></polyline></svg>')",
-              backgroundRepeat: "no-repeat",
-              backgroundPosition: "right 12px center",
-              backgroundSize: "14px",
+              fontSize: isTouchDevice ? "16px" : "14px",
               boxSizing: "border-box"
             }}
-          >
-            <option value="">All Categories</option>
-            {uniqueCategories.map(cat => (
-              <option key={cat} value={cat}>
-                {cat}
-              </option>
-            ))}
-          </select>
-          
-          <div style={{
-            display: "flex",
-            flexDirection: isTouchDevice && isVerticalOrientation ? "column" : "row",
-            gap: "10px",
-            width: isTouchDevice && isVerticalOrientation ? "100%" : "auto"
-          }}>
-            <button
-              onClick={handleOpenGoodsReceiveModal}
-              style={{
-                padding: isTouchDevice ? "14px 20px" : "10px 20px",
-                backgroundColor: "#34A853",
-                color: "white",
-                border: "none",
-                borderRadius: isTouchDevice ? "10px" : "5px",
-                cursor: "pointer",
-                transition: "background-color 0.3s ease",
-                fontWeight: 600,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: isTouchDevice && isVerticalOrientation ? "center" : "flex-start",
-                gap: "8px",
-                width: isTouchDevice && isVerticalOrientation ? "100%" : "auto",
-                fontSize: isTouchDevice ? "16px" : "14px"
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#2D9249"}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#34A853"}
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M14 10V12.6667C14 13.0203 13.8595 13.3594 13.6095 13.6095C13.3594 13.8595 13.0203 14 12.6667 14H3.33333C2.97971 14 2.64057 13.8595 2.39052 13.6095C2.14048 13.3594 2 13.0203 2 12.6667V10" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M4.66667 6.66669L8.00001 10L11.3333 6.66669" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M8 10V2" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              Goods Receive
-            </button>
-
-            <button
-              onClick={handleAddProduct}
-              style={{
-                padding: isTouchDevice ? "14px 20px" : "10px 20px",
-                backgroundColor: isHovered ? "#4321C9" : "#5932EA",
-                color: "white",
-                border: "none",
-                borderRadius: isTouchDevice ? "10px" : "5px",
-                cursor: "pointer",
-                transition: "background-color 0.3s ease",
-                fontWeight: 600,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: isTouchDevice && isVerticalOrientation ? "center" : "flex-start",
-                gap: "8px",
-                width: isTouchDevice && isVerticalOrientation ? "100%" : "auto",
-                fontSize: isTouchDevice ? "16px" : "14px"
-              }}
-              onMouseEnter={() => setIsHovered(true)}
-              onMouseLeave={() => setIsHovered(false)}
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M8 3.33331V12.6666" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M3.33337 8H12.6667" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              Add Product
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div style={{ flex: 1, position: "relative", touchAction: "auto" }}>
-        <div 
-          id="inventory-grid-container" 
-          className={`ag-theme-alpine inventory-view ${isTouchDevice ? 'touch-enabled-grid' : ''}`}
-          style={{ 
-            width: "100%", 
-            height: "100%",
-            overflowX: "hidden",
-            overflowY: "auto",
-            opacity: loading ? 0.6 : 1,
-            transition: "opacity 0.3s ease",
-            WebkitOverflowScrolling: "touch",
-            msOverflowStyle: "-ms-autohiding-scrollbar",
-            touchAction: "pan-y"
-          }}
-        >
-          <AgGridReact
-            ref={gridRef}
-            rowData={rowData}
-            columnDefs={columnDefs}
-            defaultColDef={defaultColDef}
-            modules={[ClientSideRowModelModule]}
-            pagination={true}
-            paginationPageSize={isTouchDevice ? 8 : 12}
-            headerHeight={isTouchDevice ? 46 : 30}
-            rowHeight={isTouchDevice ? 65 : 50}
-            suppressSizeToFit={false}
-            suppressHorizontalScroll={isVerticalOrientation}
-            onGridReady={onGridReady}
-            getRowNodeId={data => data.id.toString()}
-            rowClassRules={{
-              'inventory-highlight-row': params => 
-                highlightedRowIds.includes(params.data.id.toString())
+          />
+          <FontAwesomeIcon 
+            icon={faSearch} 
+            style={{
+              position: "absolute",
+              right: "12px",
+              top: "50%",
+              transform: "translateY(-50%)",
+              color: loading ? "#4321C9" : "gray",
+              cursor: "pointer",
+              fontSize: isTouchDevice ? "18px" : "14px"
             }}
-            gridOptions={gridOptions}
           />
         </div>
-        
-        {loading && (
-          <div style={{
-            position: "absolute",
-            top: "50%",
-            left: "50%",
-            transform: "translate(-50%, -50%)",
-            zIndex: 1000
-          }}>
-            <div style={{
-              width: isTouchDevice ? "50px" : "40px",
-              height: isTouchDevice ? "50px" : "40px",
-              border: `4px solid rgba(0, 0, 0, 0.1)`,
-              borderLeft: `4px solid #4321C9`,
-              borderRadius: "50%",
-              animation: "spin 1s linear infinite"
-            }}></div>
-          </div>
-        )}
       </div>
+      
+      <select
+        value={categoryTerm}
+        onChange={handleCategoryChange}
+        style={{
+          padding: isTouchDevice ? "12px" : "5px",
+          width: isTouchDevice && isVerticalOrientation ? "100%" : "216px",
+          borderRadius: "10px",
+          border: "1px solid white",
+          backgroundColor: "#F9FBFF",
+          height: isTouchDevice ? "46px" : "35px",
+          color: "gray",
+          fontSize: isTouchDevice ? "16px" : "inherit",
+          appearance: "none",
+          backgroundImage: "url('data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polyline points=\"6 9 12 15 18 9\"></polyline></svg>')",
+          backgroundRepeat: "no-repeat",
+          backgroundPosition: "right 12px center",
+          backgroundSize: "14px",
+          boxSizing: "border-box"
+        }}
+      >
+        <option value="">All Categories</option>
+        {uniqueCategories.map(cat => (
+          <option key={cat} value={cat}>
+            {cat}
+          </option>
+        ))}
+      </select>
+      
+      <div style={{
+        display: "flex",
+        flexDirection: isTouchDevice && isVerticalOrientation ? "column" : "row",
+        gap: "10px",
+        width: isTouchDevice && isVerticalOrientation ? "100%" : "auto"
+      }}>
+        <button
+          onClick={handleOpenGoodsReceiveModal}
+          style={{
+            padding: isTouchDevice ? "14px 20px" : "10px 20px",
+            backgroundColor: "#34A853",
+            color: "white",
+            border: "none",
+            borderRadius: isTouchDevice ? "10px" : "5px",
+            cursor: "pointer",
+            transition: "background-color 0.3s ease",
+            fontWeight: 600,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: isTouchDevice && isVerticalOrientation ? "center" : "flex-start",
+            gap: "8px",
+            width: isTouchDevice && isVerticalOrientation ? "100%" : "auto",
+            fontSize: isTouchDevice ? "16px" : "14px"
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#2D9249"}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#34A853"}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M14 10V12.6667C14 13.0203 13.8595 13.3594 13.6095 13.6095C13.3594 13.8595 13.0203 14 12.6667 14H3.33333C2.97971 14 2.64057 13.8595 2.39052 13.6095C2.14048 13.3594 2 13.0203 2 12.6667V10" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M4.66667 6.66669L8.00001 10L11.3333 6.66669" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M8 10V2" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          Goods Receive
+        </button>
+
+        <button
+          onClick={handleAddProduct}
+          style={{
+            padding: isTouchDevice ? "14px 20px" : "10px 20px",
+            backgroundColor: isHovered ? "#4321C9" : "#5932EA",
+            color: "white",
+            border: "none",
+            borderRadius: isTouchDevice ? "10px" : "5px",
+            cursor: "pointer",
+            transition: "background-color 0.3s ease",
+            fontWeight: 600,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: isTouchDevice && isVerticalOrientation ? "center" : "flex-start",
+            gap: "8px",
+            width: isTouchDevice && isVerticalOrientation ? "100%" : "auto",
+            fontSize: isTouchDevice ? "16px" : "14px"
+          }}
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M8 3.33331V12.6666" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M3.33337 8H12.6667" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          Add Product
+        </button>
+      </div>
+    </div>
+
+    <div style={{ flex: 1, position: "relative", touchAction: "auto" }}>
+      <div 
+        id="inventory-grid-container" 
+        className={`ag-theme-alpine inventory-view ${isTouchDevice ? 'touch-enabled-grid' : ''}`}
+        style={{ 
+          width: "100%", 
+          height: "100%",
+          overflowX: "hidden",
+          overflowY: "auto",
+          opacity: loading ? 0.6 : 1,
+          transition: "opacity 0.3s ease",
+          WebkitOverflowScrolling: "touch",
+          msOverflowStyle: "-ms-autohiding-scrollbar",
+          touchAction: "pan-y"
+        }}
+      >
+        <AgGridReact
+          ref={gridRef}
+          rowData={rowData}
+          columnDefs={columnDefs}
+          defaultColDef={defaultColDef}
+          modules={[ClientSideRowModelModule]}
+          pagination={true}
+          paginationPageSize={isTouchDevice ? 8 : 12}
+          headerHeight={isTouchDevice ? 46 : 30}
+          rowHeight={isTouchDevice ? 65 : 50}
+          suppressSizeToFit={false}
+          suppressHorizontalScroll={isVerticalOrientation}
+          onGridReady={onGridReady}
+          getRowNodeId={data => data.id.toString()}
+          rowClassRules={{
+            'inventory-highlight-row': params => 
+              highlightedRowIds.includes(params.data.id.toString())
+          }}
+          gridOptions={gridOptions}
+        />
+      </div>
+      
+      {loading && (
+        <div style={{
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          zIndex: 1000
+        }}>
+          <div style={{
+            width: isTouchDevice ? "50px" : "40px",
+            height: isTouchDevice ? "50px" : "40px",
+            border: `4px solid rgba(0, 0, 0, 0.1)`,
+            borderLeft: `4px solid #4321C9`,
+            borderRadius: "50%",
+            animation: "spin 1s linear infinite"
+          }}></div>
+        </div>
+      )}
+    </div>
 
             {/* Compatibility Modal */}
       {showCompatibilityModal && selectedProduct && (
