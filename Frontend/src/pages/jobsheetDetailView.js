@@ -1119,12 +1119,17 @@ const handleDeleteItem = async (itemId) => {
   const itemToDelete = items.find(item => item.id === itemId);
   
   if (itemToDelete) {
-    // Si el ítem es nuevo (no guardado en el servidor)
+    // Check if this would be the last item/service and there are payments
+    const remainingItems = items.filter(item => item.id !== itemId);
+    
+
+    
+    // Continue with the existing delete logic...
     if (itemToDelete._action === 'create') {
-      // Simplemente eliminar del array local
+      // Simply remove from local array
       setItems(prevItems => prevItems.filter(item => item.id !== itemId));
     } else {
-      // Para ítems existentes, seguir ID para eliminación y también eliminar de la UI
+      // For existing items, track ID for deletion and also remove from UI
       setDeletedItemIds(prev => [...prev, itemId]);
       setItems(prevItems => prevItems.filter(item => item.id !== itemId));
     }
@@ -1426,6 +1431,13 @@ const handleDeleteItem = async (itemId) => {
     showNotification(`This order is ${jobsheet?.state} and no additional payments can be added`, "error");
     return;
   }
+  
+  // Nueva validación para verificar si hay elementos o servicios para cobrar
+  if (totals.total <= 0) {
+    showNotification("Cannot add payment: There are no items or services to pay for.", "error");
+    return;
+  }
+  
   if (!paymentAmount || parseFloat(paymentAmount) <= 0) {
     showNotification("Please enter a valid payment amount", "error");
     return;
@@ -1491,7 +1503,7 @@ useEffect(() => {
   updateJobsheetStatusIfPaid();
 }, [jobsheet, items, labors, payments, isLoading]);
 
-   const handleSave = async () => {
+  const handleSave = async () => {
   if (!effectiveJobsheetId) {
     showNotification("No active jobsheet to save.", "error");
     return;
@@ -1503,6 +1515,37 @@ useEffect(() => {
     setIsLoading(false);
     showNotification("Authentication error.", "error");
     return;
+  }
+  
+  // Check if we need to remove payments because there are no billable items
+  const hasItems = items.filter(item => !item._action || item._action !== 'delete').length > 0;
+  const hasLabors = labors.filter(labor => !labor._action || labor._action !== 'delete').length > 0;
+  
+  if (!hasItems && !hasLabors && payments.length > 0) {
+    // Mark all payments for deletion and notify user
+    const paymentIds = payments.map(payment => payment.id).filter(id => !id.toString().includes('temp-'));
+    if (paymentIds.length > 0) {
+      showNotification("Removing payments because there are no items or services to bill.", "info");
+      
+      // Delete existing payments
+      for (const paymentId of paymentIds) {
+        try {
+          const response = await fetch(`${API_URL}/jobsheets/payments/${paymentId}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          
+          if (!response.ok) {
+            console.error(`Failed to delete payment ${paymentId}: ${await response.text()}`);
+          }
+        } catch (err) {
+          console.error(`Error deleting payment ${paymentId}:`, err);
+        }
+      }
+    }
+    
+    // Clear local payments state
+    setPayments([]);
   }
   
   let allSavesSuccessful = true;

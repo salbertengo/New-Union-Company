@@ -28,15 +28,19 @@ import "@fortawesome/fontawesome-svg-core/styles.css";
 const DashboardView = () => {
   // State
   const getTodayDates = () => {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const todayStartStr = todayStart.toISOString().split('T')[0];
+    const today = new Date();
     
-    const todayEnd = new Date();
-    todayEnd.setHours(23, 59, 59, 999);
-    const todayEndStr = todayEnd.toISOString().split('T')[0];
+    // Format as YYYY-MM-DD without timezone conversion
+    const formatDateString = (date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
     
-    return { start: todayStartStr, end: todayEndStr };
+    const todayStr = formatDateString(today);
+    
+    return { start: todayStr, end: todayStr };
   };
 
   const todayDates = getTodayDates();
@@ -50,8 +54,38 @@ const DashboardView = () => {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [paymentBreakdownData, setPaymentBreakdownData] = useState([]);
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const [isVerticalOrientation, setIsVerticalOrientation] = useState(false);
   const datePickerRef = useRef(null);
   const API_URL = process.env.REACT_APP_API_URL;
+  
+  // Add isDesktopView state for consistent styling with jobsheetView
+  const [isDesktopView, setIsDesktopView] = useState(window.innerWidth > 1024);
+
+  // Update device detection to match jobsheetView
+  useEffect(() => {
+    const detectDeviceAndOrientation = () => {
+      // Check for true desktop view based on width, regardless of touch capability
+      const isDesktop = window.innerWidth > 1024;
+      setIsDesktopView(isDesktop);
+      
+      // Only consider it a touch device if it has touch AND is not a desktop size
+      const hasTouchCapability = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+      setIsTouchDevice(hasTouchCapability && !isDesktop);
+      
+      // Set orientation
+      setIsVerticalOrientation(window.innerHeight > window.innerWidth);
+    };
+
+    detectDeviceAndOrientation();
+    window.addEventListener('touchstart', detectDeviceAndOrientation, { once: true });
+    window.addEventListener('resize', detectDeviceAndOrientation);
+
+    return () => {
+      window.removeEventListener('touchstart', detectDeviceAndOrientation);
+      window.removeEventListener('resize', detectDeviceAndOrientation);
+    };
+  }, []);
 
   const workflowTypes = useMemo(
     () => [
@@ -144,13 +178,19 @@ const DashboardView = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-const formatDateRangeDisplay = (start, end) => {
+  // ...existing code...
+
+  const formatDateRangeDisplay = (start, end) => {
   const formatDate = (dateString) => {
     if (!dateString) return "";
     try {
-      // Formato DD/MM/YYYY usando localización en-GB
-      return new Date(dateString).toLocaleDateString('en-GB');
+      // Parsear la fecha manualmente para evitar inconsistencias con zonas horarias
+      const [year, month, day] = dateString.split('-').map(Number);
+      
+      // Crear el formato DD/MM/YYYY explícitamente
+      return `${day.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')}/${year}`;
     } catch (e) {
+      console.error("Error formatting date:", e);
       return "Invalid date";
     }
   };
@@ -165,7 +205,175 @@ const formatDateRangeDisplay = (start, end) => {
   }
   return `${formatDate(start)} - ${formatDate(end)}`;
 };
+  // DateRangeSelector component similar to jobsheetView
+  const DateRangeSelector = () => {
+    return (
+      <div style={{ position: "relative", width: "100%" }}>
+        <button
+          onClick={() => setShowDatePicker(!showDatePicker)}
+          style={{
+            padding: isTouchDevice ? "12px 15px" : "5px 15px",
+            backgroundColor: "#F9FBFF",
+            border: "1px solid #e0e0e0",
+            borderRadius: "10px",
+            display: "flex",
+            alignItems: "center",
+            gap: "5px",
+            height: isTouchDevice ? "46px" : "35px",
+            fontSize: isTouchDevice ? "16px" : "14px",
+            color: "#333",
+            width: "100%",
+            justifyContent: "center"
+          }}
+        >
+          <FontAwesomeIcon icon={faCalendar} style={{ color: "#5932EA" }} />
+          {formatDateRangeDisplay(startDate, endDate)}
+        </button>
 
+        {showDatePicker && (
+          <div style={{
+            position: "absolute",
+            top: "50px",
+            right: isVerticalOrientation ? "auto" : "0",
+            left: isVerticalOrientation ? "50%" : "auto",
+            transform: isVerticalOrientation ? "translateX(-50%)" : "none",
+            zIndex: 1000,
+            backgroundColor: "white",
+            borderRadius: "8px",
+            boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
+            padding: isTouchDevice ? "20px" : "15px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "10px",
+            width: isVerticalOrientation ? (isTouchDevice ? "90%" : "95%") : "280px",
+            maxWidth: "500px"
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h4 style={{ margin: 0, marginBottom: 16, fontSize: isTouchDevice ? 18 : 16 }}>Date Range</h4>
+              <button 
+                onClick={() => setShowDatePicker(false)}
+                style={{ 
+                  background: "none", 
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: isTouchDevice ? 22 : 16,
+                  padding: isTouchDevice ? 10 : 0,
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  width: isTouchDevice ? 40 : 30,
+                  height: isTouchDevice ? 40 : 30
+                }}
+              >
+                <FontAwesomeIcon icon={faTimes} />
+              </button>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+              <div>
+                <label style={{ 
+                  display: "block", 
+                  marginBottom: "8px", 
+                  fontSize: isTouchDevice ? 16 : 14,
+                  fontWeight: "500"
+                }}>
+                  Start Date
+                </label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  max={endDate}
+                  style={{ 
+                    padding: isTouchDevice ? "14px 12px" : "8px", 
+                    borderRadius: "6px", 
+                    border: "1px solid #ddd",
+                    width: "100%",
+                    fontSize: isTouchDevice ? 16 : "inherit",
+                    minHeight: isTouchDevice ? "48px" : "auto",
+                    boxSizing: "border-box"
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ 
+                  display: "block", 
+                  marginBottom: "8px", 
+                  fontSize: isTouchDevice ? 16 : 14,
+                  fontWeight: "500"
+                }}>
+                  End Date
+                </label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  min={startDate}
+                  style={{ 
+                    padding: isTouchDevice ? "14px 12px" : "8px", 
+                    borderRadius: "6px", 
+                    border: "1px solid #ddd",
+                    width: "100%",
+                    fontSize: isTouchDevice ? 16 : "inherit",
+                    minHeight: isTouchDevice ? "48px" : "auto",
+                    boxSizing: "border-box"
+                  }}
+                />
+              </div>
+            </div>
+
+            <div style={{ 
+              display: "flex", 
+              justifyContent: "space-between", 
+              marginTop: "15px", 
+              gap: "10px" 
+            }}>
+<button
+  onClick={() => {
+    // Use the updated getTodayDates function
+    const todayDates = getTodayDates();
+    setStartDate(todayDates.start);
+    setEndDate(todayDates.end);
+    fetchDashboardData();
+    fetchPaymentBreakdownData();
+    setShowDatePicker(false);
+  }}
+  style={{
+    padding: isTouchDevice ? "14px" : "8px 15px",
+    backgroundColor: "#f5f5f5",
+    border: "none",
+    borderRadius: "6px",
+    cursor: "pointer",
+    fontSize: isTouchDevice ? 16 : "inherit",
+    flex: "1",
+    minHeight: isTouchDevice ? "48px" : "auto"
+  }}
+>
+  Today Only
+</button>
+              <button
+                onClick={handleApplyDates}
+                style={{
+                  padding: isTouchDevice ? "14px" : "8px 15px",
+                  backgroundColor: "#5932EA",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontSize: isTouchDevice ? 16 : "inherit",
+                  flex: "1",
+                  minHeight: isTouchDevice ? "48px" : "auto",
+                  fontWeight: "500"
+                }}
+              >
+                Apply Filter
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const handleApplyDates = () => {
     fetchDashboardData();
@@ -182,20 +390,11 @@ const formatDateRangeDisplay = (start, end) => {
         throw new Error("No authentication token found");
       }
   
-      // Ajustar la fecha de fin para incluir todo el día
-      let adjustedEndDate = endDate;
-      if (startDate === endDate) {
-        // Si estamos viendo un solo día, asegúrate de incluir todo el día
-        const endDateTime = new Date(endDate);
-        endDateTime.setHours(23, 59, 59, 999);
-        // No es necesario cambiar el formato para la API, solo asegúrate que la API
-        // interprete correctamente la fecha sin hora como día completo
-      }
-  
+      // Ensure end date includes full day
       const queryParams = new URLSearchParams({
         start_date: startDate,
-        end_date: adjustedEndDate,
-        include_full_day: "true"  // Flag adicional para indicar al backend que incluya todo el día
+        end_date: endDate,
+        include_full_day: "true"  // Flag to ensure backend includes the full day
       }).toString();
   
       const summaryResponse = await fetch(
@@ -212,6 +411,8 @@ const formatDateRangeDisplay = (start, end) => {
       }
 
       const summaryResult = await summaryResponse.json();
+          console.log("Dashboard summary data:", summaryResult); // Log para depuración
+
       setSummaryData(summaryResult);
     } catch (err) {
       console.error("Dashboard data fetch error:", err);
@@ -233,6 +434,8 @@ const formatDateRangeDisplay = (start, end) => {
       const queryParams = new URLSearchParams({
         start_date: startDate,
         end_date: endDate,
+              include_full_day: "true"  
+
       }).toString();
   
       const url = `${API_URL}/reports/export-data?${queryParams}`;
@@ -289,25 +492,26 @@ const formatDateRangeDisplay = (start, end) => {
   }, [API_URL, startDate, endDate]);
 
   const fetchPaymentBreakdownData = useCallback(async () => {
-    try {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        throw new Error("No authentication token found");
+  try {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      throw new Error("No authentication token found");
+    }
+
+    const queryParams = new URLSearchParams({
+      start_date: startDate,
+      end_date: endDate,
+      include_full_day: "true"  // Add this parameter for consistency
+    }).toString();
+
+    const response = await fetch(
+      `${API_URL}/reports/workflow-payment-breakdown?${queryParams}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       }
-
-      const queryParams = new URLSearchParams({
-        start_date: startDate,
-        end_date: endDate,
-      }).toString();
-
-      const response = await fetch(
-        `${API_URL}/reports/workflow-payment-breakdown?${queryParams}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+    );
 
       if (!response.ok) {
         throw new Error(`Failed to fetch payment breakdown data: ${response.status}`);
@@ -322,16 +526,21 @@ const formatDateRangeDisplay = (start, end) => {
   }, [API_URL, startDate, endDate]);
 
   const handleExport = () => {
-  const workbookData = exportData.map(item => ({
-    'Date': format(new Date(item.date), 'dd/MM/yyyy'), 
-    'Customer': item.customer,
-    'Jobsheet Number': item.jobsheet_number,
-    'Code': item.code || '',
-    'Cash Amount': item.cash_amount.toFixed(2),
-    'PayNow Amount': item.paynow_amount.toFixed(2),
-    'Other Amount': item.other_amount.toFixed(2),
-    'GST Value': item.gst_value.toFixed(2)
-  }));
+    const workbookData = exportData.map(item => {
+      // Ensure date is handled consistently
+      const itemDate = new Date(item.date);
+      // Format date consistently using the date-fns library to avoid timezone issues
+      return {
+        'Date': format(itemDate, 'dd/MM/yyyy'), 
+        'Customer': item.customer,
+        'Jobsheet Number': item.jobsheet_number,
+        'Code': item.code || '',
+        'Cash Amount': item.cash_amount.toFixed(2),
+        'PayNow Amount': item.paynow_amount.toFixed(2),
+        'Other Amount': item.other_amount.toFixed(2),
+        'GST Value': item.gst_value.toFixed(2)
+      };
+    });
 
     const worksheet = XLSX.utils.json_to_sheet(workbookData);
     const workbook = XLSX.utils.book_new();
@@ -349,10 +558,10 @@ const formatDateRangeDisplay = (start, end) => {
     ];
     worksheet["!cols"] = colWidths;
     
-  const filename = `Revenue_Report_${format(new Date(startDate), 'dd-MM-yyyy')}_to_${format(new Date(endDate), 'dd-MM-yyyy')}.xlsx`;
+    const filename = `Revenue_Report_${format(new Date(startDate), 'dd-MM-yyyy')}_to_${format(new Date(endDate), 'dd-MM-yyyy')}.xlsx`;
     
-  XLSX.writeFile(workbook, filename);
-  setShowExportModal(false);
+    XLSX.writeFile(workbook, filename);
+    setShowExportModal(false);
   };
 
   useEffect(() => {
@@ -397,11 +606,11 @@ const formatDateRangeDisplay = (start, end) => {
         height: "100%",
         display: "flex",
         flexDirection: "column",
-        borderRadius: "30px",
+        borderRadius: isTouchDevice ? "16px" : "30px",
         overflow: "hidden",
         backgroundColor: "#ffffff",
         boxSizing: "border-box",
-        padding: "20px",
+        padding: isTouchDevice && isVerticalOrientation ? "15px" : "20px",
       }}
     >
       <div
@@ -410,155 +619,38 @@ const formatDateRangeDisplay = (start, end) => {
           justifyContent: "space-between",
           alignItems: "center",
           marginBottom: "20px",
+          flexDirection: isTouchDevice && isVerticalOrientation ? "column" : "row", 
+          gap: isTouchDevice && isVerticalOrientation ? "15px" : "initial"
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
-          <h2 style={{ margin: 0, fontSize: "22px", fontWeight: "600" }}>
+        <div style={{ 
+          display: "flex", 
+          alignItems: "center", 
+          gap: "15px",
+          width: isTouchDevice && isVerticalOrientation ? "100%" : "auto",
+          flexDirection: isTouchDevice && isVerticalOrientation ? "column" : "row",
+          alignItems: isTouchDevice && isVerticalOrientation ? "flex-start" : "center"
+        }}>
+          <h2 style={{ 
+            margin: 0, 
+            fontSize: isTouchDevice ? "20px" : "22px", 
+            fontWeight: "600" 
+          }}>
             Dashboard
           </h2>
 
-          <div style={{ position: "relative" }} ref={datePickerRef}>
-            <button
-              onClick={() => setShowDatePicker(!showDatePicker)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                padding: "8px 16px",
-                backgroundColor: "#F9FBFF",
-                border: "1px solid #eaeaea",
-                borderRadius: "8px",
-                cursor: "pointer",
-                fontSize: "14px",
-                color: "#333",
-                transition: "all 0.2s ease",
-              }}
-            >
-              <FontAwesomeIcon
-                icon={faCalendar}
-                style={{ color: "#5932EA", fontSize: "14px" }}
-              />
-              <span>
-                {formatDateRangeDisplay(startDate, endDate)}
-              </span>
-            </button>
-
-            {showDatePicker && (
-              <div
-                style={{
-                  position: "absolute",
-                  top: "calc(100% + 5px)",
-                  left: 0,
-                  width: "280px",
-                  backgroundColor: "white",
-                  borderRadius: "8px",
-                  boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
-                  zIndex: 100,
-                  padding: "16px",
-                }}
-              >
-                <div style={{ fontSize: "14px", fontWeight: "600", marginBottom: "12px", color: "#333" }}>
-                  Select Date Range
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                  <div>
-                    <label style={{ fontSize: "13px", color: "#555", display: "block", marginBottom: "6px" }}>
-                      Start Date
-                    </label>
-                    <input
-                      type="date"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                      max={endDate}
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        border: "1px solid #eaeaea",
-                        borderRadius: "6px",
-                        fontSize: "14px",
-                        boxSizing: "border-box"
-                      }}
-                    />
-                  </div>
-                  
-                  <div>
-                    <label style={{ fontSize: "13px", color: "#555", display: "block", marginBottom: "6px" }}>
-                      End Date
-                    </label>
-                    <input
-                      type="date"
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                      min={startDate}
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        border: "1px solid #eaeaea",
-                        borderRadius: "6px",
-                        fontSize: "14px",
-                        boxSizing: "border-box"
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", justifyContent: "space-between", marginTop: "16px" }}>
-                <button
-  onClick={() => {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const todayStartStr = todayStart.toISOString().split('T')[0];
-    
-    const todayEnd = new Date();
-    todayEnd.setHours(23, 59, 59, 999);
-    const todayEndStr = todayEnd.toISOString().split('T')[0];
-    
-    setStartDate(todayStartStr);
-    setEndDate(todayEndStr);
-    handleApplyDates();
-  }}
-  style={{
-    padding: "8px 12px",
-    fontSize: "13px",
-    backgroundColor: "#f0f0f0",
-    border: "none",
-    borderRadius: "6px",
-    cursor: "pointer",
-    color: "#333",
-  }}
->
-  Today
-</button>
-
-                  <button
-                    onClick={handleApplyDates}
-                    style={{
-                      padding: "8px 16px",
-                      fontSize: "13px",
-                      backgroundColor: "#5932EA",
-                      color: "white",
-                      border: "none",
-                      borderRadius: "6px",
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "6px"
-                    }}
-                  >
-                    <FontAwesomeIcon icon={faSearch} style={{ fontSize: "12px" }} />
-                    Apply
-                  </button>
-                </div>
-              </div>
-            )}
+          <div style={{ 
+            position: "relative", 
+            width: isTouchDevice && isVerticalOrientation ? "100%" : "auto"
+          }}>
+            <DateRangeSelector />
           </div>
           
           <button
             onClick={fetchExportData}
             disabled={exportLoading}
             style={{
-              padding: "8px 16px",
+              padding: isTouchDevice ? "12px 16px" : "8px 16px",
               backgroundColor: "#34A853",
               color: "white",
               border: "none",
@@ -567,8 +659,10 @@ const formatDateRangeDisplay = (start, end) => {
               display: "flex",
               alignItems: "center",
               gap: "8px",
-              fontSize: "14px",
-              fontWeight: "500"
+              fontSize: isTouchDevice ? "16px" : "14px",
+              fontWeight: "500",
+              width: isTouchDevice && isVerticalOrientation ? "100%" : "auto",
+              justifyContent: isTouchDevice && isVerticalOrientation ? "center" : "flex-start"
             }}
           >
             <FontAwesomeIcon icon={faFileExcel} />
@@ -587,12 +681,14 @@ const formatDateRangeDisplay = (start, end) => {
             display: "flex",
             alignItems: "center",
             gap: "6px",
-            fontSize: "14px",
-            padding: "8px 16px",
+            fontSize: isTouchDevice ? "16px" : "14px",
+            padding: isTouchDevice ? "12px 16px" : "8px 16px",
             borderRadius: "8px",
             transition: "all 0.3s ease",
             transform: loading ? "scale(0.97)" : "scale(1)",
             boxShadow: loading ? "none" : "0 2px 4px rgba(89, 50, 234, 0.2)",
+            width: isTouchDevice && isVerticalOrientation ? "100%" : "auto",
+            justifyContent: isTouchDevice && isVerticalOrientation ? "center" : "flex-start"
           }}
           className="refresh-button"
         >
@@ -887,8 +983,6 @@ const formatDateRangeDisplay = (start, end) => {
         </div>
       </div>
 
-      
-
       {showExportModal && (
         <div
           style={{
@@ -937,10 +1031,10 @@ const formatDateRangeDisplay = (start, end) => {
             </div>
             
             <div style={{ marginBottom: "20px" }}>
-  <p>Your report for {formatDateRangeDisplay(startDate, endDate)} is ready to export.</p>
+              <p>Your report for {formatDateRangeDisplay(startDate, endDate)} is ready to export.</p>
               <p>The Excel file will include:</p>
               <ul style={{ paddingLeft: "20px", margin: "10px 0" }}>
-    <li>Date (DD/MM/YYYY format)</li> 
+                <li>Date (DD/MM/YYYY format)</li> 
                 <li>Customer (License Plate)</li>
                 <li>Jobsheet Number</li>
                 <li>Code (Workflow Type)</li>
