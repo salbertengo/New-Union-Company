@@ -230,24 +230,24 @@ const DashboardView = () => {
           {formatDateRangeDisplay(startDate, endDate)}
         </button>
 
-        {showDatePicker && (
-          <div style={{
-            position: "absolute",
-            top: "50px",
-            right: isVerticalOrientation ? "auto" : "0",
-            left: isVerticalOrientation ? "50%" : "auto",
-            transform: isVerticalOrientation ? "translateX(-50%)" : "none",
-            zIndex: 1000,
-            backgroundColor: "white",
-            borderRadius: "8px",
-            boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
-            padding: isTouchDevice ? "20px" : "15px",
-            display: "flex",
-            flexDirection: "column",
-            gap: "10px",
-            width: isVerticalOrientation ? (isTouchDevice ? "90%" : "95%") : "280px",
-            maxWidth: "500px"
-          }}>
+ {showDatePicker && (
+  <div style={{
+    position: "absolute",
+    top: "50px",
+    // Cambiamos el posicionamiento para evitar que se corte en el sidebar
+    left: isVerticalOrientation ? "50%" : "0",
+    transform: isVerticalOrientation ? "translateX(-50%)" : "none",
+    zIndex: 1000,
+    backgroundColor: "white",
+    borderRadius: "8px",
+    boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
+    padding: isTouchDevice ? "20px" : "15px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "10px",
+    width: isVerticalOrientation ? (isTouchDevice ? "90%" : "95%") : "280px",
+    maxWidth: "500px"
+  }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <h4 style={{ margin: 0, marginBottom: 16, fontSize: isTouchDevice ? 18 : 16 }}>Date Range</h4>
               <button 

@@ -875,15 +875,15 @@ const calculateTotals = () => {
   
   const paid = payments.reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
   
-  return {
-    items: itemsTotal,
-    laborBreakdown,
-    subtotal,
-    gstIncluded, // GST incluido solo en los productos
-    total,
-    paid,
-    balance: total - paid
-  };
+return {
+  items: itemsTotal,
+  laborBreakdown,
+  subtotal,
+  gstIncluded: gstIncluded, 
+  total,
+  paid,
+  balance: total - paid
+};
 };
 
   const getWorkflowTypeName = (type) => {
@@ -1114,10 +1114,10 @@ const handleDeleteItem = async (itemId) => {
   const itemToDelete = items.find(item => item.id === itemId);
   
   if (itemToDelete) {
-    // Check if this would be the last item/service and there are payments
+    // Verificar si este sería el último ítem/servicio
     const remainingItems = items.filter(item => item.id !== itemId);
-    
-
+    const remainingLabors = labors.filter(labor => !labor._action || labor._action !== 'delete');
+    const wouldBeEmpty = remainingItems.length === 0 && remainingLabors.length === 0;
     
     // Continue with the existing delete logic...
     if (itemToDelete._action === 'create') {
@@ -1129,14 +1129,30 @@ const handleDeleteItem = async (itemId) => {
       setItems(prevItems => prevItems.filter(item => item.id !== itemId));
     }
     
-    setHasPendingChanges(true);
-    showNotification("Item removed locally. Click Save & Exit to persist changes.", "info");
+    // Si después de eliminar el ítem no quedan ítems ni labores, eliminar pagos
+    if (wouldBeEmpty && payments.length > 0) {
+      // Marcar pagos existentes para eliminación y limpiar pagos locales
+      const existingPaymentIds = payments
+        .filter(payment => !payment.id.toString().includes('temp-'))
+        .map(payment => payment.id);
+      
+      if (existingPaymentIds.length > 0) {
+        showNotification("All payments have been removed because there are no items or services to bill.", "info");
+      }
+      
+      // Limpiar pagos locales
+      setPayments([]);
+      setHasPendingChanges(true);
+    } else {
+      setHasPendingChanges(true);
+      showNotification("Item removed locally. Click Save & Exit to persist changes.", "info");
+    }
   } else {
     console.error("Item not found for deletion:", itemId);
   }
 };
 
- const handleDeleteLabor = async (laborId) => {
+const handleDeleteLabor = async (laborId) => {
   if (isReadOnly) {
     showNotification(`This order is ${jobsheet?.state} and cannot be modified`, "error");
     return;
@@ -1149,17 +1165,16 @@ const handleDeleteItem = async (itemId) => {
     originalLaborId = originalLaborId.replace('labor-', '');
   }
   
-  console.log("Intentando borrar labor:", { 
-    laborId, 
-    originalLaborId, 
-    todosLosLabors: labors.map(l => ({ id: l.id, tipo: typeof l.id }))
-  });
-  
   // Buscar con el ID correcto
   const laborToDelete = labors.find(labor => labor.id.toString() === originalLaborId);
 
   if (laborToDelete) {
-    console.log("Labor encontrado, borrando:", laborToDelete);
+    // Verificar si este sería el último ítem/servicio
+    const remainingItems = items.filter(item => !item._action || item._action !== 'delete');
+    const remainingLabors = labors.filter(labor => 
+      labor.id !== laborToDelete.id && (!labor._action || labor._action !== 'delete')
+    );
+    const wouldBeEmpty = remainingItems.length === 0 && remainingLabors.length === 0;
     
     // Si el elemento es nuevo (no guardado en el servidor)
     if (laborToDelete._action === 'create') {
@@ -1171,8 +1186,24 @@ const handleDeleteItem = async (itemId) => {
       setLabors(prevLabors => prevLabors.filter(labor => labor.id !== laborToDelete.id));
     }
     
-    setHasPendingChanges(true);
-    showNotification("Labor removed locally. Click Save to persist changes.", "info");
+    // Si después de eliminar la labor no quedan ítems ni labores, eliminar pagos
+    if (wouldBeEmpty && payments.length > 0) {
+      // Marcar pagos existentes para eliminación y limpiar pagos locales
+      const existingPaymentIds = payments
+        .filter(payment => !payment.id.toString().includes('temp-'))
+        .map(payment => payment.id);
+      
+      if (existingPaymentIds.length > 0) {
+        showNotification("All payments have been removed because there are no items or services to bill.", "info");
+      }
+      
+      // Limpiar pagos locales
+      setPayments([]);
+      setHasPendingChanges(true);
+    } else {
+      setHasPendingChanges(true);
+      showNotification("Labor removed locally. Click Save to persist changes.", "info");
+    }
   } else {
     console.error(
       `Labor not found for deletion: ${laborId} (original: ${originalLaborId})`,
@@ -1422,6 +1453,14 @@ const handleDeleteItem = async (itemId) => {
   };
 
  const handleAddPayment = async () => {
+
+    const effectiveItemsExist = items.filter(item => !item._action || item._action !== 'delete').length > 0;
+  const effectiveLaborsExist = labors.filter(labor => !labor._action || labor._action !== 'delete').length > 0;
+  
+  if (!effectiveItemsExist && !effectiveLaborsExist) {
+    showNotification("Cannot add payment: There are no items or services to pay for after pending deletions.", "error");
+    return;
+  }
   if (isReadOnly) {
     showNotification(`This order is ${jobsheet?.state} and no additional payments can be added`, "error");
     return;
@@ -1444,13 +1483,18 @@ const handleDeleteItem = async (itemId) => {
     showNotification("Please enter a valid payment amount", "error");
     return;
   }
+  
+  // VALIDACIÓN DE SOBREPAGO RESTAURADA
+  const paymentAmountFloat = parseFloat(paymentAmount);
+  if (paymentAmountFloat > totals.balance) {
+    showNotification("Payment amount cannot exceed the remaining balance.", "error");
+    return;
+  }
+  
   if (!effectiveJobsheetId) {
     showNotification("Cannot add payment: No active jobsheet.", "error");
     return;
   }
-
-  // Parse the payment amount as float
-  const paymentAmountFloat = parseFloat(paymentAmount);
 
   // Create new payment with temporary ID and action flag
   const newPayment = {
@@ -1514,13 +1558,21 @@ useEffect(() => {
     return;
   }
   
-  setIsLoading(true);
-  const token = localStorage.getItem("token");
-  if (!token) {
-    setIsLoading(false);
-    showNotification("Authentication error.", "error");
+  // Validación adicional para revisar si quedarían pagos sin ítems/servicios
+  const effectiveItems = items.filter(item => !item._action || item._action !== 'delete').length > 0;
+  const effectiveLabors = labors.filter(labor => !labor._action || labor._action !== 'delete').length > 0;
+  const hasEffectivePayments = payments.filter(payment => !payment._action || payment._action !== 'delete').length > 0 ||
+                              payments.some(payment => payment._action === 'create');
+  
+  // NUEVA VALIDACIÓN: No permitir guardar si hay pagos pero no hay ítems/servicios
+  if (hasEffectivePayments && !effectiveItems && !effectiveLabors) {
+    showNotification("Cannot save: You have payments but no items or services. Please add items or remove payments.", "error");
     return;
   }
+  
+  setIsLoading(true);
+  const token = localStorage.getItem("token");
+  
   
   // Check if we need to remove payments because there are no billable items
   const hasItems = items.filter(item => !item._action || item._action !== 'delete').length > 0;
@@ -1887,15 +1939,13 @@ const isReadOnly = effectiveJobsheetId &&
         padding: "20px", // El padding se mantiene, el contenido interno se ajustará
         boxSizing: "border-box" // Asegurar que el padding no aumente el tamaño total más allá de width/maxWidth
       }}>
-<div style={{ // Encabezado (morado)
+<div style={{ 
   backgroundColor: "#5932EA",
   color: "white",
-  padding: "12px 20px",
-  margin: "-20px -20px 20px -20px", // Estos márgenes negativos harán que el header ocupe el ancho del padding del padre
+  padding: isTouchDevice ? "8px 12px" : "12px 20px", // Smaller padding on mobile
   display: "flex",
   justifyContent: "space-between",
-  alignItems: "center",
-  boxSizing: "border-box"
+  alignItems: "center"
 }}>
   <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
     <button 
@@ -2087,9 +2137,7 @@ const isReadOnly = effectiveJobsheetId &&
                   color: "white",
                   border: "none",
                   borderRadius: "4px",
-                  cursor: "pointer",
-                  fontSize: "14px",
-                  width: "100%"
+                                   cursor: "pointer"
                 }}
               >
                 Create Vehicle & Jobsheet
@@ -2104,20 +2152,21 @@ const isReadOnly = effectiveJobsheetId &&
   const totals = effectiveJobsheetId ? calculateTotals() : { items: 0, labor: 0, subtotal: 0, tax: 0, total: 0, paid: 0, balance: 0 };
 
   return (
-    <div style={{
-      position: isModal ? "relative" : "fixed",
-      top: isModal ? "auto" : 0,
-      left: isModal ? "auto" : 0, 
-      right: isModal ? "auto" : 0,
-      bottom: isModal ? "auto" : 0,
-      height: isModal ? "100%" : "auto",
-      width: isModal ? "100%" : "auto",
-      backgroundColor: "#f0f2f5",
-      display: "flex",
-      flexDirection: "column",
-      zIndex: isModal ? 1 : 1000,
-      overflow: "hidden"
-    }}>
+<div style={{
+  position: isModal ? "relative" : "fixed",
+  top:    isModal ? "auto" : 0,
+  left:   isModal ? "auto" : 0,
+  right:  isModal ? "auto" : 0,
+  bottom: isModal ? "auto" : 0,
+  width:   isModal ? "100%" : (isTouchDevice ? "100%" : "auto"),
+  height:  isModal ? "100%" : (isTouchDevice ? "100%" : "auto"),
+  backgroundColor: "#f0f2f5",
+  display: "flex",
+  flexDirection: "column",
+  zIndex:  isModal ? 1 : 1000,
+  overflow: "hidden", // Prevent horizontal scroll at container level
+  maxWidth: "100vw"  // Ensure container never exceeds screen width
+}}>
 
       <div style={{
         backgroundColor: "#5932EA",
@@ -2269,24 +2318,39 @@ const isReadOnly = effectiveJobsheetId &&
         </div>
       </div>
 
-      <div style={{ 
-        padding: "15px", 
-        overflowY: "auto",
-        display: "grid",
-        gridTemplateColumns: "1fr 350px",
-        gap: "15px",
-        flex: 1
-      }} ref={printableContentRef}>
-        <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+<div style={{ 
+  padding: isTouchDevice ? "10px" : "15px",
+  overflowY: "auto",
+  overflowX: "hidden",
+  // Forzar diseño grid para escritorio y flex para móvil
+  display: isTouchDevice ? "flex" : "grid",
+  // Solo aplicar flexDirection en móvil
+  flexDirection: isTouchDevice ? "column" : undefined,
+  // Configuración explícita de dos columnas para escritorio
+  gridTemplateColumns: isTouchDevice ? undefined : "1fr 350px",
+  gap: isTouchDevice ? "10px" : "15px",
+  flex: 1,
+  width: "100%",
+  boxSizing: "border-box"
+}} ref={printableContentRef}>
+        <div style={{ 
+          display: "flex", 
+          flexDirection: "column", 
+          gap: isTouchDevice ? "10px" : "15px"
+        }}>
 
 <div style={{ 
   backgroundColor: "white",
-  padding: "15px",
+  padding: isTouchDevice ? "12px" : "15px",
   borderRadius: "8px",
   boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-
+  marginBottom: isTouchDevice ? "10px" : "20px"
 }}>
-  <h3 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 600 }}>
+  <h3 style={{ 
+    margin: "0 0 10px 0", 
+    fontSize: isTouchDevice ? "18px" : "16px", // Larger font for touch
+    fontWeight: 600 
+  }}>
     {isReadOnly && <span style={{color: "#2e7d32", marginRight: "8px"}}>✓</span>}
     Add Products/Services/Charges
     {isReadOnly && <span style={{fontSize: "12px", color: "#666", marginLeft: "10px"}}>
@@ -2307,15 +2371,18 @@ const isReadOnly = effectiveJobsheetId &&
   ) : (
     <>
       {/* Botones para diferentes modos de entrada - Reorganizados en el orden solicitado */}
-      <div style={{ 
-        display: "flex", 
-        flexWrap: "wrap", 
-        gap: "8px", 
-        marginBottom: "15px", 
-        padding: "10px",
-        backgroundColor: "#f9f9f9",
-        borderRadius: "4px"
-      }}>
+<div style={{ 
+  display: "flex", 
+  flexWrap: "wrap", 
+  gap: isTouchDevice ? "10px" : "8px", 
+  marginBottom: "15px", 
+  padding: isTouchDevice ? "12px" : "10px",
+  backgroundColor: "#f9f9f9",
+  borderRadius: "4px",
+  width: "100%",
+  boxSizing: "border-box", // Ensure padding doesn't add to width
+  overflow: "hidden"       // No horizontal overflow
+}}>
         <button
           onClick={() => {
             setActiveInputMode("search");
@@ -2326,16 +2393,17 @@ const isReadOnly = effectiveJobsheetId &&
             setSearchResults([]);
           }}
           style={{
-            padding: "6px 12px",
+            padding: isTouchDevice ? "10px 16px" : "6px 12px",
             backgroundColor: activeInputMode === "search" ? "#5932EA" : "#ffffff",
             color: activeInputMode === "search" ? "white" : "#555",
             border: `1px solid ${activeInputMode === "search" ? "#5932EA" : "#ddd"}`,
-            borderRadius: "4px",
+            borderRadius: isTouchDevice ? "6px" : "4px",
             cursor: "pointer",
-            fontSize: "13px",
+            fontSize: isTouchDevice ? "15px" : "13px",
             display: "flex",
             alignItems: "center",
-            gap: "5px"
+            gap: "5px",
+            minHeight: isTouchDevice ? "44px" : "auto" // Better touch target
           }}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -2355,16 +2423,17 @@ const isReadOnly = effectiveJobsheetId &&
             setSearchResults([]);
           }}
           style={{
-            padding: "6px 12px",
+            padding: isTouchDevice ? "10px 16px" : "6px 12px",
             backgroundColor: activeInputMode === "labor" ? "#5932EA" : "#ffffff",
             color: activeInputMode === "labor" ? "white" : "#555",
             border: `1px solid ${activeInputMode === "labor" ? "#5932EA" : "#ddd"}`,
-            borderRadius: "4px",
+            borderRadius: isTouchDevice ? "6px" : "4px",
             cursor: "pointer",
-            fontSize: "13px",
+            fontSize: isTouchDevice ? "15px" : "13px",
             display: "flex",
             alignItems: "center",
-            gap: "5px"
+            gap: "5px",
+            minHeight: isTouchDevice ? "44px" : "auto" // Better touch target
           }}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -2384,16 +2453,17 @@ const isReadOnly = effectiveJobsheetId &&
             setSearchResults([]);
           }}
           style={{
-            padding: "6px 12px",
+            padding: isTouchDevice ? "10px 16px" : "6px 12px",
             backgroundColor: (activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["deposit"].id) ? getWorkflowButtonColor("2") : "#ffffff",
             color: (activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["deposit"].id) ? "white" : "#555",
             border: `1px solid ${(activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["deposit"].id) ? getWorkflowButtonColor("2") : "#ddd"}`,
-            borderRadius: "4px",
+            borderRadius: isTouchDevice ? "6px" : "4px",
             cursor: "pointer",
-            fontSize: "13px",
+            fontSize: isTouchDevice ? "15px" : "13px",
             display: "flex",
             alignItems: "center",
-            gap: "5px"
+            gap: "5px",
+            minHeight: isTouchDevice ? "44px" : "auto" // Better touch target
           }}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -2416,16 +2486,17 @@ const isReadOnly = effectiveJobsheetId &&
             setSearchResults([]);
           }}
           style={{
-            padding: "6px 12px",
+            padding: isTouchDevice ? "10px 16px" : "6px 12px",
             backgroundColor: (activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["insurance"].id) ? getWorkflowButtonColor("3") : "#ffffff",
             color: (activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["insurance"].id) ? "white" : "#555",
             border: `1px solid ${(activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["insurance"].id) ? getWorkflowButtonColor("3") : "#ddd"}`,
-            borderRadius: "4px",
+            borderRadius: isTouchDevice ? "6px" : "4px",
             cursor: "pointer",
-            fontSize: "13px",
+            fontSize: isTouchDevice ? "15px" : "13px",
             display: "flex",
             alignItems: "center",
-            gap: "5px"
+            gap: "5px",
+            minHeight: isTouchDevice ? "44px" : "auto" // Better touch target
           }}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -2447,16 +2518,17 @@ const isReadOnly = effectiveJobsheetId &&
             setSearchResults([]);
           }}
           style={{
-            padding: "6px 12px",
+            padding: isTouchDevice ? "10px 16px" : "6px 12px",
             backgroundColor: (activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["bq hp"].id) ? getWorkflowButtonColor("4") : "#ffffff",
             color: (activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["bq hp"].id) ? "white" : "#555",
             border: `1px solid ${(activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["bq hp"].id) ? getWorkflowButtonColor("4") : "#ddd"}`,
-            borderRadius: "4px",
+            borderRadius: isTouchDevice ? "6px" : "4px",
             cursor: "pointer",
-            fontSize: "13px",
+            fontSize: isTouchDevice ? "15px" : "13px",
             display: "flex",
             alignItems: "center",
-            gap: "5px"
+            gap: "5px",
+            minHeight: isTouchDevice ? "44px" : "auto" // Better touch target
           }}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -2476,16 +2548,17 @@ const isReadOnly = effectiveJobsheetId &&
             setSearchResults([]);
           }}
           style={{
-            padding: "6px 12px",
+            padding: isTouchDevice ? "10px 16px" : "6px 12px",
             backgroundColor: (activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["road tax"].id) ? getWorkflowButtonColor("5") : "#ffffff",
             color: (activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["road tax"].id) ? "white" : "#555",
             border: `1px solid ${(activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["road tax"].id) ? getWorkflowButtonColor("5") : "#ddd"}`,
-            borderRadius: "4px",
+            borderRadius: isTouchDevice ? "6px" : "4px",
             cursor: "pointer",
-            fontSize: "13px",
+            fontSize: isTouchDevice ? "15px" : "13px",
             display: "flex",
             alignItems: "center",
-            gap: "5px"
+            gap: "5px",
+            minHeight: isTouchDevice ? "44px" : "auto" // Better touch target
           }}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -2506,16 +2579,17 @@ const isReadOnly = effectiveJobsheetId &&
             setSearchResults([]);
           }}
           style={{
-            padding: "6px 12px",
+            padding: isTouchDevice ? "10px 16px" : "6px 12px",
             backgroundColor: (activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["nu hp"].id) ? getWorkflowButtonColor("6") : "#ffffff",
             color: (activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["nu hp"].id) ? "white" : "#555",
             border: `1px solid ${(activeInputMode === "workflowSpecific" && currentWorkflowKeywordInfo?.id === WORKFLOW_KEYWORDS["nu hp"].id) ? getWorkflowButtonColor("6") : "#ddd"}`,
-            borderRadius: "4px",
+            borderRadius: isTouchDevice ? "6px" : "4px",
             cursor: "pointer",
-            fontSize: "13px",
+            fontSize: isTouchDevice ? "15px" : "13px",
             display: "flex",
             alignItems: "center",
-            gap: "5px"
+            gap: "5px",
+            minHeight: isTouchDevice ? "44px" : "auto" // Better touch target
           }}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -2709,25 +2783,30 @@ const isReadOnly = effectiveJobsheetId &&
             padding: "15px",
             borderRadius: "8px",
             boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-            flex: 1,
+            marginBottom: "20px",
             display: "flex",
             flexDirection: "column"
           }}>
             <h3 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 600 }}>Items & Services</h3>
             
-            {allItems.length > 0 ? (
-              <div style={{ flex: 1, overflowY: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
-                  <thead>
-                    <tr style={{ borderBottom: "1px solid #eee" }}>
-                      <th style={{ textAlign: "left", padding: "8px 6px", color: "#666" }}>Item/Service</th>
-                      <th style={{ width: "60px", textAlign: "center", padding: "8px 6px", color: "#666" }}>Qty</th>
-                      <th style={{ width: "80px", textAlign: "right", padding: "8px 6px", color: "#666" }}>Price</th>
-                      <th style={{ width: "80px", textAlign: "right", padding: "8px 6px", color: "#666" }}>Total</th>
-                      <th style={{ width: "40px", padding: "8px 6px" }}></th>
-                    </tr>
-                  </thead>
-                  <tbody>
+           {allItems.length > 0 ? (
+  <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", width: "100%" }}>
+    <table style={{ 
+      width: "100%", 
+      borderCollapse: "collapse", 
+      fontSize: "13px",
+      tableLayout: isTouchDevice ? "fixed" : "auto" // Fixed table layout on mobile
+    }}>
+      <thead>
+        <tr style={{ borderBottom: "1px solid #eee" }}>
+          <th style={{ textAlign: "left", padding: "8px 6px", color: "#666", width: isTouchDevice ? "40%" : "auto" }}>Item/Service</th>
+          <th style={{ width: isTouchDevice ? "15%" : "60px", textAlign: "center", padding: "8px 6px", color: "#666" }}>Qty</th>
+          <th style={{ width: isTouchDevice ? "20%" : "80px", textAlign: "right", padding: "8px 6px", color: "#666" }}>Price</th>
+          <th style={{ width: isTouchDevice ? "15%" : "80px", textAlign: "right", padding: "8px 6px", color: "#666" }}>Total</th>
+          <th style={{ width: isTouchDevice ? "10%" : "40px", padding: "8px 6px" }}></th>
+        </tr>
+      </thead>
+      <tbody>
                     {allItems.map(item => (
                       <tr key={item.id} style={{ borderBottom: "1px solid #f8f8f8" }}>
                         <td style={{ padding: "8px 6px" }}>
@@ -2824,7 +2903,9 @@ const isReadOnly = effectiveJobsheetId &&
             backgroundColor: "white",
             padding: "15px",
             borderRadius: "8px",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.05)"
+            boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+            display: "flex",
+            flexDirection: "column"
           }}>
             <h3 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 600 }}>Financial Summary</h3>
             
@@ -2955,7 +3036,7 @@ const isReadOnly = effectiveJobsheetId &&
               </div>
             </div>
             
-         <div style={{
+<div style={{
   display: "flex",
   flexDirection: "column",
   gap: "8px"
@@ -2981,6 +3062,7 @@ const isReadOnly = effectiveJobsheetId &&
     <FontAwesomeIcon icon={faPrint} size={isTouchDevice ? "sm" : "sm"} />
     Print Invoice
   </button>
+  
   
 {isReadOnly ? (
     // Read-only mode: only show Exit button
@@ -3019,11 +3101,6 @@ const isReadOnly = effectiveJobsheetId &&
         color: "white",
         border: "none",
         borderRadius: isTouchDevice ? "8px" : "4px",
-        fontSize: isTouchDevice ? "15px" : "13px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: "8px",
         cursor: isLoading ? "not-allowed" : "pointer",
         opacity: isLoading ? 0.7 : 1,
         marginTop: "5px",
@@ -3062,18 +3139,29 @@ const isReadOnly = effectiveJobsheetId &&
   )}
 
   {/* Estilos adicionales específicos para dispositivos táctiles */}
-  {isTouchDevice && (
-    <style jsx="true">{`
-      @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-      }
-      
-      button:active {
-        transform: scale(0.98);
-      }
-    `}</style>
-  )}
+{isTouchDevice && (
+  
+  <style jsx="true">{`
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    button:active {
+      transform: scale(0.98);
+    }
+    
+    /* Add bottom padding to ensure content isn't hidden under fixed buttons */
+    body {
+      padding-bottom: 70px;
+    }
+    
+    input, select, button {
+      -webkit-appearance: none; /* Remove default iOS styling */
+      appearance: none;
+    }
+  `}</style>
+)}
 </div>
           </div>
           
@@ -3085,7 +3173,7 @@ const isReadOnly = effectiveJobsheetId &&
             opacity: isReadOnly ? 0.6 : 1,
             pointerEvents: isReadOnly ? "none" : "auto"
           }}>
-           <h3 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 600 }}>Add Payment
+            <h3 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 600 }}>Add Payment
               {isReadOnly && <span style={{fontSize: "12px", color: "#666", marginLeft: "10px"}}>
                 ({jobsheet?.state === "cancelled" ? "Cancelled" : "Completed"} - No Changes Allowed)
               </span>}
@@ -3108,36 +3196,47 @@ const isReadOnly = effectiveJobsheetId &&
               </div>
             ) : totals.balance > 0 ? (
               <>
-                <div style={{ 
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: "8px",
-                  marginBottom: "10px"
-                }}>
-                  <input
-                    type="number"
-                    value={paymentAmount}
-                    onChange={e => {
-                      const value = e.target.value;
-                      if (!value || parseFloat(value) <= totals.balance) {
-                        setPaymentAmount(value);
-                      } else {
-                        setPaymentAmount(totals.balance.toString());
-                        showNotification(`Maximum amount is $${totals.balance.toFixed(2)}`, "error");
-                      }
-                    }}
-                    placeholder="Amount"
-                    min="0"
-                    max={totals.balance}
-                    step="0.01"
-                    style={{ padding: "8px", borderRadius: "4px", border: "1px solid #ddd" }}
-                  />
-                  
-                  <select
-                    value={paymentMethod}
-                    onChange={e => setPaymentMethod(e.target.value)}
-                    style={{ padding: "8px", borderRadius: "4px", border: "1px solid #ddd" }}
-                  >
+<div style={{ 
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: "8px",
+  marginBottom: "10px",
+  width: "100%",
+  boxSizing: "border-box"
+}}>
+<input
+  type="number"
+  value={paymentAmount}
+  onChange={e => {
+    const value = parseFloat(e.target.value);
+    if (!isNaN(value) && value > totals.balance) {
+      setPaymentAmount(totals.balance.toString());
+    } else {
+      setPaymentAmount(e.target.value);
+    }
+  }}
+  placeholder="Amount"
+  max={totals.balance}
+  style={{ 
+    width: "100%",
+    padding: isTouchDevice ? "12px" : "8px",
+    borderRadius: "4px", 
+    border: "1px solid #ddd",
+    boxSizing: "border-box"
+  }}
+/>
+  
+  <select
+    value={paymentMethod}
+    onChange={e => setPaymentMethod(e.target.value)}
+    style={{ 
+      width: "100%",
+      padding: isTouchDevice ? "12px" : "8px", 
+      borderRadius: "4px", 
+      border: "1px solid #ddd",
+      boxSizing: "border-box" 
+    }}
+  >
                     <option value="cash">Cash</option>
                     <option value="paynow">Paynow</option>
                     <option value="nets">Nets</option>
@@ -3294,9 +3393,9 @@ const isReadOnly = effectiveJobsheetId &&
             backgroundColor: "white",
             borderRadius: "8px",
             width: "90%",
-            maxWidth: "500px",
-            padding: "20px",
-            maxHeight: "80vh",
+            maxWidth: isTouchDevice ? "100%" : "500px",
+            padding: isTouchDevice ? "16px 12px" : "20px",
+            maxHeight: isTouchDevice ? "90vh" : "80vh",
             overflowY: "auto",
             boxShadow: "0 4px 8px rgba(0,0,0,0.1)"
           }}>
@@ -3304,11 +3403,15 @@ const isReadOnly = effectiveJobsheetId &&
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
-              marginBottom: "15px",
+              marginBottom: isTouchDevice ? "20px" : "15px",
               borderBottom: "1px solid #eee",
-              paddingBottom: "10px"
+              paddingBottom: isTouchDevice ? "15px" : "10px"
             }}>
-              <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 600 }}>
+              <h3 style={{ 
+                margin: 0, 
+                fontSize: isTouchDevice ? "18px" : "16px", 
+                fontWeight: 600 
+              }}>
                 {jobsheet?.customer_id ? "Change Customer" : "Assign Customer"}
               </h3>
               <button
@@ -3316,17 +3419,24 @@ const isReadOnly = effectiveJobsheetId &&
                 style={{
                   background: "none",
                   border: "none",
-                  fontSize: "20px",
+                  fontSize: isTouchDevice ? "28px" : "20px", // Botón más grande para móvil
                   cursor: "pointer",
-                  color: "#666"
+                  color: "#666",
+                  padding: isTouchDevice ? "8px" : "0", // Área táctil más grande
+                  marginRight: isTouchDevice ? "-8px" : "0",
+                  WebkitTapHighlightColor: "transparent" // Elimina el highlight en dispositivos táctiles
                 }}
               >
                 &times;
               </button>
             </div>
 
-            <div style={{ marginBottom: "15px" }}>
-              <label style={{ display: "block", marginBottom: "5px", fontSize: "14px" }}>
+            <div style={{ marginBottom: isTouchDevice ? "20px" : "15px" }}>
+              <label style={{ 
+                display: "block", 
+                marginBottom: isTouchDevice ? "8px" : "5px", 
+                fontSize: isTouchDevice ? "15px" : "13px" 
+              }}>
                 Search Customers
               </label>
               <div style={{ position: "relative" }}>
@@ -3337,20 +3447,22 @@ const isReadOnly = effectiveJobsheetId &&
                   placeholder="Search by name, contact or email"
                   style={{ 
                     width: "100%",
-                    padding: "10px 10px 10px 35px",
-                    borderRadius: "4px",
+                    padding: isTouchDevice ? "12px 12px 12px 40px" : "10px 10px 10px 35px",
+                    borderRadius: isTouchDevice ? "8px" : "4px",
                     border: "1px solid #ddd",
-                    fontSize: "14px"
+                    fontSize: isTouchDevice ? "16px" : "14px", // Fuente más grande en móvil
+                    boxSizing: "border-box"
                   }}
                 />
                 <FontAwesomeIcon 
                   icon={faSearch} 
                   style={{ 
                     position: "absolute",
-                    left: "12px",
+                    left: isTouchDevice ? "14px" : "12px",
                     top: "50%",
                     transform: "translateY(-50%)",
-                    color: "#666"
+                    color: "#666",
+                    fontSize: isTouchDevice ? "16px" : "14px"
                   }}
                 />
               </div>
@@ -3359,9 +3471,9 @@ const isReadOnly = effectiveJobsheetId &&
             {customerSearchResults.length > 0 && (
               <div style={{
                 border: "1px solid #eee",
-                borderRadius: "4px",
-                marginBottom: "15px",
-                maxHeight: "200px",
+                borderRadius: isTouchDevice ? "8px" : "4px",
+                marginBottom: isTouchDevice ? "20px" : "15px",
+                maxHeight: isTouchDevice ? "40vh" : "200px",
                 overflowY: "auto"
               }}>
                 {customerSearchResults.map(customer => (
@@ -3369,7 +3481,7 @@ const isReadOnly = effectiveJobsheetId &&
                     key={customer.id}
                     onClick={() => handleSelectCustomer(customer)}
                     style={{
-                      padding: "10px 15px",
+                      padding: isTouchDevice ? "14px 16px" : "10px 15px", // Área táctil más grande
                       borderBottom: "1px solid #f0f0f0",
                       cursor: "pointer",
                       backgroundColor: selectedCustomerId === customer.id ? "#f0f7ff" : "white",
@@ -3378,8 +3490,15 @@ const isReadOnly = effectiveJobsheetId &&
                     onMouseOver={(e) => e.currentTarget.style.backgroundColor = selectedCustomerId === customer.id ? "#f0f7ff" : "#f9f9f9"}
                     onMouseOut={(e) => e.currentTarget.style.backgroundColor = selectedCustomerId === customer.id ? "#f0f7ff" : "white"}
                   >
-                    <div style={{ fontWeight: "500" }}>{customer.name}</div>
-                    <div style={{ fontSize: "13px", color: "#666", marginTop: "3px" }}>
+                    <div style={{ 
+                      fontWeight: "500",
+                      fontSize: isTouchDevice ? "16px" : "14px" 
+                    }}>{customer.name}</div>
+                    <div style={{ 
+                      fontSize: isTouchDevice ? "14px" : "13px", 
+                      color: "#666", 
+                      marginTop: "3px" 
+                    }}>
                       {customer.contact || "No contact"} | {customer.email || "No email"}
                     </div>
                   </div>
@@ -3387,191 +3506,25 @@ const isReadOnly = effectiveJobsheetId &&
               </div>
             )}
 
-            {(selectedCustomer || jobsheet?.customer_id) && (
-              <div style={{
-                padding: "15px",
-                backgroundColor: "#f0f7ff",
-                borderRadius: "4px",
-                marginBottom: "15px",
-                border: "1px solid #d0e0ff"
-              }}>
-                <h4 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 500 }}>
-                  {selectedCustomer ? "Selected Customer:" : "Current Customer:"}
-                </h4>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div>
-                    <div style={{ fontWeight: "500" }}>
-                      {selectedCustomer?.name || jobsheet?.customer_name || "Unknown"}
-                    </div>
-                    <div style={{ fontSize: "13px", color: "#666", marginTop: "3px" }}>
-                      {selectedCustomer?.contact || jobsheet?.customer_contact || "No contact"}
-                      {" | "}
-                      {selectedCustomer?.email || jobsheet?.customer_email || "No email"}
-                    </div>
-                  </div>
-                  {selectedCustomer && (
-                    <button 
-                      onClick={() => {
-                        setSelectedCustomer(null);
-                        setSelectedCustomerId(null);
-                      }}
-                      style={{
-                        background: "none",
-                        border: "none",
-                        color: "#5932EA",
-                        cursor: "pointer"
-                      }}
-                    >
-                      <FontAwesomeIcon icon={faTimes} />
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-
+            {/* Botones del formulario */}
             <div style={{ 
-              padding: "10px",
-              backgroundColor: "#f9f9f9",
-              borderRadius: "4px",
-              marginBottom: "15px",
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center"
+              display: "flex", 
+              gap: isTouchDevice ? "15px" : "10px", 
+              justifyContent: "flex-end", 
+              marginTop: isTouchDevice ? "20px" : "15px" 
             }}>
-              <button
-                onClick={() => setShowNewCustomerForm(!showNewCustomerForm)}
-                style={{
-                  padding: "6px 12px",
-                  backgroundColor: "#5932EA",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                  fontSize: "13px",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "5px"
-                }}
-              >
-                <FontAwesomeIcon icon={faPlus} size="xs" />
-                Create New Customer
-              </button>
-            </div>
-
-            {showNewCustomerForm && (
-              <div style={{
-                padding: "15px",
-                backgroundColor: "#f9f9f9",
-                borderRadius: "4px",
-                marginBottom: "15px",
-                border: "1px solid #eee"
-              }}>
-                <h4 style={{ margin: "0 0 15px 0", fontSize: "14px", fontWeight: 500 }}>New Customer Details</h4>
-                
-                <div style={{ marginBottom: "12px" }}>
-                  <label style={{ display: "block", marginBottom: "5px", fontSize: "13px" }}>
-                    Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={newCustomerDetails.name}
-                    onChange={(e) => setNewCustomerDetails({...newCustomerDetails, name: e.target.value})}
-                    placeholder="Customer name"
-                    style={{ 
-                      width: "100%",
-                      padding: "8px",
-                      borderRadius: "4px",
-                      border: "1px solid #ddd",
-                      fontSize: "13px",
-                      boxSizing: "border-box"
-                    }}
-                  />
-                </div>
-                
-                <div style={{ marginBottom: "12px" }}>
-                  <label style={{ display: "block", marginBottom: "5px", fontSize: "13px" }}>
-                    Contact
-                  </label>
-                  <input
-                    type="text"
-                    value={newCustomerDetails.contact}
-                    onChange={(e) => setNewCustomerDetails({...newCustomerDetails, contact: e.target.value})}
-                    placeholder="Phone number"
-                    style={{ 
-                      width: "100%",
-                      padding: "8px",
-                      borderRadius: "4px",
-                      border: "1px solid #ddd",
-                      fontSize: "13px",
-                      boxSizing: "border-box"
-                    }}
-                  />
-                </div>
-                
-                <div style={{ marginBottom: "15px" }}>
-                  <label style={{ display: "block", marginBottom: "5px", fontSize: "13px" }}>
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    value={newCustomerDetails.email}
-                    onChange={(e) => setNewCustomerDetails({...newCustomerDetails, email: e.target.value})}
-                    placeholder="Email address"
-                    style={{ 
-                      width: "100%",
-                      padding: "8px",
-                      borderRadius: "4px",
-                      border: "1px solid #ddd",
-                      fontSize: "13px",
-                      boxSizing: "border-box"
-                    }}
-                  />
-                </div>
-                
-                <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-                  <button
-                    onClick={() => setShowNewCustomerForm(false)}
-                    style={{
-                      padding: "6px 12px",
-                      backgroundColor: "#f1f1f1",
-                      color: "#333",
-                      border: "1px solid #ddd",
-                      borderRadius: "4px",
-                      cursor: "pointer",
-                      fontSize: "13px"
-                    }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleCreateCustomer}
-                    style={{
-                      padding: "6px 12px",
-                      backgroundColor: "#00C853",
-                      color: "white",
-                      border: "none",
-                      borderRadius: "4px",
-                      cursor: "pointer",
-                      fontSize: "13px"
-                    }}
-                  >
-                    Create Customer
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "15px" }}>
               <button
                 onClick={() => setShowCustomerModal(false)}
                 style={{
-                  padding: "8px 16px",
+                  padding: isTouchDevice ? "12px 20px" : "8px 16px",
                   backgroundColor: "#f1f1f1",
                   color: "#333",
                   border: "1px solid #ddd",
-                  borderRadius: "4px",
+                  borderRadius: isTouchDevice ? "8px" : "4px",
                   cursor: "pointer",
-                  fontSize: "14px"
+                  fontSize: isTouchDevice ? "16px" : "14px",
+                  minWidth: isTouchDevice ? "100px" : "auto", // Área táctil más grande
+                  WebkitTapHighlightColor: "transparent" // Elimina el highlight en móvil
                 }}
               >
                 Close
@@ -3580,13 +3533,15 @@ const isReadOnly = effectiveJobsheetId &&
                 onClick={handleUpdateJobsheetCustomer}
                 disabled={!selectedCustomerId}
                 style={{
-                  padding: "8px 16px",
+                  padding: isTouchDevice ? "12px 20px" : "8px 16px",
                   backgroundColor: selectedCustomerId ? "#00C853" : "#e0e0e0",
                   color: "white",
                   border: "none",
-                  borderRadius: "4px",
+                  borderRadius: isTouchDevice ? "8px" : "4px",
                   cursor: selectedCustomerId ? "pointer" : "not-allowed",
-                  fontSize: "14px"
+                  fontSize: isTouchDevice ? "16px" : "14px",
+                  minWidth: isTouchDevice ? "140px" : "auto", // Área táctil más grande
+                  WebkitTapHighlightColor: "transparent"
                 }}
               >
                 {jobsheet?.customer_id ? "Update Customer" : "Assign Customer"}

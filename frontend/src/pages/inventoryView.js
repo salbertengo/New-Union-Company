@@ -800,14 +800,14 @@ const handleSubmitGoodsReceive = async () => {
   { 
     headerName: 'Stock', 
     field: 'stock', 
-    flex: 1,
+    flex: 0.5,
     minWidth: isTouchDevice && isVerticalOrientation ? 50 : 70, // Smaller on mobile
     headerClass: 'custom-header-inventory' 
   },
   { 
     headerName: 'Min', 
     field: 'min', 
-    flex: 1,
+    flex: 0.5,
     minWidth: isTouchDevice && isVerticalOrientation ? 45 : 70, // Smaller on mobile
     headerClass: 'custom-header-inventory' 
   },

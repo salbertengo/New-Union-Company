@@ -17,6 +17,7 @@ import {
 import "@fortawesome/fontawesome-svg-core/styles.css";
 import JobsheetDetailView from '../pages/jobsheetDetailView';
 import Joyride, { STATUS } from 'react-joyride';
+import JobsheetCreationModal from '../components/jobsheetCreationModal';
 
 ModuleRegistry.registerModules([ClientSideRowModelModule]);
 
@@ -52,10 +53,11 @@ const JobsheetView = () => {
     state: "in_progress",
     date_created: new Date().toISOString().split("T")[0],
   });
+const [showCreationModal, setShowCreationModal] = useState(false);
 
   // States for tour guidance
   const [runTour, setRunTour] = useState(false);
-  const [tourSteps, setTourSteps] = useState([]); // Tour step definitions
+  const [tourSteps, setTourSteps] = useState([]); // Tourw step definitions
 
   // JobsheetDetailView control states
   const [showJobsheetDetail, setShowJobsheetDetail] = useState(false);
@@ -106,76 +108,91 @@ const JobsheetView = () => {
     { 
       headerName: "ID",
       field: "id",
-      width: 0,
+          width: 40, 
+    maxWidth: 40, 
+    minWidth: 40, 
+    flex: 0, 
       suppressMenu: true,
       headerClass: "custom-header-sumary", 
     },
-    { 
-      headerName: "Created",
-      field: "created_at",
-      suppressMenu: true,
-      headerClass: "custom-header-sumary",
-      cellRenderer: (params) => {
-        if (!params.data.created_at) return "—";
-        const date = new Date(params.data.created_at);
-        return date.toLocaleDateString('en-GB');
-      },
+  { 
+    headerName: "Created",
+    field: "created_at",
+    suppressMenu: true,
+    headerClass: "custom-header-sumary",
+    // Remove fixed width
+    cellRenderer: (params) => {
+      if (!params.data.created_at) return "—";
+      const date = new Date(params.data.created_at);
+      return date.toLocaleDateString('en-GB');
     },
-    { 
-      headerName: "Plate",
-      field: "license_plate",
-      suppressMenu: true,
-      headerClass: "custom-header-sumary",
-      width: 120,
-      cellRenderer: (params) => {
-        if (!params.data) return null;
-        return <div>{params.value || ""}</div>;
-      },
+    // Add responsive width based on device
+    width: isTouchDevice && isVerticalOrientation ? 80 : undefined,
+  },
+  { 
+    headerName: "Plate",
+    field: "license_plate",
+    suppressMenu: true,
+    headerClass: "custom-header-sumary",
+    // Adjust to be responsive on mobile devices
+    width: isTouchDevice && isVerticalOrientation ? 80 : 120,
+    cellRenderer: (params) => {
+      if (!params.data) return null;
+      return <div>{params.value || ""}</div>;
     },
-    {
-      headerName: "Customer",
-      field: "customer_name",
-      width: 140,
-      suppressMenu: true,
-      headerClass: "custom-header-sumary",
-    },
-    {
-      headerName: "State",
-      field: "state",
-      suppressMenu: true,
-      headerClass: "custom-header-sumary",
-      cellRenderer: (params) => {
-        const state = params.data.state || "in progress";
-        let color = "#FF9500";
+  },
+  {
+    headerName: "Customer",
+    field: "customer_name",
+    width: isTouchDevice && isVerticalOrientation ? 100 : 140,
+    suppressMenu: true,
+    headerClass: "custom-header-sumary",
+  },
+  {
+  headerName: "State",
+  field: "state",
+  suppressMenu: true,
+  headerClass: "custom-header-sumary",
+  cellRenderer: (params) => {
+    const state = params.data.state || "in progress";
+    let color = "#FF9500";
 
-        if (state === "completed") color = "#00C853";
-        else if (state === "in progress") color = "#2979FF";
-        else if (state === "cancelled") color = "#F44336";
+    if (state === "completed") color = "#00C853";
+    else if (state === "in progress") color = "#2979FF";
+    else if (state === "cancelled") color = "#F44336";
 
-        return (
-          <button
-            className="status-btn"
-            data-id={params.data.id}
-            data-status={state}
-            style={{
-              backgroundColor: `${color}20`,
-              color: color,
-              border: `1px solid ${color}40`,
-              borderRadius: "12px",
-              padding: "4px 10px",
-              fontSize: "12px",
-              fontWeight: 500,
-              cursor: "pointer",
-              textTransform: "capitalize",
-              minWidth: "90px",
-            }}
-            onClick={() => handleStatusChange(params.data.id, state)}
-          >
-            {state.charAt(0).toUpperCase() + state.slice(1)}
-          </button>
-        );
-      },
-    },
+    return (
+      <div style={{
+        display: "flex",
+        justifyContent: "center", 
+        alignItems: "center",
+        height: "100%",  // Take full height of cell
+        width: "100%"    // Take full width of cell
+      }}>
+        <button
+          className="status-btn"
+          data-id={params.data.id}
+          data-status={state}
+          style={{
+            backgroundColor: `${color}20`,
+            color: color,
+            border: `1px solid ${color}40`,
+            borderRadius: "12px",
+            padding: "4px 10px",
+            fontSize: "12px",
+            fontWeight: 500,
+            cursor: "pointer",
+            textTransform: "capitalize",
+            minWidth: "90px",
+          }}
+          onClick={() => handleStatusChange(params.data.id, state)}
+        >
+          {state.charAt(0).toUpperCase() + state.slice(1)}
+        </button>
+      </div>
+    );
+  },
+},
     {
       headerName: "Total Amount",
       field: "total_amount",
@@ -271,7 +288,11 @@ const gridOptions = {
   animateRows: true,
   alwaysShowVerticalScroll: isTouchDevice,
   suppressScrollOnNewData: false,
-  domLayout: isDesktopView ? 'autoHeight' : isTouchDevice ? 'normal' : 'autoHeight'
+  domLayout: isDesktopView ? 'autoHeight' : isTouchDevice ? 'normal' : 'autoHeight',
+  // Add mobile specific options
+  suppressHorizontalScroll: isTouchDevice && isVerticalOrientation ? true : false,
+  // Force the grid to fit within container width
+  autoSizeColumns: isTouchDevice && isVerticalOrientation ? true : false,
 };
 
   const onGridReady = (params) => {
@@ -392,11 +413,13 @@ const gridOptions = {
     ];
 
     const nextStatus = () => {
-      const currentIndex = statuses.indexOf(statusFilter);
-      const nextIndex = (currentIndex + 1) % statuses.length;
-      setStatusFilter(statuses[nextIndex]);
-      fetchJobsheets(searchTerm, statuses[nextStatus]);
-    };
+  const currentIndex = statuses.indexOf(statusFilter);
+  const nextIndex = (currentIndex + 1) % statuses.length;
+  const newStatus = statuses[nextIndex];
+  
+  setStatusFilter(newStatus);
+  fetchJobsheets(searchTerm, newStatus);
+};
 
     let color = "#666";
     if (statusFilter === "completed") color = "#00C853";
@@ -741,8 +764,19 @@ const gridOptions = {
   };
 
   const handleOpenNewModal = () => {
-    setSelectedJobsheetId(null);
+    setShowCreationModal(true);
+  };
+
+  const handleJobsheetCreated = (newJobsheetId) => {
+    // Close creation modal
+    setShowCreationModal(false);
+    
+    // Open detail view for the newly created jobsheet
+    setSelectedJobsheetId(newJobsheetId);
     setShowJobsheetDetail(true);
+    
+    // Refresh jobsheet list to include the new one
+    fetchJobsheets(searchTerm, statusFilter);
   };
 
   const DateRangeSelector = () => {
@@ -937,20 +971,24 @@ const gridOptions = {
             flexDirection: isVerticalOrientation ? "column" : "row",
             justifyContent: "space-between",
             alignItems: isVerticalOrientation ? "stretch" : "center",
-            marginBottom: isTouchDevice ? "15px" : "10px",
-            gap: isTouchDevice ? "10px" : "0"
+            marginBottom: isTouchDevice ? "15px" : "15px", // Aumentado para mejor separación
+            gap: isTouchDevice ? "10px" : "16px" // Aumentado para mejor separación visual
           }}
         >
+          {/* Grupo izquierdo: búsqueda, filtro de fechas y filtro de estados */}
           <div style={{ 
             display: "flex", 
             flexDirection: isVerticalOrientation ? "column" : "row",
-            width: "100%",
+            width: isVerticalOrientation ? "100%" : "80%", // En escritorio, deja espacio para el botón
             gap: "10px", 
-            alignItems: isVerticalOrientation ? "stretch" : "center"
+            alignItems: isVerticalOrientation ? "stretch" : "center",
+            flexWrap: isVerticalOrientation ? "nowrap" : "wrap"
           }}>
+            {/* Barra de búsqueda */}
             <div style={{ 
               position: "relative", 
-              width: "100%" 
+              width: isVerticalOrientation ? "100%" : "40%",
+              minWidth: isVerticalOrientation ? "auto" : "250px"
             }}>
               <input
                 type="text"
@@ -963,8 +1001,8 @@ const gridOptions = {
                   borderRadius: "10px",
                   border: "1px solid white",
                   backgroundColor: "#F9FBFF",
-                  height: isTouchDevice ? "46px" : "25px",
-                  fontSize: isTouchDevice ? "16px" : "inherit",
+                  height: isTouchDevice ? "46px" : "35px", // Altura ajustada para alinear con otros elementos
+                  fontSize: isTouchDevice ? "16px" : "14px",
                   boxSizing: "border-box"
                 }}
               />
@@ -982,41 +1020,59 @@ const gridOptions = {
               />
             </div>
 
+            {/* Selector de fecha y filtro de estados */}
             <div style={{ 
               display: "flex",
               flexDirection: isVerticalOrientation ? "column" : "row",
               gap: "10px",
-              width: "100%"
+              width: isVerticalOrientation ? "100%" : "auto",
+              flex: isVerticalOrientation ? "auto" : "1"
             }}>
-              <DateRangeSelector />
-              <StatusFilterButton />
+              {/* DateRangeSelector - con ancho fijo en escritorio */}
+              <div style={{ width: isVerticalOrientation ? "100%" : "200px" }}>
+                <DateRangeSelector />
+              </div>
+              
+              {/* StatusFilterButton - con ancho fijo en escritorio */}
+              <div style={{ width: isVerticalOrientation ? "100%" : "150px" }}>
+                <StatusFilterButton />
+              </div>
             </div>
           </div>
 
-          <button
-            onClick={handleOpenNewModal}
-            onMouseEnter={() => setIsHovered(true)}
-            onMouseLeave={() => setIsHovered(false)}
-            style={{
-              padding: isTouchDevice ? "14px 20px" : "10px 20px",
-              backgroundColor: isHovered ? "#4321C9" : "#5932EA",
-              color: "white",
-              border: "none",
-              borderRadius: "8px",
-              cursor: "pointer",
-              transition: "background-color 0.3s ease",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              fontSize: isTouchDevice ? "16px" : "inherit",
-              width: "100%",
-              justifyContent: "center",
-              marginTop: isVerticalOrientation ? "5px" : "0"
-            }}
-          >
-            <FontAwesomeIcon icon={faPlus} />
-            Add Job Sheet
-          </button>
+          {/* Botón Add Job Sheet - siempre a la derecha en escritorio */}
+          <div style={{ 
+            width: isVerticalOrientation ? "100%" : "auto",
+            marginLeft: isVerticalOrientation ? "0" : "auto" // Importante: empuja el botón a la derecha
+          }}>
+            <button
+              onClick={handleOpenNewModal}
+              onMouseEnter={() => setIsHovered(true)}
+              onMouseLeave={() => setIsHovered(false)}
+              style={{
+                padding: isTouchDevice ? "14px 20px" : "8px 16px",
+                backgroundColor: isHovered ? "#4321C9" : "#5932EA",
+                color: "white",
+                border: "none",
+                borderRadius: "8px",
+                cursor: "pointer",
+                transition: "background-color 0.3s ease",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                fontSize: isTouchDevice ? "16px" : "14px",
+                width: isVerticalOrientation ? "100%" : "auto",
+                minWidth: isDesktopView ? "180px" : "auto", // Un poco más grande como pediste
+                maxWidth: isDesktopView ? "220px" : "none", // Limita el ancho máximo
+                justifyContent: "center",
+                height: isTouchDevice ? "auto" : "35px", // Altura fija en escritorio
+                whiteSpace: "nowrap"
+              }}
+            >
+              <FontAwesomeIcon icon={faPlus} />
+              Add Job Sheet
+            </button>
+          </div>
         </div>
 
         <div style={{ 
@@ -1038,28 +1094,39 @@ const gridOptions = {
               msOverflowStyle: "-ms-autohiding-scrollbar"
             }}
           >
-            <AgGridReact
-              ref={gridRef}
-              rowData={jobsheets}
-              columnDefs={columnDefs}
-              defaultColDef={{
-                resizable: false,
-                sortable: true,
-                flex: 1,
-                suppressMenu: true,
-                minWidth: isTouchDevice ? 120 : 100,
-                cellClass: isTouchDevice ? 'touch-cell' : ''
-              }}
-              modules={[ClientSideRowModelModule]}
-              pagination={true}
-              paginationPageSize={isTouchDevice ? 7 : 12}
-              headerHeight={isTouchDevice ? 50 : 30}
-              rowHeight={isTouchDevice ? 65 : 50}
-              suppressSizeToFit={false}
-              suppressHorizontalScroll={false}
-              onGridReady={onGridReady}
-              gridOptions={gridOptions}
-            />
+           <AgGridReact
+  ref={gridRef}
+  rowData={jobsheets}
+  columnDefs={columnDefs}
+  defaultColDef={{
+    resizable: false,
+    sortable: true,
+    flex: 1,
+    suppressMenu: true,
+    minWidth: isTouchDevice && isVerticalOrientation ? 70 : 100,
+    cellClass: isTouchDevice ? 'touch-cell' : '',
+    // Add to ensure columns adjust to screen width on mobile
+    autoHeight: isTouchDevice && isVerticalOrientation,
+  }}
+  modules={[ClientSideRowModelModule]}
+  pagination={true}
+  paginationPageSize={isTouchDevice ? 7 : 12}
+  headerHeight={isTouchDevice ? 50 : 30}
+  rowHeight={isTouchDevice ? 65 : 50}
+  // Change to explicitly fit width on mobile
+  suppressSizeToFit={!(isTouchDevice && isVerticalOrientation)}
+  suppressHorizontalScroll={isTouchDevice && isVerticalOrientation}
+  onGridReady={(params) => {
+    onGridReady(params);
+    // Add this to force grid to fit available width
+    if (isTouchDevice && isVerticalOrientation) {
+      setTimeout(() => {
+        params.api.sizeColumnsToFit();
+      }, 100);
+    }
+  }}
+  gridOptions={gridOptions}
+/>
           </div>
         </div>
 
@@ -1078,21 +1145,10 @@ const gridOptions = {
               alignItems: "center"
             }}
           >
-            {/* Modal container - Arreglado el problema de posicionamiento */}
+            {/* Modal container - Mismo tamaño grande para creación y edición */}
             <div
-              className={`modal-container ${selectedJobsheetId === null ? 'creation-modal' : 'edit-modal'}`}
-              style={selectedJobsheetId === null ? {
-                // ESTILO PARA CREACIÓN DE JOBSHEET - MODAL PEQUEÑO
-                position: "relative", // Cambiado de absolute a relative
-                width: isTouchDevice ? "90%" : "600px",
-                height: isTouchDevice ? "auto" : "500px",
-                maxHeight: "90%",
-                backgroundColor: "#f0f2f5",
-                borderRadius: "12px",
-                boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
-                overflow: "hidden"
-              } : {
-                // ESTILO PARA EDICIÓN DE JOBSHEET - MODAL GRANDE
+              className="modal-container edit-modal"
+              style={{
                 position: "absolute",
                 top: "60px",
                 left: "50px",
@@ -1176,6 +1232,49 @@ const gridOptions = {
             </div>
           </div>
         )}
+{showCreationModal && (
+  <div 
+    style={{
+      position: "fixed",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: "rgba(0,0,0,0.5)",
+      zIndex: 2000,
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+      padding: "15px" // Añadir padding para todos los dispositivos
+    }}
+  >
+    {/* Contenedor del modal - tamaño reducido para móviles y desktop */}
+    <div
+      className="modal-container creation-modal"
+      style={{
+        backgroundColor: "#f0f2f5",
+        borderRadius: "12px",
+        boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
+        overflow: "hidden",
+        width: isTouchDevice 
+          ? (isVerticalOrientation ? "90%" : "80%") // Móvil: 90% en vertical, 80% en horizontal
+          : "450px", // Desktop: 450px fijo
+        maxWidth: "100%",
+        maxHeight: isTouchDevice 
+          ? (isVerticalOrientation ? "80%" : "90%") // Móvil: 80% de altura en vertical, 90% en horizontal
+          : "90vh", // Desktop: 90% de la altura visible
+        display: "flex",
+        height: "auto", // Auto para todos los dispositivos
+        margin: 0
+      }}
+    >
+      <JobsheetCreationModal
+        onClose={() => setShowCreationModal(false)}
+        onCreationSuccess={handleJobsheetCreated}
+      />
+    </div>
+  </div>
+)}
 
         {notification.show && (
           <div
