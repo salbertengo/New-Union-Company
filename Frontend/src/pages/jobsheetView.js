@@ -395,7 +395,7 @@ const gridOptions = {
       const currentIndex = statuses.indexOf(statusFilter);
       const nextIndex = (currentIndex + 1) % statuses.length;
       setStatusFilter(statuses[nextIndex]);
-      fetchJobsheets(searchTerm, statuses[nextIndex]);
+      fetchJobsheets(searchTerm, statuses[nextStatus]);
     };
 
     let color = "#666";
@@ -1078,8 +1078,21 @@ const gridOptions = {
               alignItems: "center"
             }}
           >
+            {/* Modal container - Arreglado el problema de posicionamiento */}
             <div
-              style={{
+              className={`modal-container ${selectedJobsheetId === null ? 'creation-modal' : 'edit-modal'}`}
+              style={selectedJobsheetId === null ? {
+                // ESTILO PARA CREACIÓN DE JOBSHEET - MODAL PEQUEÑO
+                position: "relative", // Cambiado de absolute a relative
+                width: isTouchDevice ? "90%" : "600px",
+                height: isTouchDevice ? "auto" : "500px",
+                maxHeight: "90%",
+                backgroundColor: "#f0f2f5",
+                borderRadius: "12px",
+                boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
+                overflow: "hidden"
+              } : {
+                // ESTILO PARA EDICIÓN DE JOBSHEET - MODAL GRANDE
                 position: "absolute",
                 top: "60px",
                 left: "50px",
@@ -1088,8 +1101,7 @@ const gridOptions = {
                 backgroundColor: "#f0f2f5",
                 borderRadius: "12px",
                 boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
-                overflow: "hidden",
-                animation: "modalFadeIn 0.3s ease"
+                overflow: "hidden"
               }}
             >
               <JobsheetDetailView
@@ -1195,6 +1207,11 @@ const gridOptions = {
               0% { opacity: 0; transform: scale(0.95); }
               100% { opacity: 1; transform: scale(1); }
             }
+            
+            .modal-container {
+              animation: modalFadeIn 0.3s ease;
+            }
+            
             @keyframes fadeIn {
               from { opacity: 0; }
               to { opacity: 1; }

@@ -334,12 +334,7 @@ useEffect(() => {
     plate: value
   });
 
-  // Check for walk-in keyword but don't return early
-  if (value.toLowerCase().includes('walk')) {
-    console.log("Detected walk-in request");
-    setPlateSearchResults([]);
-    // Continue execution to ensure state updates properly
-  } else if (value.length >= 2) {
+  if (value.length >= 2) {
     try {
       const token = localStorage.getItem("token");
       if (!token) return;
@@ -1432,6 +1427,13 @@ const handleDeleteItem = async (itemId) => {
     return;
   }
   
+  // Check if there are pending item additions that might fail
+  const hasPendingItems = items.some(item => item._action === 'create');
+  if (hasPendingItems) {
+    showNotification("Please save your items first before adding payments", "warning");
+    return;
+  }
+  
   // Nueva validación para verificar si hay elementos o servicios para cobrar
   if (totals.total <= 0) {
     showNotification("Cannot add payment: There are no items or services to pay for.", "error");
@@ -1488,14 +1490,17 @@ useEffect(() => {
     if (jobsheet && !isLoading) { 
       const totals = calculateTotals();
       
+      // Only update status if there are no pending items with insufficient stock
+      const hasPendingItems = items.some(item => item._action === 'create');
+      
       if (totals.balance <= 0 && 
           totals.subtotal > 0 && 
-          jobsheet.state !== "completed") {
+          jobsheet.state !== "completed" &&
+          !hasPendingItems) {
         
         // Don't update the UI state yet - just mark it for update when saved
         setPendingJobsheetUpdates(prev => ({...prev, state: "completed"}));
         setHasPendingChanges(true);
-        // Note we're not updating the jobsheet.state here anymore
       }
     }
   };
@@ -1716,13 +1721,23 @@ useEffect(() => {
     
     // Refresh local data but DO NOT exit
     if (refreshJobsheets) refreshJobsheets();
-    // Removed onClose() call here
     
     // Reload the current jobsheet data to refresh the view
     loadJobsheetData();
   } else {
-    showNotification(`Error saving changes: ${errors.join("; ")}`, "error");
-    console.error("Failed to save changes:", errors);
+if (!allSavesSuccessful) {
+  // Reset any pending state changes
+  setPendingJobsheetUpdates(prev => {
+    const { state, ...rest } = prev;
+    return rest;
+  });
+  
+  // Also clear any pending payments that haven't been saved yet
+  setPayments(prevPayments => prevPayments.filter(payment => !payment._action));
+  
+  showNotification(`Error saving changes: ${errors.join("; ")}`, "error");
+  console.error("Failed to save changes:", errors);
+}
   }
 };
 
@@ -1850,8 +1865,7 @@ const isReadOnly = effectiveJobsheetId &&
       `}</style>
     </div>;
   }
-
- if (effectiveIsNew) {
+  if (effectiveIsNew) {
    return (
       <div style={{ // Contenedor principal del modal/vista de página completa
         position: isModal ? "relative" : "fixed",
@@ -1943,7 +1957,7 @@ const isReadOnly = effectiveJobsheetId &&
                 type="text"
                 value={licensePlate}
                 onChange={handleLicensePlateSearch}
-                placeholder="Input license plate or type 'walk' for walk-in sale"
+                placeholder="Input license plate"
                 style={{ 
                   width: "100%",
                   padding: "10px 10px 10px 35px",
@@ -1964,6 +1978,35 @@ const isReadOnly = effectiveJobsheetId &&
                 }}
               />
             </div>
+          </div>
+
+          {/* Nuevo botón para crear Walk-in Sale - Siempre visible */}
+          <div style={{
+            padding: "15px",
+            backgroundColor: "#e8f5e9",
+            borderRadius: "4px",
+            marginBottom: "15px",
+            border: "1px solid #c8e6c9"
+          }}>
+            <p style={{ margin: "0 0 10px 0", fontSize: "14px" }}>
+              <FontAwesomeIcon icon={faStore} style={{ marginRight: "8px" }} />
+              <strong>Walk-in Sale:</strong> Create a jobsheet without vehicle information
+            </p>
+            <button
+              onClick={handleWalkInJobsheet}
+              style={{
+                width: "100%",
+                padding: "10px",
+                backgroundColor: "#00C853",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                cursor: "pointer",
+                fontSize: "14px"
+              }}
+            >
+              Create Walk-in Sale
+            </button>
           </div>
 
           {plateSearchResults.length > 0 && (
@@ -2000,7 +2043,7 @@ const isReadOnly = effectiveJobsheetId &&
             </div>
           )}
 
-          {licensePlate && !licensePlate.toLowerCase().includes('walk') && plateSearchResults.length === 0 && (
+          {licensePlate && plateSearchResults.length === 0 && (
             <div style={{ 
               padding: "15px",
               backgroundColor: "#f9f9f9",
@@ -2053,36 +2096,6 @@ const isReadOnly = effectiveJobsheetId &&
               </button>
             </div>
           )}
-
-          {licensePlate && licensePlate.toLowerCase().includes('walk') && (
-  <div style={{
-    padding: "15px",
-    backgroundColor: "#e8f5e9",
-    borderRadius: "4px",
-    marginBottom: "15px",
-    border: "1px solid #c8e6c9"
-  }}>
-    <p style={{ margin: "0 0 10px 0", fontSize: "14px" }}>
-      <FontAwesomeIcon icon={faStore} style={{ marginRight: "8px" }} />
-      <strong>Walk-in Sale:</strong> Create a jobsheet without vehicle information
-    </p>
-    <button
-      onClick={handleWalkInJobsheet}
-      style={{
-        width: "100%",
-        padding: "10px",
-        backgroundColor: "#00C853",
-        color: "white",
-        border: "none",
-        borderRadius: "4px",
-        cursor: "pointer",
-        fontSize: "14px"
-      }}
-    >
-      Create Walk-in Sale
-    </button>
-  </div>
-)}
         </div>
       </div>
     );
@@ -2105,6 +2118,7 @@ const isReadOnly = effectiveJobsheetId &&
       zIndex: isModal ? 1 : 1000,
       overflow: "hidden"
     }}>
+
       <div style={{
         backgroundColor: "#5932EA",
         color: "white",
@@ -3071,8 +3085,7 @@ const isReadOnly = effectiveJobsheetId &&
             opacity: isReadOnly ? 0.6 : 1,
             pointerEvents: isReadOnly ? "none" : "auto"
           }}>
-           <h3 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 600 }}>
-              Add Payment
+           <h3 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 600 }}>Add Payment
               {isReadOnly && <span style={{fontSize: "12px", color: "#666", marginLeft: "10px"}}>
                 ({jobsheet?.state === "cancelled" ? "Cancelled" : "Completed"} - No Changes Allowed)
               </span>}
