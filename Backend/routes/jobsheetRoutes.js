@@ -24,7 +24,6 @@ router.get('/payments/jobsheet/:jobsheetId', JobsheetController.getPaymentsByJob
 router.post('/payments', JobsheetController.addPayment);
 router.put('/payments/:id', JobsheetController.updatePayment);
 router.delete('/payments/:id', JobsheetController.deletePayment);
-
 // AL FINAL: La ruta más general con parámetro
 router.get('/:id', JobsheetController.getJobsheetById);
 router.post('/', JobsheetController.createJobsheet);

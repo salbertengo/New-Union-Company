@@ -2847,7 +2847,7 @@ return (
                     Pricing Information
                   </h3>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
-                    <div>
+ <div>
   <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
     Cost Price *
   </label>
@@ -2865,11 +2865,10 @@ return (
       type="number"
       step="0.01"
       min="0"
-      name="cost_price"
-      value={newReceiveItem.cost_price}
-      onChange={e => setNewReceiveItem({
-        ...newReceiveItem,
-        cost_price: parseFloat(e.target.value) || 0
+      value={editItem.cost > 0 ? editItem.cost : ''}
+      onChange={(e) => setEditItem({ 
+        ...editItem, 
+        cost: e.target.value === '' ? 0 : parseFloat(e.target.value) 
       })}
       style={{
         width: "100%",
@@ -2885,8 +2884,9 @@ return (
       required
     />
   </div>
-                    </div>
-                   <div>
+</div>
+
+<div>
   <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
     Sale Price *
   </label>
@@ -2904,11 +2904,10 @@ return (
       type="number"
       step="0.01"
       min="0"
-      name="sale_price"
-      value={newReceiveItem.sale_price}
-      onChange={e => setNewReceiveItem({
-        ...newReceiveItem,
-        sale_price: parseFloat(e.target.value) || 0
+      value={editItem.sale > 0 ? editItem.sale : ''}
+      onChange={(e) => setEditItem({ 
+        ...editItem, 
+        sale: e.target.value === '' ? 0 : parseFloat(e.target.value) 
       })}
       style={{
         width: "100%",
@@ -2923,7 +2922,7 @@ return (
       placeholder="0.00"
       required
     />
-</div>
+  </div>
                       {editItem.cost > 0 && editItem.sale > 0 && (
                         <div style={{ 
                           marginTop: "6px", 
