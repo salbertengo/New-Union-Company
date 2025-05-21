@@ -8,12 +8,12 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { 
   faEdit, 
   faTrash, 
-  faSearch, 
+  faTimes, 
   faPlus,
   faMoneyBill,
   faCalendarAlt,
   faCreditCard,
-  faIdCard,
+  faCheck,
   faExchangeAlt,
   faFileInvoiceDollar,
   faWallet,
@@ -44,12 +44,19 @@ const PaymentsPage = () => {
   const searchTimeout = useRef(null);
   const [jobsheets, setJobsheets] = useState([]);
   const [formData, setFormData] = useState({
-    id: null,
-    jobsheet_id: "",
-    amount: "",
-    method: "cash",
-    payment_date: new Date().toISOString().split('T')[0]
-  });
+  id: null,
+  jobsheet_id: "",
+  amount: "",
+  method: "cash",
+  payment_date: new Date().toLocaleDateString('en-GB').split('/').reverse().join('-')
+});
+const [dateFilter, setDateFilter] = useState({ startDate: "", endDate: "" });
+const [showDatePicker, setShowDatePicker] = useState(false);
+const [methodFilter, setMethodFilter] = useState("");
+const [showExitConfirmation, setShowExitConfirmation] = useState(false);
+const [formChanged, setFormChanged] = useState(false);
+const [isInteractingWithDatePicker, setIsInteractingWithDatePicker] = useState(false);
+
   const [isMobile, setIsMobile] = useState(false);
   const [isVertical, setIsVertical] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -78,13 +85,13 @@ const PaymentsPage = () => {
         field: 'id',
         width: isMobile ? 70 : 80,
         suppressMenu: true,
-        headerClass: 'custom-header-sumary'
+        headerClass: 'custom-header-inventory'
       },
       {
         headerName: 'Amount',
         field: 'amount',
         suppressMenu: true,
-        headerClass: 'custom-header-sumary',
+        headerClass: 'custom-header-inventory',
         width: isMobile ? 100 : 120,
         cellRenderer: (params) => {
           return `$${parseFloat(params.value).toFixed(2)}`;
@@ -99,28 +106,28 @@ const PaymentsPage = () => {
         field: 'jobsheet_id',
         suppressMenu: true,
         width: isMobile ? 100 : 120,
-        headerClass: 'custom-header-sumary',
+        headerClass: 'custom-header-inventory',
         cellRenderer: (params) => {
           return `#${params.value}`;
         }
       },
       {
-        headerName: 'Date',
-        field: 'payment_date',
-        suppressMenu: true,
-        headerClass: 'custom-header-sumary',
-        width: isMobile && !isVertical ? 100 : 120,
-        cellRenderer: (params) => {
-          if (!params.value) return '';
-          const date = new Date(params.value);
-          return date.toLocaleDateString('en-GB');
-        }
-      },
+  headerName: 'Date',
+  field: 'payment_date',
+  suppressMenu: true,
+  headerClass: 'custom-header-inventory',
+  width: isMobile && !isVertical ? 100 : 120,
+  cellRenderer: (params) => {
+    if (!params.value) return '';
+    const date = new Date(params.value);
+    return `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
+  }
+},
       {
         headerName: 'Method',
         field: 'method',
         suppressMenu: true,
-        headerClass: 'custom-header-sumary',
+        headerClass: 'custom-header-inventory',
         width: 100,
         cellRenderer: (params) => {
           // Use default method if value is undefined or not in our color map
@@ -183,7 +190,7 @@ const PaymentsPage = () => {
         headerName: 'Customer',
         field: 'customer_name',
         suppressMenu: true,
-        headerClass: 'custom-header-sumary',
+        headerClass: 'custom-header-inventory',
         hide: isMobile && isVertical
       },
     ];
@@ -219,7 +226,7 @@ const PaymentsPage = () => {
         headerName: 'Date',
         field: 'payment_date',
         suppressMenu: true,
-        headerClass: 'custom-header-sumary',
+        headerClass: 'custom-header-inventory',
         width: 100,
         cellRenderer: (params) => {
           if (!params.value) return '';
@@ -232,61 +239,90 @@ const PaymentsPage = () => {
     // Vista completa para desktop o tablets horizontales
     return [...baseColumns, ...desktopColumns, actionsColumn];
   }, [isMobile, isVertical]);
-
+const formatDate = (dateString) => {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  return `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
+};
+  const handleModalClose = () => {
+  if (formChanged) {
+    setShowExitConfirmation(true);
+  } else {
+    setShowModal(false);
+  }
+};
+useEffect(() => {
+  let clickTimeout = null;
   
-  const onGridReady = (params) => {
-    gridRef.current = params.api;
-    setTimeout(() => {
-      if (gridRef.current && !gridRef.current.isDestroyed) {
-        gridRef.current.sizeColumnsToFit();
-      }
-    }, 100);
-  };  
-
-  useEffect(() => {
-    fetchPayments();
-    fetchJobsheets();
+  function handleClickOutside(event) {
+    const datePickerContainer = document.getElementById('date-picker-container');
+    const isTargetDateInput = event.target.type === 'date';
     
-    return () => {
-      // Limpia la referencia de la grid al desmontar
-      if (gridRef.current) {
-        gridRef.current = null;
-      }
-      
-      if (searchTimeout.current) {
-        clearTimeout(searchTimeout.current);
-      }
-    };
-  }, []);
-
-  const handleSearch = (e) => {
-    setSearchTerm(e.target.value);
-    if (searchTimeout.current) {
-      clearTimeout(searchTimeout.current);
+    // Si el click fue dentro del contenedor o en un input de fecha, no cerramos
+    if ((datePickerContainer && datePickerContainer.contains(event.target)) || 
+        isTargetDateInput || 
+        isInteractingWithDatePicker) {
+      return;
     }
     
-    searchTimeout.current = setTimeout(() => {
-      fetchPayments(e.target.value);
-    }, 500);
+    // Si el datepicker está abierto y se hizo clic fuera, cerrarlo
+    if (showDatePicker) {
+      setShowDatePicker(false);
+    }
+  }
+
+  document.addEventListener('mousedown', handleClickOutside);
+  document.addEventListener('touchstart', handleClickOutside);
+  
+  return () => {
+    document.removeEventListener('mousedown', handleClickOutside);
+    document.removeEventListener('touchstart', handleClickOutside);
+    if (clickTimeout) clearTimeout(clickTimeout);
   };
-  const fetchPayments = useCallback(async () => {
-    setLoading(true);
-    try {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        console.error("No token found");
-        return;
-      }
+}, [showDatePicker, isInteractingWithDatePicker]);
+
+const showToast = (message, type = 'success') => {
+  setNotification({
+    show: true,
+    message,
+    type
+  });
   
-      // First get all payments
-      const response = await fetch(`${API_URL}/jobsheets/payments`, {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
-  
-      if (response.ok) {
+  setTimeout(() => {
+    setNotification(prev => ({ ...prev, show: false }));
+  }, 5000);
+};
+const fetchPayments = useCallback(async (filters = {}) => {
+  setLoading(true);
+  try {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      console.error("No token found");
+      return;
+    }
+
+    // Construir correctamente la cadena de consulta para filtros
+    const params = new URLSearchParams();
+    
+    // Filtro de rango de fechas
+    if (filters.startDate) params.append('start_date', filters.startDate);
+    if (filters.endDate) params.append('end_date', filters.endDate);
+    
+    // Filtro de método de pago
+    if (filters.method) params.append('method', filters.method);
+    
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    console.log("Fetching payments with query:", queryString);
+
+    // Realizar la solicitud con filtros
+    const response = await fetch(`${API_URL}/jobsheets/payments${queryString}`, {
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (response.ok) {
         const data = await response.json();
         
         // Get all unique jobsheet IDs from payments
@@ -361,17 +397,75 @@ const PaymentsPage = () => {
         }));
         
         setPayments(enhancedPayments);
-      } else {
-        console.error("Failed to fetch payments");
-        setPayments([]);
-      }
-    } catch (error) {
-      console.error("Network error fetching payments:", error);
+         } else {
+      showToast("Failed to fetch payments", "error");
       setPayments([]);
-    } finally {
-      setLoading(false);
     }
-  }, [API_URL]);
+  } catch (error) {
+    console.error("Network error fetching payments:", error);
+    showToast("Error loading payments data", "error");
+    setPayments([]);
+  } finally {
+    setLoading(false);
+  }
+}, [API_URL, showToast]);
+
+const formatDateRange = () => {
+  if (dateFilter.startDate && dateFilter.endDate) {
+    return `${formatDate(dateFilter.startDate)} - ${formatDate(dateFilter.endDate)}`;
+  } else if (dateFilter.startDate) {
+    return `From ${formatDate(dateFilter.startDate)}`;
+  } else if (dateFilter.endDate) {
+    return `Up ${formatDate(dateFilter.endDate)}`;
+  }
+  return 'Filter by date';
+};
+
+const onGridReady = (params) => {
+    gridRef.current = params.api;
+    setTimeout(() => {
+      if (gridRef.current && !gridRef.current.isDestroyed) {
+        gridRef.current.sizeColumnsToFit();
+      }
+    }, 100);
+  };  
+
+  useEffect(() => {
+    fetchPayments();
+    fetchJobsheets();
+    
+    return () => {
+      // Limpia la referencia de la grid al desmontar
+      if (gridRef.current) {
+        gridRef.current = null;
+      }
+      
+      if (searchTimeout.current) {
+        clearTimeout(searchTimeout.current);
+      }
+    };
+  }, []);
+const applyFilters = useCallback(() => {
+  setLoading(true);
+  
+  const filters = {};
+  if (dateFilter.startDate) filters.startDate = dateFilter.startDate;
+  if (dateFilter.endDate) filters.endDate = dateFilter.endDate;
+  if (methodFilter) filters.method = methodFilter;
+  
+  fetchPayments(filters);
+}, [dateFilter, methodFilter, fetchPayments]);
+  const handleSearch = (e) => {
+    setSearchTerm(e.target.value);
+    if (searchTimeout.current) {
+      clearTimeout(searchTimeout.current);
+    }
+    
+    searchTimeout.current = setTimeout(() => {
+      fetchPayments(e.target.value);
+    }, 500);
+  };
+  
 
   const fetchJobsheets = async () => {
     try {
@@ -398,6 +492,83 @@ const PaymentsPage = () => {
       console.error("Error fetching jobsheets:", error);
     }
   };
+const Notification = ({ show, message, type, onClose }) => {
+  useEffect(() => {
+    if (show) {
+      const timer = setTimeout(() => {
+        onClose();
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [show, onClose]);
+
+  if (!show) return null;
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        bottom: isMobile ? '40px' : '20px',
+        right: isMobile ? '20px' : '20px',
+        backgroundColor: type === 'error' ? '#D32F2F' : '#34A853',
+        color: 'white',
+        padding: isMobile ? '16px 24px' : '12px 24px',
+        borderRadius: '12px',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+        zIndex: 2000,
+        maxWidth: isMobile ? '90%' : '400px',
+        animation: 'slideIn 0.3s ease',
+        fontSize: isMobile ? '16px' : '14px'
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ 
+          width: isMobile ? '36px' : '24px', 
+          height: isMobile ? '36px' : '24px', 
+          borderRadius: '50%',
+          backgroundColor: 'rgba(255,255,255,0.2)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+          {type === 'success' ? (
+            <FontAwesomeIcon icon={faCheck} style={{ fontSize: isMobile ? '16px' : '12px' }} />
+          ) : (
+            <FontAwesomeIcon icon={faTimes} style={{ fontSize: isMobile ? '16px' : '12px' }} />
+          )}
+        </div>
+        <span style={{ fontWeight: '500', fontSize: isMobile ? '16px' : '14px' }}>{message}</span>
+      </div>
+      <button
+        onClick={onClose}
+        style={{
+          background: 'none',
+          border: 'none',
+          color: 'white',
+          cursor: 'pointer',
+          fontSize: isMobile ? '24px' : '18px',
+          opacity: 0.7,
+          transition: 'opacity 0.2s',
+          width: isMobile ? '44px' : '24px',
+          height: isMobile ? '44px' : '24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 0,
+          margin: 0,
+          position: 'absolute',
+          top: '12px',
+          right: '12px',
+        }}
+        onMouseOver={(e) => e.currentTarget.style.opacity = 1}
+        onMouseOut={(e) => e.currentTarget.style.opacity = 0.7}
+      >
+        ×
+      </button>
+    </div>
+  );
+};
+
 
   const handleEdit = (payment) => {
     // Usa setTimeout para evitar conflictos con AG-Grid
@@ -643,53 +814,105 @@ const PaymentsPage = () => {
 
             {!isMobile && <h2 style={{ margin: 0, fontSize: '18px' }}>Payments</h2>}
 
-            <div style={{ 
-              display: 'flex', 
-              flexDirection: isMobile && isVertical ? 'column' : 'row', 
-              gap: '10px', 
-              alignItems: isMobile && isVertical ? 'stretch' : 'center',
-              width: isMobile && isVertical ? '100%' : 'auto'
-            }}>
-              <div style={{ 
-                position: 'relative',
-                width: isMobile && isVertical ? '100%' : '216px' 
-              }}>
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center',
-                  width: '100%'
-                }}>
-                  <input
-                    type="text"
-                    placeholder="Search payments..."
-                    value={searchTerm}
-                    onChange={handleSearch}
-                    style={{
-                      padding: isMobile ? '12px 35px 12px 12px' : '5px 30px 5px 10px',
-                      width: '100%',
-                      borderRadius: '10px',
-                      border: '1px solid white',
-                      backgroundColor: '#F9FBFF',
-                      height: isMobile ? '46px' : '25px',
-                      fontSize: isMobile ? '16px' : 'inherit',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                  <FontAwesomeIcon
-                    icon={faSearch}
-                    style={{
-                      position: 'absolute',
-                      right: '10px',
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      color: loading ? '#4321C9' : 'gray',
-                      cursor: 'pointer',
-                      fontSize: isMobile ? '18px' : 'inherit'
-                    }}
-                  />
-                </div>
-              </div>
-
+           <div style={{ 
+  display: 'flex', 
+  flexDirection: isMobile && isVertical ? 'column' : 'row', 
+  gap: '10px', 
+  alignItems: isMobile && isVertical ? 'stretch' : 'center',
+  width: isMobile && isVertical ? '100%' : 'auto',
+  marginBottom: '15px'
+}}>
+  {/* Filtro de fecha */}
+<div id="date-picker-container" style={{
+  position: 'relative',  // Importante para el posicionamiento absoluto del datepicker
+  width: isMobile && isVertical ? '100%' : '220px'
+}}>
+  <div 
+    onClick={(e) => {
+      e.stopPropagation();
+      setShowDatePicker(!showDatePicker);
+    }}
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      padding: '10px 12px',
+      borderRadius: '8px',
+      border: '1px solid #e0e0e0',
+      backgroundColor: '#F9FBFF',
+      cursor: 'pointer',
+      justifyContent: 'space-between'
+    }}
+  >
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <FontAwesomeIcon icon={faCalendarAlt} style={{ color: '#5932EA' }} />
+      <span style={{ 
+        fontSize: '14px', 
+        color: (dateFilter.startDate || dateFilter.endDate) ? '#333' : '#999',
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis' 
+      }}>
+        {formatDateRange()}
+      </span>
+    </div>
+    {(dateFilter.startDate || dateFilter.endDate) && (
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          setDateFilter({ startDate: "", endDate: "" });
+          setTimeout(() => applyFilters(), 0);
+        }}
+        style={{
+          background: 'none',
+          border: 'none',
+          fontSize: '16px',
+          color: '#999',
+          cursor: 'pointer'
+        }}
+      >
+        ×
+      </button>
+    )}
+  </div>
+</div>
+  {/* Filtro de método de pago */}
+  <div style={{
+    position: 'relative',
+    width: isMobile && isVertical ? '100%' : '180px'
+  }}>
+    <select
+      value={methodFilter}
+      onChange={(e) => {
+        setMethodFilter(e.target.value);
+        // Aplicar filtros inmediatamente después de actualizar el estado
+        setTimeout(() => {
+          const filters = {};
+          if (dateFilter.startDate) filters.startDate = dateFilter.startDate;
+          if (dateFilter.endDate) filters.endDate = dateFilter.endDate;
+          if (e.target.value) filters.method = e.target.value;
+          
+          fetchPayments(filters);
+        }, 0);
+      }}
+      style={{
+        width: '100%',
+        padding: '10px 12px',
+        borderRadius: '8px',
+        border: '1px solid #e0e0e0',
+        backgroundColor: '#F9FBFF',
+        appearance: 'none',
+        backgroundImage: "url('data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"%235932EA\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 9L12 15L18 9\"/></svg>')",
+        backgroundRepeat: 'no-repeat',
+        backgroundPosition: 'right 12px center',
+        fontSize: '14px'
+      }}
+    >
+      <option value="">All payment methods</option>
+      <option value="cash">Cash</option>
+      <option value="paynow">PayNow</option>
+      <option value="nets">NETS</option>
+    </select>
+</div>
               <button
                 onClick={handleOpenNewModal}
                 onMouseEnter={() => setIsHovered(true)}
@@ -1119,6 +1342,290 @@ const PaymentsPage = () => {
             </div>
           )}
 
+          {showExitConfirmation && (
+  <div
+    style={{
+      position: "fixed",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: "rgba(0, 0, 0, 0.6)",
+      backdropFilter: "blur(3px)",
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+      zIndex: 1100,
+    }}
+  >
+    <div
+      style={{
+        backgroundColor: "white",
+        borderRadius: "12px",
+        width: "95%",
+        maxWidth: "400px",
+        boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.2)",
+        overflow: "hidden"
+      }}
+    >
+      <div
+        style={{
+          borderBottom: "1px solid #eee",
+          padding: "20px 24px",
+        }}
+      >
+        <h3 style={{ margin: "0 0 8px 0", fontSize: "18px", fontWeight: "600" }}>
+          Discard Changes?
+        </h3>
+        <p style={{ margin: "0", fontSize: "14px", color: "#666" }}>
+          You have unsaved changes. Are you sure you want to close without saving?
+        </p>
+      </div>
+      
+      <div style={{ padding: "16px 24px 24px" }}>
+        <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+          <button
+            onClick={() => setShowExitConfirmation(false)}
+            style={{
+              padding: "10px 16px",
+              backgroundColor: "#f5f5f5",
+              color: "#333",
+              border: "none",
+              borderRadius: "8px",
+              cursor: "pointer"
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => {
+              setShowExitConfirmation(false);
+              setShowModal(false);
+              setFormChanged(false);
+            }}
+            style={{
+              padding: "10px 16px",
+              backgroundColor: "#D32F2F",
+              color: "white",
+              border: "none",
+              borderRadius: "8px",
+              cursor: "pointer"
+            }}
+          >
+            Discard
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+{showDatePicker && (
+  <div
+    style={{
+      position: "absolute",
+      top: "45px",
+      left: "50%", // Centramos el elemento
+      transform: "translateX(-50%)", // Lo desplazamos a la izquierda la mitad de su ancho
+      zIndex: 1000,
+      backgroundColor: "white",
+      borderRadius: "12px",
+      boxShadow: "0 2px 15px rgba(0,0,0,0.15)",
+      padding: "20px",
+      display: "flex",
+      flexDirection: "column",
+      gap: "15px",
+      width: "280px", 
+      maxWidth: isMobile ? "90%" : "280px"
+    }}
+    onMouseEnter={() => setIsInteractingWithDatePicker(true)}
+    onMouseLeave={() => setIsInteractingWithDatePicker(false)}
+    onTouchStart={() => setIsInteractingWithDatePicker(true)}
+    onTouchEnd={() => setTimeout(() => setIsInteractingWithDatePicker(false), 300)}
+  >
+    <div style={{ 
+      display: 'flex', 
+      alignItems: 'center', 
+      justifyContent: 'space-between', 
+      marginBottom: '5px' 
+    }}>
+      <h3 style={{ 
+        margin: '0', 
+        fontSize: '16px', 
+        fontWeight: '600', 
+        color: '#333' 
+      }}>
+        Filter by dates
+      </h3>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          setShowDatePicker(false);
+        }}
+        style={{
+          background: 'none',
+          border: 'none',
+          fontSize: '20px',
+          color: '#999',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '28px',
+          height: '28px',
+        }}
+      >
+        ×
+      </button>
+    </div>
+    
+    <div style={{ marginBottom: '15px' }}>
+      <label style={{ 
+        display: 'block', 
+        marginBottom: '6px', 
+        fontSize: '14px', 
+        fontWeight: '500',
+        color: '#555' 
+      }}>
+        Start Date
+      </label>
+      <div style={{ position: 'relative' }}>
+        <FontAwesomeIcon 
+          icon={faCalendarAlt} 
+          style={{
+            position: 'absolute',
+            left: '12px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            color: '#5932EA',
+          }}
+        />
+        <input
+          type="date"
+          value={dateFilter.startDate}
+          onChange={(e) => {
+            setDateFilter(prev => ({ ...prev, startDate: e.target.value }));
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsInteractingWithDatePicker(true);
+          }}
+          onBlur={() => setIsInteractingWithDatePicker(false)}
+          style={{
+            width: "100%",
+            padding: '10px 12px 10px 35px',
+            borderRadius: '8px',
+            border: '1px solid #e0e0e0',
+            fontSize: '14px',
+            backgroundColor: '#f9fbff',
+            boxSizing: 'border-box'
+          }}
+        />
+      </div>
+    </div>
+
+    <div style={{ marginBottom: '15px' }}>
+      <label style={{ 
+        display: 'block', 
+        marginBottom: '6px', 
+        fontSize: '14px', 
+        fontWeight: '500',
+        color: '#555' 
+      }}>
+        End Date
+      </label>
+      <div style={{ position: 'relative' }}>
+        <FontAwesomeIcon 
+          icon={faCalendarAlt} 
+          style={{
+            position: 'absolute',
+            left: '12px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            color: '#5932EA',
+          }}
+        />
+        <input
+          type="date"
+          value={dateFilter.endDate}
+          min={dateFilter.startDate}
+          onChange={(e) => {
+            setDateFilter(prev => ({ ...prev, endDate: e.target.value }));
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsInteractingWithDatePicker(true);
+          }}
+          onBlur={() => setIsInteractingWithDatePicker(false)}
+          style={{
+            width: "100%",
+            padding: '10px 12px 10px 35px',
+            borderRadius: '8px',
+            border: '1px solid #e0e0e0',
+            fontSize: '14px',
+            backgroundColor: '#f9fbff',
+            boxSizing: 'border-box'
+          }}
+        />
+      </div>
+    </div>
+    
+    <div style={{ 
+      display: 'flex', 
+      justifyContent: 'space-between', 
+      marginTop: '5px',
+      gap: '10px' 
+    }}>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          setDateFilter({ startDate: "", endDate: "" });
+          setShowDatePicker(false);
+          setTimeout(() => applyFilters(), 0);
+        }}
+        style={{
+          padding: '10px 16px',
+          backgroundColor: '#f5f5f5',
+          border: 'none',
+          borderRadius: '8px',
+          cursor: 'pointer',
+          color: '#333',
+          fontSize: '14px',
+          fontWeight: '500',
+          transition: 'background-color 0.2s ease',
+          flex: '1'
+        }}
+        onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#e8e8e8'}
+        onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
+      >
+        Clear
+      </button>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          setShowDatePicker(false);
+          setTimeout(() => applyFilters(), 0);
+        }}
+        style={{
+          padding: '10px 16px',
+          backgroundColor: '#5932EA',
+          color: 'white',
+          border: 'none',
+          borderRadius: '8px',
+          cursor: 'pointer',
+          fontSize: '14px',
+          fontWeight: '600',
+          boxShadow: '0 2px 6px rgba(89, 50, 234, 0.3)',
+          transition: 'background-color 0.2s ease',
+          flex: '1'
+        }}
+        onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#4321C9'}
+        onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#5932EA'}
+      >
+        Apply
+      </button>
+    </div>
+  </div>
+)}
           {/* Modal de eliminación adaptado para móvil */}
           {showDeleteModal && (
             <div
@@ -1243,7 +1750,10 @@ const PaymentsPage = () => {
               0% { transform: rotate(0deg); }
               100% { transform: rotate(360deg); }
             }
-            
+             @keyframes slideIn {
+      from { transform: translateX(30px); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
             @keyframes modalFadeIn {
               from { opacity: 0; transform: scale(0.95); }
               to { opacity: 1; transform: scale(1); }
@@ -1280,24 +1790,14 @@ const PaymentsPage = () => {
               --ag-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             }
             
-            .ag-theme-alpine .ag-header {
-              border-bottom: 1px solid #5932EA;
-            }
+
             
             .ag-theme-alpine .ag-cell {
               display: flex;
               align-items: center;
             }
             
-            .custom-header-sumary {
-              background-color: #F9FBFF !important;
-              font-weight: 600 !important;
-              color: #333 !important;
-              border-bottom: 1px solid #5932EA !important;
-              text-align: left !important;
-              padding-left: 12px !important;
-            }
-            
+
             @media (pointer: coarse) {
               ::-webkit-scrollbar {
                 width: 6px;

@@ -650,20 +650,20 @@ const DashboardView = () => {
             onClick={fetchExportData}
             disabled={exportLoading}
             style={{
-              padding: isTouchDevice ? "12px 16px" : "8px 16px",
-              backgroundColor: "#34A853",
-              color: "white",
-              border: "none",
-              borderRadius: "8px",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              fontSize: isTouchDevice ? "16px" : "14px",
-              fontWeight: "500",
-              width: isTouchDevice && isVerticalOrientation ? "100%" : "auto",
-              justifyContent: isTouchDevice && isVerticalOrientation ? "center" : "flex-start"
-            }}
+    padding: isTouchDevice ? '14px 20px' : '10px 20px',
+    backgroundColor: '#34A853',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    transition: 'background-color 0.3s ease',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    fontSize: isTouchDevice ? '16px' : 'inherit',
+    width: isVerticalOrientation ? '100%' : 'auto',
+    justifyContent: isVerticalOrientation ? 'center' : 'flex-start'
+  }}
           >
             <FontAwesomeIcon icon={faFileExcel} />
             Export Report
@@ -674,22 +674,20 @@ const DashboardView = () => {
           onClick={fetchDashboardData}
           disabled={loading}
           style={{
-            backgroundColor: "#5932EA",
-            border: "none",
-            color: "white",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-            fontSize: isTouchDevice ? "16px" : "14px",
-            padding: isTouchDevice ? "12px 16px" : "8px 16px",
-            borderRadius: "8px",
-            transition: "all 0.3s ease",
-            transform: loading ? "scale(0.97)" : "scale(1)",
-            boxShadow: loading ? "none" : "0 2px 4px rgba(89, 50, 234, 0.2)",
-            width: isTouchDevice && isVerticalOrientation ? "100%" : "auto",
-            justifyContent: isTouchDevice && isVerticalOrientation ? "center" : "flex-start"
-          }}
+    padding: isTouchDevice ? '14px 20px' : '10px 20px',
+    backgroundColor: '#5932EA',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    transition: 'background-color 0.3s ease',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    fontSize: isTouchDevice ? '16px' : 'inherit',
+    width: isVerticalOrientation ? '100%' : 'auto',
+    justifyContent: isVerticalOrientation ? 'center' : 'flex-start'
+  }}
           className="refresh-button"
         >
           <FontAwesomeIcon 

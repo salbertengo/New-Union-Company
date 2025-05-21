@@ -113,13 +113,13 @@ const [showCreationModal, setShowCreationModal] = useState(false);
     minWidth: 40, 
     flex: 0, 
       suppressMenu: true,
-      headerClass: "custom-header-sumary", 
+      headerClass: "custom-header-inventory", 
     },
   { 
     headerName: "Created",
     field: "created_at",
     suppressMenu: true,
-    headerClass: "custom-header-sumary",
+    headerClass: "custom-header-inventory",
     // Remove fixed width
     cellRenderer: (params) => {
       if (!params.data.created_at) return "—";
@@ -133,7 +133,7 @@ const [showCreationModal, setShowCreationModal] = useState(false);
     headerName: "Plate",
     field: "license_plate",
     suppressMenu: true,
-    headerClass: "custom-header-sumary",
+    headerClass: "custom-header-inventory",
     // Adjust to be responsive on mobile devices
     width: isTouchDevice && isVerticalOrientation ? 80 : 120,
     cellRenderer: (params) => {
@@ -146,13 +146,13 @@ const [showCreationModal, setShowCreationModal] = useState(false);
     field: "customer_name",
     width: isTouchDevice && isVerticalOrientation ? 100 : 140,
     suppressMenu: true,
-    headerClass: "custom-header-sumary",
+    headerClass: "custom-header-inventory",
   },
   {
   headerName: "State",
   field: "state",
   suppressMenu: true,
-  headerClass: "custom-header-sumary",
+  headerClass: "custom-header-inventory",
   cellRenderer: (params) => {
     const state = params.data.state || "in progress";
     let color = "#FF9500";
@@ -197,7 +197,7 @@ const [showCreationModal, setShowCreationModal] = useState(false);
       headerName: "Total Amount",
       field: "total_amount",
       width: 160,
-      headerClass: "custom-header-sumary",
+      headerClass: "custom-header-inventory",
       cellRenderer: (params) => {
         if (!params.data) return '';
         const totalValue = parseFloat(params.data.total_amount || 0);
@@ -243,7 +243,7 @@ const [showCreationModal, setShowCreationModal] = useState(false);
       headerName: "Actions",
       field: "actions",
       width: 160,
-      headerClass: "custom-header-sumary",
+      headerClass: "custom-header-inventory",
       cellRenderer: (params) => {
         if (!params.data) return '';
         return (
@@ -329,14 +329,32 @@ const gridOptions = {
         return;
       }
 
-      const startDateFormatted = startDate.toISOString().split('T')[0];
-      const endDateFormatted = endDate.toISOString().split('T')[0];
+      // Crear copias de las fechas para no modificar el estado original
+      const startDateTime = new Date(startDate);
+      startDateTime.setHours(0, 0, 0, 0); // Inicio del día (00:00:00)
+      
+      const endDateTime = new Date(endDate);
+      endDateTime.setHours(23, 59, 59, 999); // Fin del día (23:59:59.999)
+      
+      // Formato simple YYYY-MM-DD para evitar problemas de timezone
+      const formatDateForAPI = (date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      };
+      
+      const startDateStr = formatDateForAPI(startDateTime);
+      const endDateStr = formatDateForAPI(endDateTime);
 
-      let url = `${API_URL}/jobsheets?start_date=${startDateFormatted}&end_date=${endDateFormatted}`;
+      // Usar start_date y end_date para coincidir con la API
+      let url = `${API_URL}/jobsheets?start_date=${startDateStr}&end_date=${endDateStr}`;
       
       if (status && status !== "all") {
         url += `&state=${encodeURIComponent(status)}`;
       }
+
+      console.log("Fetching jobsheets with URL:", url); // Para depuración
 
       const response = await fetch(url, {
         headers: {
@@ -780,39 +798,87 @@ const gridOptions = {
   };
 
   const DateRangeSelector = () => {
-    const formatDate = (date) => {
-      return date.toLocaleDateString('en-GB');
-    };
+  // Función para verificar si la fecha seleccionada es hoy
+  const isToday = (date1, date2) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const d1 = new Date(date1);
+    d1.setHours(0, 0, 0, 0);
+    const d2 = new Date(date2);
+    d2.setHours(0, 0, 0, 0);
+    
+    return d1.getTime() === today.getTime() && d2.getTime() === today.getTime();
+  };
+  
+  // Formato de fecha para mostrar
+  const formatDate = (date) => {
+    if (!date) return "";
+    const d = new Date(date);
+    return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
+  };
+  const displayDateRange = () => {
+    if (isToday(startDate, endDate)) {
+      return "Today";
+    }
+    
+    if (formatDateForInput(startDate) === formatDateForInput(endDate)) {
+      return formatDate(startDate);
+    }
+    
+    return `${formatDate(startDate)} - ${formatDate(endDate)}`;
+  };
+
+    // Fix for date input changes to prevent timezone issues
+   const handleStartDateChange = (e) => {
+    const dateString = e.target.value; // Format: YYYY-MM-DD
+    const [year, month, day] = dateString.split('-').map(Number);
+    const newDate = new Date(year, month - 1, day); // month is 0-indexed in JS Date
+    setStartDate(newDate);
+  };
+
+  const handleEndDateChange = (e) => {
+    const dateString = e.target.value; // Format: YYYY-MM-DD
+    const [year, month, day] = dateString.split('-').map(Number);
+    const newDate = new Date(year, month - 1, day); // month is 0-indexed in JS Date
+    setEndDate(newDate);
+  };
+
+  const formatDateForInput = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0'); 
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
 
     return (
-    <div style={{ position: "relative", width: "100%" }}>
+     <div style={{ position: "relative", width: "100%" }}>
       <button
         onClick={() => setShowDatePicker(!showDatePicker)}
         style={{
-          padding: isTouchDevice ? "12px 15px" : "5px 15px",
+          padding: isTouchDevice ? "14px 20px" : "10px 20px",
           backgroundColor: "#F9FBFF",
           border: "1px solid #e0e0e0",
-          borderRadius: "10px",
+          borderRadius: "8px",
           display: "flex",
           alignItems: "center",
-          gap: "5px",
-          height: isTouchDevice ? "46px" : "35px",
-          fontSize: isTouchDevice ? "16px" : "14px",
+          gap: "8px",
+          height: isTouchDevice ? "46px" : "36px",
+          fontSize: isTouchDevice ? "16px" : "inherit",
           color: "#333",
           width: "100%",
           justifyContent: "center"
         }}
       >
         <FontAwesomeIcon icon={faCalendarAlt} style={{ color: "#5932EA" }} />
-        {formatDate(startDate)} - {formatDate(endDate)}
+        {displayDateRange()}
       </button>
 
-      {showDatePicker && (
+         {showDatePicker && (
         <div style={{
           position: "absolute",
           top: "50px",
-          right: isVerticalOrientation ? "auto" : "0",
-          left: isVerticalOrientation ? "50%" : "auto",
+          left: isVerticalOrientation ? "50%" : "0",
           transform: isVerticalOrientation ? "translateX(-50%)" : "none",
           zIndex: 1000,
           backgroundColor: "white",
@@ -825,7 +891,7 @@ const gridOptions = {
           width: isVerticalOrientation ? (isTouchDevice ? "90%" : "95%") : "280px",
           maxWidth: "500px"
         }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <h4 style={{ margin: 0, marginBottom: 16, fontSize: isTouchDevice ? 18 : 16 }}>Date Range</h4>
             <button 
               onClick={() => setShowDatePicker(false)}
@@ -846,8 +912,13 @@ const gridOptions = {
             </button>
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-            <div>
+          <div style={{ 
+            display: "flex", 
+            flexDirection: isVerticalOrientation ? "column" : "row", 
+            gap: "10px",
+            marginBottom: "15px"
+          }}>
+            <div style={{ flex: 1 }}>
               <label style={{ 
                 display: "block", 
                 marginBottom: "8px", 
@@ -858,8 +929,8 @@ const gridOptions = {
               </label>
               <input
                 type="date"
-                value={startDate.toISOString().split('T')[0]}
-                onChange={(e) => setStartDate(new Date(e.target.value))}
+                value={formatDateForInput(startDate)}
+                onChange={handleStartDateChange}
                 style={{ 
                   padding: isTouchDevice ? "14px 12px" : "8px", 
                   borderRadius: "6px", 
@@ -871,7 +942,7 @@ const gridOptions = {
                 }}
               />
             </div>
-            <div>
+            <div style={{ flex: 1 }}>
               <label style={{ 
                 display: "block", 
                 marginBottom: "8px", 
@@ -882,8 +953,8 @@ const gridOptions = {
               </label>
               <input
                 type="date"
-                value={endDate.toISOString().split('T')[0]}
-                onChange={(e) => setEndDate(new Date(e.target.value))}
+                value={formatDateForInput(endDate)}
+                onChange={handleEndDateChange}
                 style={{ 
                   padding: isTouchDevice ? "14px 12px" : "8px", 
                   borderRadius: "6px", 
@@ -897,53 +968,53 @@ const gridOptions = {
             </div>
           </div>
 
-          <div style={{ 
-            display: "flex", 
-            justifyContent: "space-between", 
-            marginTop: "15px", 
-            gap: "10px" 
-          }}>
-            <button
-              onClick={() => {
-                setStartDate(new Date());
-                setEndDate(new Date());
-              }}
-              style={{
-                padding: isTouchDevice ? "14px" : "8px 15px",
-                backgroundColor: "#f5f5f5",
-                border: "none",
-                borderRadius: "6px",
-                cursor: "pointer",
-                fontSize: isTouchDevice ? 16 : "inherit",
-                flex: "1",
-                minHeight: isTouchDevice ? "48px" : "auto"
-              }}
-            >
-              Today Only
-            </button>
-            <button
-              onClick={() => {
-                fetchJobsheets(searchTerm, statusFilter);
-                setShowDatePicker(false);
-              }}
-              style={{
-                padding: isTouchDevice ? "14px" : "8px 15px",
-                backgroundColor: "#5932EA",
-                color: "white",
-                border: "none",
-                borderRadius: "6px",
-                cursor: "pointer",
-                fontSize: isTouchDevice ? 16 : "inherit",
-                flex: "1",
-                minHeight: isTouchDevice ? "48px" : "auto",
-                fontWeight: "500"
-              }}
-            >
-              Apply Filter
-            </button>
+            <div style={{ 
+              display: "flex", 
+              justifyContent: "space-between", 
+              marginTop: "5px", 
+              gap: "10px" 
+            }}>
+              <button
+                onClick={() => {
+                  setStartDate(new Date());
+                  setEndDate(new Date());
+                }}
+                style={{
+                  padding: isTouchDevice ? "14px" : "8px 15px",
+                  backgroundColor: "#f5f5f5",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontSize: isTouchDevice ? 16 : "inherit",
+                  flex: "1",
+                  minHeight: isTouchDevice ? "48px" : "auto"
+                }}
+              >
+                Today Only
+              </button>
+              <button
+                onClick={() => {
+                  fetchJobsheets(searchTerm, statusFilter);
+                  setShowDatePicker(false);
+                }}
+                style={{
+                  padding: isTouchDevice ? "14px" : "8px 15px",
+                  backgroundColor: "#5932EA",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontSize: isTouchDevice ? 16 : "inherit",
+                  flex: "1",
+                  minHeight: isTouchDevice ? "48px" : "auto",
+                  fontWeight: "500"
+                }}
+              >
+                Apply Filter
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+)}
     </div>
   );
 };
@@ -986,39 +1057,49 @@ const gridOptions = {
           }}>
             {/* Barra de búsqueda */}
             <div style={{ 
-              position: "relative", 
-              width: isVerticalOrientation ? "100%" : "40%",
-              minWidth: isVerticalOrientation ? "auto" : "250px"
-            }}>
-              <input
-                type="text"
-                placeholder="Search jobsheets..."
-                value={searchTerm}
-                onChange={handleSearch}
-                style={{
-                  padding: isTouchDevice ? "12px 35px 12px 12px" : "5px 30px 5px 10px",
-                  width: "100%",
-                  borderRadius: "10px",
-                  border: "1px solid white",
-                  backgroundColor: "#F9FBFF",
-                  height: isTouchDevice ? "46px" : "35px", // Altura ajustada para alinear con otros elementos
-                  fontSize: isTouchDevice ? "16px" : "14px",
-                  boxSizing: "border-box"
-                }}
-              />
-              <FontAwesomeIcon
-                icon={faSearch}
-                style={{
-                  position: "absolute",
-                  right: "12px",
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  color: loading ? "#4321C9" : "gray",
-                  cursor: "pointer",
-                  fontSize: isTouchDevice ? "18px" : "inherit"
-                }}
-              />
-            </div>
+  position: "relative", 
+  width: isVerticalOrientation ? "100%" : "40%",
+  minWidth: isVerticalOrientation ? "auto" : "250px"
+}}>
+  <div 
+    style={{ 
+      display: 'flex', 
+      alignItems: 'center',
+      width: '100%',
+      backgroundColor: '#F9FBFF',
+      borderRadius: '8px',
+      border: '1px solid #e0e0e0',
+      padding: isTouchDevice ? '0 14px' : '0 10px',
+      height: isTouchDevice ? '46px' : '36px',
+      boxSizing: 'border-box',
+      transition: 'background-color 0.3s ease'
+    }}
+  >
+    <FontAwesomeIcon
+      icon={faSearch}
+      style={{
+        color: loading ? '#4321C9' : 'gray',
+        fontSize: isTouchDevice ? '16px' : '14px',
+        marginRight: '8px'
+      }}
+    />
+    <input
+      type="text"
+      placeholder="Search jobsheets..."
+      value={searchTerm}
+      onChange={handleSearch}
+      style={{
+        padding: '0',
+        width: '100%',
+        border: 'none',
+        backgroundColor: 'transparent',
+        outline: 'none',
+        fontSize: isTouchDevice ? '16px' : 'inherit',
+        color: '#333'
+      }}
+    />
+  </div>
+</div>
 
             {/* Selector de fecha y filtro de estados */}
             <div style={{ 
@@ -1029,7 +1110,7 @@ const gridOptions = {
               flex: isVerticalOrientation ? "auto" : "1"
             }}>
               {/* DateRangeSelector - con ancho fijo en escritorio */}
-              <div style={{ width: isVerticalOrientation ? "100%" : "200px" }}>
+<div style={{ width: isVerticalOrientation ? "100%" : "280px" }}>
                 <DateRangeSelector />
               </div>
               
@@ -1046,32 +1127,28 @@ const gridOptions = {
             marginLeft: isVerticalOrientation ? "0" : "auto" // Importante: empuja el botón a la derecha
           }}>
             <button
-              onClick={handleOpenNewModal}
-              onMouseEnter={() => setIsHovered(true)}
-              onMouseLeave={() => setIsHovered(false)}
-              style={{
-                padding: isTouchDevice ? "14px 20px" : "8px 16px",
-                backgroundColor: isHovered ? "#4321C9" : "#5932EA",
-                color: "white",
-                border: "none",
-                borderRadius: "8px",
-                cursor: "pointer",
-                transition: "background-color 0.3s ease",
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                fontSize: isTouchDevice ? "16px" : "14px",
-                width: isVerticalOrientation ? "100%" : "auto",
-                minWidth: isDesktopView ? "180px" : "auto", // Un poco más grande como pediste
-                maxWidth: isDesktopView ? "220px" : "none", // Limita el ancho máximo
-                justifyContent: "center",
-                height: isTouchDevice ? "auto" : "35px", // Altura fija en escritorio
-                whiteSpace: "nowrap"
-              }}
-            >
-              <FontAwesomeIcon icon={faPlus} />
-              Add Job Sheet
-            </button>
+  onClick={handleOpenNewModal}
+  onMouseEnter={() => setIsHovered(true)}
+  onMouseLeave={() => setIsHovered(false)}
+  style={{
+    padding: isTouchDevice ? '14px 20px' : '10px 20px',
+    backgroundColor: isHovered ? '#4321C9' : '#5932EA',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    transition: 'background-color 0.3s ease',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    fontSize: isTouchDevice ? '16px' : 'inherit',
+    width: isVerticalOrientation ? '100%' : 'auto',
+    justifyContent: isVerticalOrientation ? 'center' : 'flex-start'
+  }}
+>
+  <FontAwesomeIcon icon={faPlus} />
+  <span>Add Job Sheet</span>
+</button>
           </div>
         </div>
 

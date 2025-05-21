@@ -101,6 +101,11 @@ const InventoryView = () => {
     `}
   </style>
   );
+const [showExitConfirmation, setShowExitConfirmation] = useState(false);
+const [exitingModal, setExitingModal] = useState(null); 
+const [originalEditItem, setOriginalEditItem] = useState(null);
+const [originalCompatibilities, setOriginalCompatibilities] = useState([]);
+const [originalGoodsReceiveData, setOriginalGoodsReceiveData] = useState(null);
 
   const [rowData, setRowData] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -126,6 +131,7 @@ const InventoryView = () => {
   const [newProductSku, setNewProductSku] = useState('');
   const [newProductCategory, setNewProductCategory] = useState('');
   const [newProductMinStock, setNewProductMinStock] = useState(0);
+  
   const [goodsReceiveData, setGoodsReceiveData] = useState({
     supplier_name: '',
     invoice_number: '',
@@ -149,11 +155,13 @@ const InventoryView = () => {
   const modalInitialFocusRef = useRef(null);
   const [receiveHighlightIndex, setReceiveHighlightIndex] = useState(null);
   const [highlightedRowIds, setHighlightedRowIds] = useState([]);
+  const [uniqueCategories, setUniqueCategories] = useState([]);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+const [uniqueBrands, setUniqueBrands] = useState([]);
 
   useEffect(() => {
     if (!gridReady || !gridRef.current || highlightedRowIds.length === 0) return;
     
-    console.log('🔍 Aplicando highlight a productos:', highlightedRowIds);
 
     const findProductPage = (productId) => {
       let foundPage = -1;
@@ -182,7 +190,6 @@ const InventoryView = () => {
     const targetPage = findProductPage(highlightedRowIds[0]);
     
     if (targetPage >= 0) {
-      console.log(`🔍 Productos encontrados en página ${targetPage+1}, navegando...`);
       
       gridRef.current.paginationGoToPage(targetPage);
       
@@ -194,13 +201,11 @@ const InventoryView = () => {
           }
         });
         
-        console.log(`🟢 Encontrados ${matchingNodes.length} productos para highlight en página actual`);
         
         matchingNodes.forEach(node => {
           const rowElement = document.querySelector(`#inventory-grid-container .ag-row[row-index="${node.rowIndex}"]`);
           
           if (rowElement) {
-            console.log(`✅ Aplicando highlight a fila ${node.rowIndex} (ID=${node.data.id})`);
             
             rowElement.style.transition = "all 0.3s ease";
             rowElement.style.backgroundColor = "#4CAF50";
@@ -234,7 +239,6 @@ const InventoryView = () => {
         }, 3000);
       }, 300);
     } else {
-      console.log('❌ No se encontraron productos para highlight en ninguna página');
       setHighlightedRowIds([]);
     }
   }, [highlightedRowIds, gridReady]);
@@ -298,7 +302,159 @@ const InventoryView = () => {
       console.error('Error fetching suppliers:', error);
     }
   }, [API_URL]);
+const handleCloseCompatibilityModal = () => {
+  // Verificar si hay cambios en las compatibilidades
+  const hasChanges = JSON.stringify(compatibilities) !== JSON.stringify(originalCompatibilities);
+  
+  if (hasChanges) {
+    setExitingModal('compatibility');
+    setShowExitConfirmation(true);
+  } else {
+    setShowCompatibilityModal(false);
+  }
+};
+const validateRequiredFields = () => {
+  const { sku, name, cost, sale } = editItem;
+  return sku && name && (cost > 0) && (sale > 0);
+};
+const handleCloseGoodsReceiveModal = () => {
+  // Detectar cualquier cambio, incluso antes de agregar un ítem completo
+  const hasChanges = goodsReceiveData.items.length > 0 || 
+                     goodsReceiveData.supplier_name !== '' ||
+                     goodsReceiveData.invoice_number !== '' ||
+                     goodsReceiveData.invoice_date !== new Date().toISOString().split('T')[0] ||
+                     newReceiveItem.product_name !== '' ||
+                     newReceiveItem.product_id !== '' ||
+                     newReceiveItem.quantity !== 1 ||
+                     newReceiveItem.cost_price !== 0 ||
+                     newReceiveItem.sale_price !== 0 ||
+                     newReceiveItem.jobsheet_id !== '' ||
+                     isNewProduct ||
+                     newProductSku !== '' ||
+                     newProductCategory !== '' ||
+                     newProductMinStock !== 0;
+                     
+  
+  console.log("Checking for changes in Goods Receive modal:", hasChanges);
+  
+  if (hasChanges) {
+    setExitingModal('goodsReceive');
+    setShowExitConfirmation(true);
+  } else {
+    setShowGoodsReceiveModal(false);
+  }
+};
+const handleCloseProductModal = () => {
+  const hasChanges = JSON.stringify(editItem) !== JSON.stringify(originalEditItem);
+  
+  console.log("Checking for changes in Product modal:", hasChanges);
+  
+  if (hasChanges) {
+    setExitingModal('product');
+    setShowExitConfirmation(true);
+  } else {
+    setShowModal(false);
+  }
+};
+const handleConfirmedExit = () => {
+  setShowExitConfirmation(false);
+  
+  if (exitingModal === 'product') {
+    setShowModal(false);
+    // Reiniciar estados del modal de producto
+    setEditItem(null);
+    setQuickMode(false);
+  } else if (exitingModal === 'compatibility') {
+    setShowCompatibilityModal(false);
+    // Reiniciar estados de compatibilidad
+    setCompatibilities([]);
+    setNewCompatibility('');
+  } else if (exitingModal === 'goodsReceive') {
+    setShowGoodsReceiveModal(false);
+    // Reiniciar TODOS los estados relacionados con Goods Receive
+    setGoodsReceiveData({
+      supplier_name: '',
+      invoice_number: '',
+      invoice_date: new Date().toISOString().split('T')[0],
+      items: []
+    });
+    setNewReceiveItem({
+      product_id: '',
+      product_name: '',
+      quantity: 1,
+      cost_price: 0,
+       costDisplay: null, 
+      saleDisplay: null,
+      sale_price: 0,
+      jobsheet_id: '',
+      license_plate: ''
+    });
+    setIsNewProduct(false);
+    setNewProductSku('');
+    setNewProductCategory('');
+    setNewProductMinStock(0);
+    setReceiveHighlightIndex(null);
+  }
+  
+  setExitingModal(null);
+};
 
+// Modificar las funciones de apertura de modales para guardar el estado original
+const handleOpenEditModal = (data) => {
+  setTimeout(() => {
+    const clonedData = JSON.parse(JSON.stringify(data));
+    setEditItem(clonedData);
+    setOriginalEditItem(clonedData);
+    setShowModal(true);
+  }, 50);
+};
+
+const handleOpenCompatibilityModal = async (product) => {
+  setTimeout(async () => {
+    const clonedProduct = JSON.parse(JSON.stringify(product));
+    setSelectedProduct(clonedProduct);
+    await fetchCompatibilities(clonedProduct.id);
+    setOriginalCompatibilities([...compatibilities]);
+    setShowCompatibilityModal(true);
+  }, 50);
+};
+
+const handleOpenGoodsReceiveModal = async () => {
+  setGoodsReceiveData({
+    supplier_name: '',
+    invoice_number: '',
+    invoice_date: new Date().toISOString().split('T')[0],
+    items: []
+  });
+  
+  setOriginalGoodsReceiveData({
+    supplier_name: '',
+    invoice_number: '',
+    invoice_date: new Date().toISOString().split('T')[0],
+    items: []
+  });
+  
+  setShowGoodsReceiveModal(true);
+  setJobsheets([]);
+  setLoading(true);
+  
+  try {
+    await Promise.all([
+      fetchSuppliers(),
+      fetchJobsheets(),
+      fetchCategories(),
+      fetchBrands(),
+    ]);
+  } catch (error) {
+    console.error("Error initializing goods receive modal:", error);
+  }
+  
+  setTimeout(() => {
+    if (modalInitialFocusRef.current) {
+      modalInitialFocusRef.current.focus();
+    }
+  }, 100);
+};
 const fetchJobsheets = useCallback(async () => {
   try {
     setLoading(true);
@@ -368,22 +524,73 @@ const fetchJobsheets = useCallback(async () => {
     }, 500);
   };
 
+const fetchBrands = useCallback(async () => {
+  try {
+    setLoading(true);
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/inventory/brands`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      }
+    });
+    
+    if (response.ok) {
+      const brands = await response.json();
+      setUniqueBrands(brands); 
+    }
+  } catch (error) {
+    console.error('Error fetching brands:', error);
+  } finally {
+    setLoading(false);
+  }
+}, [API_URL]);
+const fetchCategories = useCallback(async () => {
+  try {
+    setLoading(true);
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/inventory/categories`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      }
+    });
+    
+    if (response.ok) {
+      const categories = await response.json();
+      setUniqueCategories(categories); 
+    }
+  } catch (error) {
+    console.error('Error fetching categories:', error);
+  } finally {
+    setLoading(false);
+  }
+}, [API_URL]);
+
   const handleCategoryChange = (e) => {
     const value = e.target.value;
     setCategoryTerm(value);
     fetchInventoryData(searchTerm, value);
   };
 
-  useEffect(() => {
-    fetchInventoryData().then(() => {
-    });
-    
-    return () => {
-      if (searchTimeout.current) {
-        clearTimeout(searchTimeout.current);
-      }
-    };
-  }, [fetchInventoryData, refreshInventory]);
+useEffect(() => {
+  const loadData = async () => {
+    await fetchInventoryData();
+    await fetchCategories();
+    await fetchBrands();
+  };
+  
+  loadData();
+  
+  return () => {
+    if (searchTimeout.current) {
+      clearTimeout(searchTimeout.current);
+    }
+  };
+}, [fetchInventoryData, fetchCategories, fetchBrands, refreshInventory]);
+
 
   useEffect(() => {
     return () => {
@@ -393,53 +600,9 @@ const fetchJobsheets = useCallback(async () => {
     };
   }, []);
 
-  const uniqueCategories = [...new Set(rowData.map(item => item.category))];
-  const uniqueBrands = [...new Set(rowData.map(item => item.brand))];
 
-  const handleOpenEditModal = (data) => {
-    setTimeout(() => {
-      const clonedData = JSON.parse(JSON.stringify(data));
-      setEditItem(clonedData);
-      setShowModal(true);
-    }, 50);
-  };
-  const handleOpenCompatibilityModal = async (product) => {
-    setTimeout(async () => {
-      const clonedProduct = JSON.parse(JSON.stringify(product));
-      setSelectedProduct(clonedProduct);
-      await fetchCompatibilities(clonedProduct.id);
-      setShowCompatibilityModal(true);
-    }, 50);
-  };
-
- const handleOpenGoodsReceiveModal = async () => {
-  setShowGoodsReceiveModal(true);
-  
-  setGoodsReceiveData({
-    supplier_name: '',
-    invoice_number: '',
-    invoice_date: new Date().toISOString().split('T')[0],
-    items: []
-  });
-  
-  setJobsheets([]);
-  setLoading(true);
-  
-  try {
-    await Promise.all([
-      fetchSuppliers(),
-      fetchJobsheets()
-    ]);
-  } catch (error) {
-    console.error("Error initializing goods receive modal:", error);
-  }
-  
-  setTimeout(() => {
-    if (modalInitialFocusRef.current) {
-      modalInitialFocusRef.current.focus();
-    }
-  }, 100);
-};
+ 
+ 
 
   const handleGoodsReceiveInputChange = (e) => {
     const { name, value } = e.target;
@@ -486,7 +649,7 @@ const fetchJobsheets = useCallback(async () => {
           setIsNewProduct(true);
         }
       }
-    }, 500);
+    }, 1500);
   }
 };
 const addItemToReceive = () => {
@@ -859,70 +1022,143 @@ const handleSubmitGoodsReceive = async () => {
 ], [isTouchDevice, isVerticalOrientation]);
 
 
-  const handleAddProduct = () => {
-    setTimeout(() => {
+const handleAddProduct = () => {
+  setTimeout(() => {
+    const newProduct = {
+      sku: '',
+      name: '',
+      category: '',
+      brand: '',
+      stock: 0,
+      min: 0,
+      cost: 0,
+      sale: 0, 
+       costDisplay: null,  
+      saleDisplay: null   
+    
+    };
+    setEditItem(newProduct);
+    setOriginalEditItem(JSON.parse(JSON.stringify(newProduct))); // Guardar una copia profunda
+    setShowModal(true);
+  }, 50);
+};
+const confirmDelete = async () => {
+  try {
+    setShowDeleteConfirmation(false); // Cerrar el modal de confirmación
+    
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/inventory/${editItem.id}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      }
+    });
+
+    if (response.ok) {
+      fetchInventoryData(searchTerm, categoryTerm);
+      setShowModal(false);
+      setNotification({
+        show: true,
+        message: "Product successfully deleted",
+        type: "success"
+      });
+    } else {
+      console.error('Error deleting item:', response.status);
+      setNotification({
+        show: true,
+        message: "Error deleting product. Please try again.",
+        type: "error"
+      });
+    }
+  } catch (error) {
+    console.error('Error deleting item:', error);
+    setNotification({
+      show: true,
+      message: "Network error when deleting product",
+      type: "error"
+    });
+  }
+};
+
+ const handleSaveAndAddAnother = async () => {
+  if (!editItem) return;
+    if (!validateRequiredFields()) {
+    setNotification({
+      show: true,
+      message: "Please complete all required fields (SKU, Name, Cost and Sale).",
+      type: "error"
+    });
+    return;
+  }
+  const { sku, name, cost, sale } = editItem;
+  if (!sku || !name || !cost || !sale) {
+    alert("Please complete all required fields (SKU, Name, Cost and Sale).");
+    return;
+  }
+  
+  const token = localStorage.getItem('token');
+  try {
+    const response = await fetch(`${API_URL}/inventory`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify(editItem),
+    });
+
+    if (response.ok) {
+    await fetchInventoryData(searchTerm, categoryTerm);
+    await Promise.all([fetchCategories(), fetchBrands()]);
+      
       const newProduct = {
         sku: '',
         name: '',
-        category: uniqueCategories[0] || '',
-        brand: uniqueBrands[0] || '',
+        category: '',
+        brand: '',
         stock: 0,
         min: 0,
         cost: 0,
-        sale: 0
+        sale: 0,
+        costDisplay: null,
+        saleDisplay: null
       };
+      
       setEditItem(newProduct);
-      setShowModal(true);
-    }, 50);
-  };
-
-  const handleSaveAndAddAnother = async () => {
-    if (!editItem) return;
-    const { sku, name, cost, sale } = editItem;
-    if (!sku || !name || !cost || !sale) {
-      alert("Please complete all required fields (SKU, Name, Cost and Sale).");
-      return;
-    }
-    
-    const token = localStorage.getItem('token');
-    try {
-      const response = await fetch(`${API_URL}/inventory`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(editItem),
+      setOriginalEditItem(JSON.parse(JSON.stringify(newProduct)));
+      
+      setNotification({
+        show: true,
+        message: "Product created successfully. You can now add another one.",
+        type: "success"
       });
-  
-      if (response.ok) {
-        fetchInventoryData(searchTerm, categoryTerm);
-        setEditItem({
-          sku: '',
-          name: '',
-          category: uniqueCategories[0] || '',
-          brand: uniqueBrands[0] || '',
-          stock: 0,
-          min: 0,
-          cost: 0,
-          sale: 0
+    } else {
+         const errorData = await response.json();
+      if (errorData.error === 'duplicate_sku') {
+        setNotification({
+          show: true,
+          message: "This SKU already exists. Please enter a unique SKU.",
+          type: "error"
         });
-        alert("Product created successfully. You can now add another one.");
       } else {
-        const errorData = await response.json();
-        if (errorData.error === 'duplicate_sku' || 
-            (errorData.message && errorData.message.includes('SKU already exists'))) {
-          alert("This SKU already exists. Please enter a unique SKU.");
-        } else {
-          console.error('Error saving product:', response.status);
-          alert("Error creating product. Please try again.");
-        }
+        console.error('Error saving item:', response.status);
+        setNotification({
+          show: true,
+          message: "Error saving product. Please try again.",
+          type: "error"
+        });
       }
-    } catch (error) {
-      console.error('Error in handleSaveAndAddAnother:', error);
-      alert("Error connecting to server. Please check your connection.");
     }
-  };
+  } catch (error) {
+    console.error('Error in handleSave:', error);
+    setNotification({
+      show: true,
+      message: "Error connecting to server. Please check your connection.",
+      type: "error"
+    });
+  }
+};
   
   const handleSave = async () => {
     if (!editItem) return;
@@ -973,31 +1209,10 @@ const handleSubmitGoodsReceive = async () => {
     }
   };
 
-  const handleDelete = async () => {
-    if (!editItem?.id) return;
-    const confirmed = window.confirm('Are you sure you want to delete this item?');
-    if (!confirmed) return;
-
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/inventory/${editItem.id}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        }
-      });
-
-      if (response.ok) {
-        fetchInventoryData(searchTerm, categoryTerm);
-        setShowModal(false);
-      } else {
-        console.error('Error deleting item:', response.status);
-      }
-    } catch (error) {
-      console.error('Error deleting item:', error);
-    }
-  };
+  const handleDelete = () => {
+  if (!editItem?.id) return;
+  setShowDeleteConfirmation(true); // This opens the custom modal instead of window.confirm()
+};
 
 const onGridReady = params => {
   gridRef.current = params.api;
@@ -1160,154 +1375,177 @@ return (
   >
     <GridStyles />
     
-    <div
-      style={{
-        display: "flex",
-        flexDirection: isTouchDevice && isVerticalOrientation ? "column" : "row",
-        justifyContent: "space-between",
-        alignItems: isTouchDevice && isVerticalOrientation ? "stretch" : "center",
-        marginBottom: isTouchDevice ? "15px" : "10px",
-        gap: isTouchDevice ? "12px" : "10px"
-      }}
-    >
-      {/* Título y barra de búsqueda */}
-      <div style={{ 
-        flex: 1,
-        maxWidth: isTouchDevice && isVerticalOrientation ? "100%" : "300px"
-      }}>
-        <h2 style={{ 
-          margin: 0, 
-          marginBottom: "10px",
-          fontSize: isTouchDevice ? "20px" : "18px",
-          fontWeight: "600",
-          color: "#333333"
-        }}>
-          Inventory
-        </h2>
-        
-        <div style={{ position: "relative" }}>
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={handleSearchChange}
-            placeholder="Search inventory..."
-            style={{
-              width: "100%",
-              padding: isTouchDevice ? "12px 40px 12px 12px" : "8px 30px 8px 10px",
-              borderRadius: "10px",
-              border: "1px solid white",
-              backgroundColor: "#F9FBFF",
-              fontSize: isTouchDevice ? "16px" : "14px",
-              boxSizing: "border-box"
-            }}
-          />
-          <FontAwesomeIcon 
-            icon={faSearch} 
-            style={{
-              position: "absolute",
-              right: "12px",
-              top: "50%",
-              transform: "translateY(-50%)",
-              color: loading ? "#4321C9" : "gray",
-              cursor: "pointer",
-              fontSize: isTouchDevice ? "18px" : "14px"
-            }}
-          />
-        </div>
-      </div>
-      
-      <select
-        value={categoryTerm}
-        onChange={handleCategoryChange}
-        style={{
-          padding: isTouchDevice ? "12px" : "5px",
-          width: isTouchDevice && isVerticalOrientation ? "100%" : "216px",
-          borderRadius: "10px",
-          border: "1px solid white",
-          backgroundColor: "#F9FBFF",
-          height: isTouchDevice ? "46px" : "35px",
-          color: "gray",
-          fontSize: isTouchDevice ? "16px" : "inherit",
-          appearance: "none",
-          backgroundImage: "url('data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polyline points=\"6 9 12 15 18 9\"></polyline></svg>')",
-          backgroundRepeat: "no-repeat",
-          backgroundPosition: "right 12px center",
-          backgroundSize: "14px",
-          boxSizing: "border-box"
-        }}
-      >
-        <option value="">All Categories</option>
-        {uniqueCategories.map(cat => (
-          <option key={cat} value={cat}>
-            {cat}
-          </option>
-        ))}
-      </select>
-      
-      <div style={{
-        display: "flex",
-        flexDirection: isTouchDevice && isVerticalOrientation ? "column" : "row",
-        gap: "10px",
-        width: isTouchDevice && isVerticalOrientation ? "100%" : "auto"
-      }}>
-        <button
-          onClick={handleOpenGoodsReceiveModal}
-          style={{
-            padding: isTouchDevice ? "14px 20px" : "10px 20px",
-            backgroundColor: "#34A853",
-            color: "white",
-            border: "none",
-            borderRadius: isTouchDevice ? "10px" : "5px",
-            cursor: "pointer",
-            transition: "background-color 0.3s ease",
-            fontWeight: 600,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: isTouchDevice && isVerticalOrientation ? "center" : "flex-start",
-            gap: "8px",
-            width: isTouchDevice && isVerticalOrientation ? "100%" : "auto",
-            fontSize: isTouchDevice ? "16px" : "14px"
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#2D9249"}
-          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#34A853"}
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M14 10V12.6667C14 13.0203 13.8595 13.3594 13.6095 13.6095C13.3594 13.8595 13.0203 14 12.6667 14H3.33333C2.97971 14 2.64057 13.8595 2.39052 13.6095C2.14048 13.3594 2 13.0203 2 12.6667V10" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M4.66667 6.66669L8.00001 10L11.3333 6.66669" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M8 10V2" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-          Goods Receive
-        </button>
+<div
+  style={{
+    display: "flex",
+    flexDirection: isTouchDevice && isVerticalOrientation ? "column" : "row",
+    justifyContent: "space-between",
+    alignItems: isTouchDevice && isVerticalOrientation ? "stretch" : "center",
+    marginBottom: isTouchDevice ? "15px" : "10px",
+    gap: isTouchDevice ? "12px" : "10px"
+  }}
+>
+  {/* Title above the controls */}
+  <div style={{
+    width: "100%", 
+    marginBottom: "10px"
+  }}>
+    <h2 style={{
+      margin: 0,
+      fontSize: isTouchDevice ? "20px" : "18px",
+      fontWeight: "600",
+      color: "#333333"
+    }}>
+      Inventory
+    </h2>
+  </div>
+</div>
 
-        <button
-          onClick={handleAddProduct}
-          style={{
-            padding: isTouchDevice ? "14px 20px" : "10px 20px",
-            backgroundColor: isHovered ? "#4321C9" : "#5932EA",
-            color: "white",
-            border: "none",
-            borderRadius: isTouchDevice ? "10px" : "5px",
-            cursor: "pointer",
-            transition: "background-color 0.3s ease",
-            fontWeight: 600,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: isTouchDevice && isVerticalOrientation ? "center" : "flex-start",
-            gap: "8px",
-            width: isTouchDevice && isVerticalOrientation ? "100%" : "auto",
-            fontSize: isTouchDevice ? "16px" : "14px"
-          }}
-          onMouseEnter={() => setIsHovered(true)}
-          onMouseLeave={() => setIsHovered(false)}
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M8 3.33331V12.6666" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M3.33337 8H12.6667" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-          Add Product
-        </button>
-      </div>
+{/* Controls Row - All elements on the same line */}
+<div
+  style={{
+    display: "flex",
+    flexDirection: isTouchDevice && isVerticalOrientation ? "column" : "row",
+    justifyContent: "space-between",
+    alignItems: isTouchDevice && isVerticalOrientation ? "stretch" : "center",
+    marginBottom: isTouchDevice ? "15px" : "20px",
+    gap: isTouchDevice ? "12px" : "10px"
+  }}
+>
+  {/* Search field */}
+  <div style={{ 
+    position: "relative",
+    flex: 1,
+    maxWidth: isTouchDevice && isVerticalOrientation ? "100%" : "300px"
+  }}>
+    <div style={{ position: "relative" }}>
+      <input
+        type="text"
+        value={searchTerm}
+        onChange={handleSearchChange}
+        placeholder="Search inventory..."
+        style={{
+          width: "100%",
+          padding: isTouchDevice ? "12px 40px 12px 12px" : "10px 30px 10px 12px",
+          borderRadius: "8px",
+          border: "1px solid #e0e0e0",
+          backgroundColor: "#F9FBFF",
+          fontSize: isTouchDevice ? "16px" : "14px",
+          boxSizing: "border-box",
+          outline: "none"
+        }}
+      />
+      <FontAwesomeIcon 
+        icon={faSearch} 
+        style={{
+          position: "absolute",
+          right: "12px",
+          top: "50%",
+          transform: "translateY(-50%)",
+          color: loading ? "#4321C9" : "gray",
+          cursor: "pointer",
+          fontSize: isTouchDevice ? "18px" : "14px"
+        }}
+      />
     </div>
+  </div>
+  
+  {/* Category Selector */}
+  <select
+    value={categoryTerm}
+    onChange={handleCategoryChange}
+    style={{
+      padding: isTouchDevice ? "12px 30px 12px 12px" : "10px 30px 10px 12px",
+      width: isTouchDevice && isVerticalOrientation ? "100%" : "216px",
+      borderRadius: "8px",
+      border: "1px solid #e0e0e0",
+      backgroundColor: "#F9FBFF",
+      color: categoryTerm ? "#333" : "#666",
+      fontSize: isTouchDevice ? "16px" : "14px",
+      appearance: "none",
+      backgroundImage: "url('data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"%235932EA\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 9L12 15L18 9\"/></svg>')",
+      backgroundRepeat: "no-repeat",
+      backgroundPosition: "right 12px center",
+      backgroundSize: "12px",
+      boxSizing: "border-box",
+      outline: "none"
+    }}
+  >
+    <option value="">All Categories</option>
+    {uniqueCategories.map(cat => (
+      <option key={cat} value={cat}>
+        {cat}
+      </option>
+    ))}
+  </select>
+  
+  {/* Action Buttons */}
+  <div style={{
+    display: "flex",
+    flexDirection: isTouchDevice && isVerticalOrientation ? "column" : "row",
+    gap: "10px",
+    width: isTouchDevice && isVerticalOrientation ? "100%" : "auto"
+  }}>
+    {/* Goods Receive Button */}
+    <button
+      onClick={handleOpenGoodsReceiveModal}
+      style={{
+        padding: isTouchDevice ? "12px 20px" : "10px 20px",
+        backgroundColor: "#34A853",
+                color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  transition: 'background-color 0.3s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+        justifyContent: isTouchDevice && isVerticalOrientation ? "center" : "flex-start",
+        width: isTouchDevice && isVerticalOrientation ? "100%" : "auto",
+                          fontSize: isTouchDevice ? '16px' : 'inherit',
+
+      }}
+      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#2D9249"}
+      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#34A853"}
+    >
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M14 10V12.6667C14 13.0203 13.8595 13.3594 13.6095 13.6095C13.3594 13.8595 13.0203 14 12.6667 14H3.33333C2.97971 14 2.64057 13.8595 2.39052 13.6095C2.14048 13.3594 2 13.0203 2 12.6667V10" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M4.66667 6.66669L8.00001 10L11.3333 6.66669" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M8 10V2" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+      Goods Receive
+    </button>
+
+    {/* Add Product Button */}
+    <button
+      onClick={handleAddProduct}
+      style={{
+        padding: isTouchDevice ? "12px 20px" : "10px 20px",
+        backgroundColor: isHovered ? "#4321C9" : "#5932EA",
+                color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  transition: 'background-color 0.3s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+        justifyContent: isTouchDevice && isVerticalOrientation ? "center" : "flex-start",
+        width: isTouchDevice && isVerticalOrientation ? "100%" : "auto",
+                          fontSize: isTouchDevice ? '16px' : 'inherit',
+
+      }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M8 3.33331V12.6666" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M3.33337 8H12.6667" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+      Add Product
+    </button>
+  </div>
+</div>
 
     <div style={{ flex: 1, position: "relative", touchAction: "auto" }}>
       <div 
@@ -1440,6 +1678,7 @@ return (
                       color: "white",
                       width: "32px",
                       height: "32px",
+                      minWidth: "32px",
                       borderRadius: "50%",
                       cursor: "pointer",
                       display: "flex",
@@ -1619,10 +1858,10 @@ return (
                           }}
                         >
                           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                            <div style={{ 
-                              width: "32px", 
-                              height: "32px", 
-                              backgroundColor: "#EDE7F6", 
+                            <div style={{
+                              width: "32px",
+                              height: "32px",
+                              backgroundColor: "#EDE7F6",
                               borderRadius: "8px",
                               display: "flex",
                               alignItems: "center",
@@ -1780,29 +2019,32 @@ return (
               Register received items and update inventory
             </p>
           </div>
-          <button
-            onClick={() => setShowGoodsReceiveModal(false)}
-            style={{
-              background: "rgba(255,255,255,0.2)",
-              border: "none",
-              color: "white",
-              width: "32px",
-              height: "32px",
-              borderRadius: "50%",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: "18px",
-              transition: "background-color 0.2s",
-              userSelect: "none",
-              zIndex: 10
-            }}
-            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.3)")}
-            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.2)")}
-          >
-            ×
-          </button>
+<button
+  onClick={() => {
+    handleCloseGoodsReceiveModal();
+  }}
+  style={{
+    background: "rgba(255,255,255,0.2)",
+    border: "none",
+    color: "white",
+    width: "32px",
+    height: "32px",
+    minWidth: "32px",
+    borderRadius: "50%",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "18px",
+    transition: "background-color 0.2s",
+    userSelect: "none",
+    zIndex: 10
+  }}
+  onMouseOver={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.3)")}
+  onMouseOut={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.2)")}
+>
+  ×
+</button>
         </div>
       </div>
 
@@ -1820,6 +2062,7 @@ return (
             Supplier & Invoice Details
           </h3>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+           
             <div>
               <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
                 Supplier *
@@ -1973,20 +2216,42 @@ return (
       <span style={{ fontWeight: "600" }}>
         New product will be created
       </span>
-      <button
-        onClick={() => setIsNewProduct(false)}
-        style={{
-          background: "none",
-          border: "none",
-          marginLeft: "auto",
-          color: "#666",
-          cursor: "pointer",
-          fontSize: "13px",
-          textDecoration: "underline"
-        }}
-      >
-        Cancel
-      </button>
+<button
+  onClick={() => {
+    setIsNewProduct(false);
+    setNewReceiveItem({
+      ...newReceiveItem,
+      product_name: '',
+      product_id: '',
+      cost_price: 0,
+      sale_price: 0
+    });
+    setNewProductSku('');
+    setNewProductCategory('');
+    setNewProductMinStock(0);
+  }}
+  style={{
+    padding: "12px 20px",
+    backgroundColor: "transparent",
+    color: "#666",
+    border: "1px solid #d0d0d0",
+    borderRadius: "8px",
+    cursor: "pointer",
+    fontSize: "14px",
+    fontWeight: "500",
+    transition: "all 0.2s",
+  }}
+  onMouseOver={(e) => {
+    e.currentTarget.style.backgroundColor = "#f5f5f5";
+    e.currentTarget.style.color = "#555";
+  }}
+  onMouseOut={(e) => {
+    e.currentTarget.style.backgroundColor = "transparent";
+    e.currentTarget.style.color = "#666";
+  }}
+>
+  Cancel
+</button>
     </div>
     
     <div>
@@ -2108,7 +2373,7 @@ return (
       step="0.01"
       min="0"
       name="cost_price"
-  value={newReceiveItem.cost_price || ''}
+      value={newReceiveItem.cost_price || ''}
       onChange={e => setNewReceiveItem({
         ...newReceiveItem,
         cost_price: parseFloat(e.target.value) || 0
@@ -2148,7 +2413,7 @@ return (
       step="0.01"
       min="0"
       name="sale_price"
-  value={newReceiveItem.sale_price || ''}
+      value={newReceiveItem.sale_price || ''}
       onChange={e => setNewReceiveItem({
         ...newReceiveItem,
         sale_price: parseFloat(e.target.value) || 0
@@ -2326,8 +2591,8 @@ return (
       }}>
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ marginBottom: "12px", color: "#999" }}>
           <rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="2"/>
-          <path d="M16 10H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-          <path d="M16 14H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+          <path d="M16 10H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M16 14H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
         <p style={{ margin: "0 0 8px 0", fontSize: "15px", fontWeight: "500" }}>No active job sheets found</p>
         <p style={{ margin: "0", fontSize: "13px" }}>Create a job sheet first or check your filters</p>
@@ -2413,58 +2678,57 @@ return (
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "8px" }}>
-              <div style={{ 
-                display: "grid",
-                gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr 80px",
-                gap: "12px",
-                padding: "8px 16px",
-                borderBottom: "1px solid #e0e0e0",
-                fontSize: "13px",
-                fontWeight: "600",
-                color: "#666"
-              }}>
-                <div>Product</div>
-                <div>Quantity</div>
-                <div>Cost</div>
-                <div>Sale</div>
-                <div>Total</div>
-                <div>Assigned To</div>
-                <div></div>
-              </div>
+<div style={{ 
+  display: "grid",
+  gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 80px", // Changed from "2fr 1fr 1fr 1fr 1fr 1fr 80px"
+  gap: "12px",
+  padding: "8px 16px",
+  borderBottom: "1px solid #e0e0e0",
+  fontSize: "13px",
+  fontWeight: "600",
+  color: "#666"
+}}>
+  <div>Product</div>
+  <div>Quantity</div>
+  <div>Cost</div>
+  <div>Sale</div>
+  <div>Assigned To</div>
+  <div></div>
+</div>
               
-              {goodsReceiveData.items.map((item, index) => (
-                <div
-                  key={index}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr 80px",
-                    gap: "12px",
-                    alignItems: "center",
-                    padding: "12px 16px",
-                    borderRadius: "8px",
-                    border: "1px solid #e0e0e0",
-                    backgroundColor: index === receiveHighlightIndex ? "#e7fbe9" : "#fff",
-                    transition: "background-color 1s ease"
-                  }}
-                >
-                  <div style={{ fontSize: "14px", fontWeight: "500" }}>{item.product_name}</div>
-                  <div>{item.quantity}</div>
-                  <div>${Number(item.cost_price).toFixed(2)}</div>
-                  <div>${Number(item.sale_price).toFixed(2)}</div>
-                  <div>${(item.quantity * item.cost_price).toFixed(2)}</div>
-                  <div>
-                    {item.jobsheet_id ? (
-                      <div style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        backgroundColor: "#EDE7F6",
-                        color: "#5932EA",
-                        borderRadius: "12px",
-                        padding: "4px 8px",
-                        fontSize: "12px",
-                        gap: "4px",
-                        fontWeight: "500"
-                      }}>
+{goodsReceiveData.items.map((item, index) => (
+  <div
+    key={index}
+    style={{
+      display: "grid",
+      gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 80px", // Changed from "2fr 1fr 1fr 1fr 1fr 1fr 80px"
+      gap: "12px",
+      alignItems: "center",
+      padding: "12px 16px",
+      borderRadius: "8px",
+      border: "1px solid #e0e0e0",
+      backgroundColor: index === receiveHighlightIndex ? "#e7fbe9" : "#fff",
+      transition: "background-color 1s ease"
+    }}
+  >
+    <div style={{ fontSize: "14px", fontWeight: "500" }}>{item.product_name}</div>
+    <div>{item.quantity}</div>
+    <div>${Number(item.cost_price).toFixed(2)}</div>
+    <div>${Number(item.sale_price).toFixed(2)}</div>
+    {/* Removed Total column: <div>${(item.quantity * item.cost_price).toFixed(2)}</div> */}
+    <div>
+      {item.jobsheet_id ? (
+        <div style={{
+          display: "inline-flex",
+          alignItems: "center",
+          backgroundColor: "#EDE7F6",
+          color: "#5932EA",
+          borderRadius: "12px",
+          padding: "4px 8px",
+          fontSize: "12px",
+          gap: "4px",
+          fontWeight: "500"
+        }}>
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                           <path d="M14 15.5C14 16.3284 13.3284 17 12.5 17C11.6716 17 11 16.3284 11 15.5C11 14.6716 11.6716 14 12.5 14C13.3284 14 14 14.6716 14 15.5Z" fill="#5932EA"/>
                           <path d="M8.5 17C9.32843 17 10 16.3284 10 15.5C10 14.6716 9.32843 14 8.5 14C7.67157 14 7 14.6716 7 15.5C7 16.3284 7.67157 17 8.5 17Z" fill="#5932EA"/>
@@ -2537,30 +2801,30 @@ return (
           backgroundColor: "#f9fafc",
         }}
       >
-        <button
-          onClick={() => setShowGoodsReceiveModal(false)}
-          style={{
-            padding: "12px 20px",
-            backgroundColor: "transparent",
-            color: "#666",
-            border: "1px solid #d0d0d0",
-            borderRadius: "8px",
-            cursor: "pointer",
-            fontSize: "14px",
-            fontWeight: "500",
-            transition: "all 0.2s",
-          }}
-          onMouseOver={(e) => {
-            e.currentTarget.style.backgroundColor = "#f5f5f5";
-            e.currentTarget.style.color = "#555";
-          }}
-          onMouseOut={(e) => {
-            e.currentTarget.style.backgroundColor = "transparent";
-            e.currentTarget.style.color = "#666";
-          }}
-        >
-          Cancel
-        </button>
+<button
+  onClick={handleCloseGoodsReceiveModal}
+  style={{
+    padding: "12px 20px",
+    backgroundColor: "transparent",
+    color: "#666",
+    border: "1px solid #d0d0d0",
+    borderRadius: "8px",
+    cursor: "pointer",
+    fontSize: "14px",
+    fontWeight: "500",
+    transition: "all 0.2s",
+  }}
+  onMouseOver={(e) => {
+    e.currentTarget.style.backgroundColor = "#f5f5f5";
+    e.currentTarget.style.color = "#555";
+  }}
+  onMouseOut={(e) => {
+    e.currentTarget.style.backgroundColor = "transparent";
+    e.currentTarget.style.color = "#666";
+  }}
+>
+  Cancel
+</button>
         <button
           onClick={handleSubmitGoodsReceive}
           disabled={goodsReceiveData.items.length === 0 || !goodsReceiveData.supplier_name}
@@ -2687,34 +2951,34 @@ return (
                       {editItem.id ? `Editing ${editItem.name || 'Product'}` : "Enter product details below"}
                     </p>
                   </div>
-                  <button
-                    onClick={() => setShowModal(false)}
-                    aria-label="Close modal"
-                    style={{
-                      background: "rgba(255,255,255,0.2)",
-                      border: "none",
-                      color: "white",
-                      width: "32px",
-                      height: "32px",
-                      minWidth: "32px",
-                      borderRadius: "50%",
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: "18px",
-                      transition: "background-color 0.2s",
-                      userSelect: "none",
-                      zIndex: 10,
-                      outline: "none",
-                    }}
-                    onMouseOver={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.3)")}
-                    onMouseOut={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.2)")}
-                    onFocus={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.3)")}
-                    onBlur={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.2)")}
-                  >
-                    ×
-                  </button>
+<button
+  onClick={handleCloseProductModal}
+  aria-label="Close modal"
+  style={{
+    background: "rgba(255,255,255,0.2)",
+    border: "none",
+    color: "white",
+    width: "32px",
+    height: "32px",
+    minWidth: "32px",
+    borderRadius: "50%",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "18px",
+    transition: "background-color 0.2s",
+    userSelect: "none",
+    zIndex: 10,
+    outline: "none",
+  }}
+  onMouseOver={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.3)")}
+  onMouseOut={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.2)")}
+  onFocus={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.3)")}
+  onBlur={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.2)")}
+>
+  ×
+</button>
                 </div>
                 
                 {/* Fila 2: Selector de Quick Mode con diseño moderno y limpio */}
@@ -2846,8 +3110,10 @@ return (
                   <h3 style={{ margin: "0 0 16px 0", fontSize: "16px", fontWeight: "600", color: "#333" }}>
                     Pricing Information
                   </h3>
+
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
- <div>
+                    <div>
+
   <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
     Cost Price *
   </label>
@@ -2862,14 +3128,28 @@ return (
       pointerEvents: "none"
     }}>$</span>
     <input
-      type="number"
-      step="0.01"
-      min="0"
-      value={editItem.cost > 0 ? editItem.cost : ''}
-      onChange={(e) => setEditItem({ 
-        ...editItem, 
-        cost: e.target.value === '' ? 0 : parseFloat(e.target.value) 
-      })}
+      type="text"
+      inputMode="decimal"
+      name="cost_price"
+      value={editItem.costDisplay || (editItem.cost > 0 ? editItem.cost : '')}
+      onChange={(e) => {
+        const val = e.target.value;
+        if (val === '' || /^[0-9]*\.?[0-9]*$/.test(val)) {
+          setEditItem(prev => ({
+            ...prev,
+            cost: val === '' ? 0 : parseFloat(val) || 0,
+            costDisplay: val
+          }));
+        }
+      }}
+      onBlur={(e) => {
+        const value = parseFloat(e.target.value) || 0;
+        setEditItem(prev => ({
+          ...prev,
+          cost: value,
+          costDisplay: null
+        }));
+      }}
       style={{
         width: "100%",
         padding: "12px 12px 12px 30px",
@@ -2901,14 +3181,28 @@ return (
       pointerEvents: "none"
     }}>$</span>
     <input
-      type="number"
-      step="0.01"
-      min="0"
-      value={editItem.sale > 0 ? editItem.sale : ''}
-      onChange={(e) => setEditItem({ 
-        ...editItem, 
-        sale: e.target.value === '' ? 0 : parseFloat(e.target.value) 
-      })}
+      type="text"
+      inputMode="decimal"
+      name="sale_price"
+      value={editItem.saleDisplay || (editItem.sale > 0 ? editItem.sale : '')}
+      onChange={(e) => {
+        const val = e.target.value;
+        if (val === '' || /^[0-9]*\.?[0-9]*$/.test(val)) {
+          setEditItem(prev => ({
+            ...prev,
+            sale: val === '' ? 0 : parseFloat(val) || 0,
+            saleDisplay: val
+          }));
+        }
+      }}
+      onBlur={(e) => {
+        const value = parseFloat(e.target.value) || 0;
+        setEditItem(prev => ({
+          ...prev,
+          sale: value,
+          saleDisplay: null
+        }));
+      }}
       style={{
         width: "100%",
         padding: "12px 12px 12px 30px",
@@ -2923,101 +3217,91 @@ return (
       required
     />
   </div>
-                      {editItem.cost > 0 && editItem.sale > 0 && (
-                        <div style={{ 
-                          marginTop: "6px", 
-                          fontSize: "13px", 
-                          color: 
-                          editItem.sale > editItem.cost 
-                            ? "#2E7D32" 
-                            : editItem.sale < editItem.cost 
-                              ? "#C62828" 
-                              : "#666"
-                        }}>
-                          {editItem.sale > editItem.cost 
-                            ? `Margin: ${((editItem.sale - editItem.cost) / editItem.cost * 100).toFixed(1)}%` 
-                            : editItem.sale < editItem.cost 
-                              ? "Warning: Sale price is lower than cost" 
-                              : "No margin - selling at cost"}
-                        </div>
-                      )}
-                    </div>
+</div>
                   </div>
                 </div>
 
                 {/* Additional sections - Only visible if not in quick mode */}
-
-                  {!quickMode && (
+              {!quickMode && (
   <>
     {/* Classification */}
     <div style={{ 
-      display: "grid", 
-      gridTemplateColumns: "1fr 1fr", 
-      gap: "16px",
-      marginBottom: "20px"
+      padding: "20px", 
+      backgroundColor: "#f9fafc", 
+      borderRadius: "12px", 
+      border: "1px solid #e0e0e0",
+      marginBottom: "24px" 
     }}>
-      {/* Categoría */}
-      <div>
-        <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
-          Category
-        </label>
-        <input
-          type="text"
-          list="category-options"
-          value={editItem.category}
-          onChange={(e) => setEditItem({ ...editItem, category: e.target.value })}
-          style={{
-            width: "100%",
-            padding: "12px",
-            borderRadius: "8px",
-            border: "1px solid #e0e0e0",
-            backgroundColor: "#fff",
-            fontSize: "14px",
-            transition: "border-color 0.2s",
-            outline: "none",
-            boxSizing: "border-box"
-          }}
-          onFocus={(e) => e.target.style.borderColor = "#5932EA"}
-          onBlur={(e) => e.target.style.borderColor = "#e0e0e0"}
-        />
-        <datalist id="category-options">
-          {uniqueCategories.map(cat => (
-            <option key={cat} value={cat} />
-          ))}
-        </datalist>
+      <h3 style={{ margin: "0 0 16px 0", fontSize: "16px", fontWeight: "600", color: "#333" }}>
+        Classification
+      </h3>
+      <div style={{ 
+        display: "grid", 
+        gridTemplateColumns: "1fr 1fr", 
+        gap: "16px",
+        width: "100%", 
+        boxSizing: "border-box" 
+      }}>
+        {/* Categoría */}
+        <div>
+          <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
+            Category
+          </label>
+          <input
+            type="text"
+            list="category-options"
+            value={editItem.category}
+            onChange={(e) => setEditItem({ ...editItem, category: e.target.value })}
+            style={{
+              width: "100%",
+              padding: "12px",
+              borderRadius: "8px",
+              border: "1px solid #e0e0e0",
+              backgroundColor: "#fff",
+              fontSize: "14px",
+              outline: "none",
+              boxSizing: "border-box"
+            }}
+            placeholder="Enter or select category"
+          />
+          <datalist id="category-options">
+            {uniqueCategories.map(cat => (
+              <option key={cat} value={cat} />
+            ))}
+          </datalist>
+        </div>
+
+        {/* Marca */}
+        <div>
+          <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
+            Brand
+          </label>
+          <input
+            type="text"
+            list="brand-options"
+            value={editItem.brand}
+            onChange={(e) => setEditItem({ ...editItem, brand: e.target.value })}
+            style={{
+              width: "100%",
+              padding: "12px",
+              borderRadius: "8px",
+              border: "1px solid #e0e0e0",
+              backgroundColor: "#fff",
+              fontSize: "14px",
+              outline: "none",
+              boxSizing: "border-box"
+            }}
+            placeholder="Enter or select brand"
+          />
+          <datalist id="brand-options">
+            {uniqueBrands.map(brand => (
+              <option key={brand} value={brand} />
+            ))}
+          </datalist>
+        </div>
+      </div>
       </div>
 
-      {/* Marca */}
-      <div>
-        <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "500", color: "#444" }}>
-          Brand
-        </label>
-        <input
-          type="text"
-          list="brand-options"
-          value={editItem.brand}
-          onChange={(e) => setEditItem({ ...editItem, brand: e.target.value })}
-          style={{
-            width: "100%",
-            padding: "12px",
-            borderRadius: "8px",
-            border: "1px solid #e0e0e0",
-            backgroundColor: "#fff",
-            fontSize: "14px",
-            transition: "border-color 0.2s",
-            outline: "none",
-            boxSizing: "border-box"
-          }}
-          onFocus={(e) => e.target.style.borderColor = "#5932EA"}
-          onBlur={(e) => e.target.style.borderColor = "#e0e0e0"}
-        />
-        <datalist id="brand-options">
-          {uniqueBrands.map(brand => (
-            <option key={brand} value={brand} />
-          ))}
-        </datalist>
-      </div>
-    </div>
 
                     {/* Inventory Information */}
                     <div style={{ padding: "20px", backgroundColor: "#f9fafc", borderRadius: "12px", border: "1px solid #e0e0e0" }}>
@@ -3142,80 +3426,91 @@ return (
               )}
               
               <div style={{ display: "flex", gap: "12px", marginLeft: "auto" }}>
-                <button
-                  onClick={() => setShowModal(false)}
-                  style={{
-                    padding: "12px 20px",
-                    backgroundColor: "transparent",
-                    color: "#666",
-                    border: "1px solid #d0d0d0",
-                    borderRadius: "8px",
-                    cursor: "pointer",
-                    fontSize: "14px",
-                    fontWeight: "500",
-                    transition: "all 0.2s",
-                  }}
-                  onMouseOver={(e) => {
-                    e.currentTarget.style.backgroundColor = "#f5f5f5";
-                    e.currentTarget.style.color = "#555";
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.backgroundColor = "transparent";
-                    e.currentTarget.style.color = "#666";
-                  }}
-                >
-                  Cancel
-                </button>
+<button
+  onClick={handleCloseProductModal}
+  style={{
+    padding: "12px 20px",
+    backgroundColor: "transparent",
+    color: "#666",
+    border: "1px solid #d0d0d0",
+    borderRadius: "8px",
+    cursor: "pointer",
+    fontSize: "14px",
+    fontWeight: "500",
+    transition: "all 0.2s",
+  }}
+  onMouseOver={(e) => {
+    e.currentTarget.style.backgroundColor = "#f5f5f5";
+    e.currentTarget.style.color = "#555";
+  }}
+  onMouseOut={(e) => {
+    e.currentTarget.style.backgroundColor = "transparent";
+    e.currentTarget.style.color = "#666";
+  }}
+>
+  Cancel
+</button>
                 
                 {!editItem.id && (
-                  <button
-                    onClick={handleSaveAndAddAnother}
-                    style={{
-                      padding: "12px 24px",
-                      backgroundColor: "#4E9F3D",
-                      color: "white",
-                      border: "none",
-                      borderRadius: "8px",
-                      cursor: "pointer",
-                      fontSize: "14px",
-                      fontWeight: "600",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "8px",
-                      minWidth: "170px",
-                      transition: "all 0.2s",
-                    }}
-                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#3D8030"}
-                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#4E9F3D"}
-                  >
-                    Save & Add Another
-                  </button>
+                 <button
+  onClick={handleSaveAndAddAnother}
+  disabled={!validateRequiredFields()}
+  style={{
+    padding: "12px 24px",
+    backgroundColor: validateRequiredFields() ? "#4E9F3D" : "#d0d0d0",
+    color: validateRequiredFields() ? "white" : "#999",
+    border: "none",
+    borderRadius: "8px",
+    cursor: validateRequiredFields() ? "pointer" : "not-allowed",
+    fontSize: "14px",
+    fontWeight: "600",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "8px",
+    minWidth: "170px",
+    transition: "all 0.2s",
+  }}
+  onMouseOver={(e) => {
+    if (validateRequiredFields()) e.currentTarget.style.backgroundColor = "#3D8030";
+  }}
+  onMouseOut={(e) => {
+    if (validateRequiredFields()) e.currentTarget.style.backgroundColor = "#4E9F3D";
+  }}
+>
+  Save & Add Another
+</button>
+
                 )}
                 
-                <button
-                  onClick={handleSave}
-                  style={{
-                    padding: "12px 24px",
-                    backgroundColor: "#5932EA",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "8px",
-                    cursor: "pointer",
-                    fontSize: "14px",
-                    fontWeight: "600",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "8px",
-                    minWidth: "120px",
-                    transition: "all 0.2s",
-                  }}
-                  onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#4321C9"}
-                  onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#5932EA"}
-                >
-                  {editItem.id ? "Update Product" : "Create Product"}
-                </button>
+              <button
+  onClick={handleSave}
+  disabled={!validateRequiredFields()}
+  style={{
+    padding: "12px 24px",
+    backgroundColor: validateRequiredFields() ? "#5932EA" : "#d0d0d0",
+    color: validateRequiredFields() ? "white" : "#999",
+    border: "none",
+    borderRadius: "8px",
+    cursor: validateRequiredFields() ? "pointer" : "not-allowed",
+    fontSize: "14px",
+    fontWeight: "600",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "8px",
+    minWidth: "120px",
+    transition: "all 0.2s",
+  }}
+  onMouseOver={(e) => {
+    if (validateRequiredFields()) e.currentTarget.style.backgroundColor = "#4321C9";
+  }}
+  onMouseOut={(e) => {
+    if (validateRequiredFields()) e.currentTarget.style.backgroundColor = "#5932EA";
+  }}
+>
+  {editItem.id ? "Update Product" : "Create Product"}
+</button>
               </div>
             </div>
 
@@ -3234,6 +3529,240 @@ return (
         </div>
       )}
 
+      {showDeleteConfirmation && (
+  <div
+    style={{
+      position: "fixed",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: "rgba(0, 0, 0, 0.6)",
+      backdropFilter: "blur(3px)",
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+      zIndex: 1100,
+      animation: "fadeIn 0.2s ease",
+    }}
+  >
+    <div
+      style={{
+        backgroundColor: "white",
+        borderRadius: "12px",
+        width: "95%",
+        maxWidth: "400px",
+        boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.2)",
+        animation: "modalFadeIn 0.3s ease",
+        overflow: "hidden"
+      }}
+    >
+      <div
+        style={{
+          borderBottom: "1px solid #eee",
+          padding: "20px 24px",
+          display: "flex",
+          alignItems: "center",
+          gap: "16px"
+        }}
+      >
+        <div
+          style={{
+            minWidth: "40px",
+            height: "40px",
+            borderRadius: "50%",
+            backgroundColor: "#FEF2F2",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#DC2626"
+          }}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M19 7L18.1327 19.1425C18.0579 20.1891 17.187 21 16.1378 21H7.86224C6.81296 21 5.94208 20.1891 5.86732 19.1425L5 7M10 11V17M14 11V17M15 7V4C15 3.44772 14.5523 3 14 3H10C9.44772 3 9 3.44772 9 4V7M4 7H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </div>
+        <div>
+          <h3 style={{ margin: "0 0 4px 0", fontSize: "18px", fontWeight: "600", color: "#111" }}>
+            Delete Product
+          </h3>
+          <p style={{ margin: "0", fontSize: "14px", color: "#666" }}>
+            Are you sure you want to delete this product? This action cannot be undone.
+          </p>
+        </div>
+      </div>
+      
+      <div style={{ padding: "16px 24px 24px" }}>
+        <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+          <button
+            onClick={() => setShowDeleteConfirmation(false)}
+            style={{
+              padding: "10px 16px",
+              backgroundColor: "white",
+              color: "#111",
+              border: "1px solid #ddd",
+              borderRadius: "8px",
+              cursor: "pointer",
+              fontSize: "14px",
+              fontWeight: "500",
+              transition: "all 0.2s"
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.backgroundColor = "#f5f5f5";
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.backgroundColor = "white";
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={confirmDelete}
+            style={{
+              padding: "10px 16px",
+              backgroundColor: "#DC2626",
+              color: "white",
+              border: "none",
+              borderRadius: "8px",
+              cursor: "pointer",
+              fontSize: "14px",
+              fontWeight: "500",
+              transition: "all 0.2s"
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.backgroundColor = "#B91C1C";
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.backgroundColor = "#DC2626";
+            }}
+          >
+            Delete Product
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+{showExitConfirmation && (
+  <div
+    style={{
+      position: "fixed",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: "rgba(0, 0, 0, 0.6)",
+      backdropFilter: "blur(3px)",
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+      zIndex: 1100, // Mayor que los otros modales para que quede encima
+      animation: "fadeIn 0.2s ease",
+    }}
+  >
+    <div
+      style={{
+        backgroundColor: "white",
+        borderRadius: "12px",
+        width: "95%",
+        maxWidth: "400px",
+        boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.2)",
+        animation: "modalFadeIn 0.3s ease",
+        overflow: "hidden"
+      }}
+    >
+      <div
+        style={{
+          borderBottom: "1px solid #eee",
+          padding: "20px 24px",
+          display: "flex",
+          alignItems: "center",
+          gap: "16px"
+        }}
+      >
+        <div
+          style={{
+            minWidth: "40px",
+            height: "40px",
+            borderRadius: "50%",
+            backgroundColor: "#FEF2F2",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#DC2626"
+          }}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path
+              d="M12 8V12M12 16H12.01M22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12Z"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </div>
+        <div>
+          <h3 style={{ margin: "0 0 4px 0", fontSize: "18px", fontWeight: "600", color: "#111" }}>
+            Unsaved Changes
+          </h3>
+          <p style={{ margin: "0", fontSize: "14px", color: "#666" }}>
+            You have unsaved changes that will be lost if you exit now.
+          </p>
+        </div>
+      </div>
+      
+      <div style={{ padding: "16px 24px 24px" }}>
+        <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+          <button
+            onClick={() => setShowExitConfirmation(false)}
+            style={{
+              padding: "10px 16px",
+              backgroundColor: "white",
+              color: "#111",
+              border: "1px solid #ddd",
+              borderRadius: "8px",
+              cursor: "pointer",
+              fontSize: "14px",
+              fontWeight: "500",
+              transition: "all 0.2s"
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.backgroundColor = "#f5f5f5";
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.backgroundColor = "white";
+            }}
+          >
+            Keep Editing
+          </button>
+          <button
+            onClick={handleConfirmedExit}
+            style={{
+              padding: "10px 16px",
+              backgroundColor: "#DC2626",
+              color: "white",
+              border: "none",
+              borderRadius: "8px",
+              cursor: "pointer",
+              fontSize: "14px",
+              fontWeight: "500",
+              transition: "all 0.2s"
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.backgroundColor = "#B91C1C";
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.backgroundColor = "#DC2626";
+            }}
+          >
+            Discard Changes
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
 {notification.show && (
   <Notification
     show={notification.show}

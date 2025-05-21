@@ -38,7 +38,7 @@ class JobsheetItemModel {
   
       // Verificar si hay suficiente stock
       const [inventoryItem] = await connection.query(
-        'SELECT stock, sale FROM inventory WHERE id = ? FOR UPDATE', 
+        'SELECT stock, sale, name FROM inventory WHERE id = ? FOR UPDATE', 
         [itemData.product_id]
       );
   
@@ -66,7 +66,7 @@ class JobsheetItemModel {
         UPDATE inventory SET stock = stock - ? WHERE id = ?
       `, [itemData.quantity, itemData.product_id]);
   
-      // NUEVO: Actualizar el total_amount en la tabla jobsheets
+      // Actualizar el total_amount en la tabla jobsheets
       await connection.query(`
         UPDATE jobsheets
         SET total_amount = (
@@ -76,6 +76,36 @@ class JobsheetItemModel {
         )
         WHERE id = ?
       `, [itemData.jobsheet_id, itemData.jobsheet_id]);
+
+      // NUEVO: Registrar la compatibilidad si el jobsheet tiene un vehículo asociado
+      const [jobsheet] = await connection.query(`
+        SELECT j.state, j.vehicle_id, v.model
+        FROM jobsheets j
+        LEFT JOIN vehicles v ON j.vehicle_id = v.id
+        WHERE j.id = ?
+      `, [itemData.jobsheet_id]);
+
+      if (jobsheet[0] && jobsheet[0].vehicle_id && jobsheet[0].model && jobsheet[0].state !== 'cancelled') {
+        // Verificar si la compatibilidad ya existe
+        const [existingCompatibility] = await connection.query(`
+          SELECT COUNT(*) AS count FROM compatibility 
+          WHERE product_id = ? AND motorcycle_model = ?
+        `, [itemData.product_id, jobsheet[0].model]);
+
+        // Si no existe, añadir la compatibilidad
+        if (existingCompatibility[0].count === 0) {
+          await connection.query(`
+            INSERT INTO compatibility (product_id, motorcycle_model, created_by_jobsheet)
+            VALUES (?, ?, ?)
+          `, [
+            itemData.product_id, 
+            jobsheet[0].model,
+            itemData.jobsheet_id // Marcar que fue creada por un jobsheet
+          ]);
+          
+          console.log(`Compatibility created automatically: Product ID ${itemData.product_id} with model ${jobsheet[0].model}`);
+        }
+      }
   
       await connection.commit();
       
@@ -181,7 +211,13 @@ class JobsheetItemModel {
   
       // Almacenar el jobsheet_id para actualizar el total después
       const jobsheetId = item[0].jobsheet_id;
-  
+      
+      // Obtener el estado del jobsheet
+      const [jobsheetState] = await connection.query(
+        'SELECT state FROM jobsheets WHERE id = ?',
+        [jobsheetId]
+      );
+
       // Eliminar el item
       const [result] = await connection.query('DELETE FROM jobsheet_items WHERE id = ?', [id]);
   
@@ -189,6 +225,22 @@ class JobsheetItemModel {
       await connection.query(`
         UPDATE inventory SET stock = stock + ? WHERE id = ?
       `, [item[0].quantity, item[0].product_id]);
+  
+      // Si es el último item de este producto en este jobsheet, eliminar compatibilidad creada automáticamente
+      const [remainingItems] = await connection.query(
+        'SELECT COUNT(*) as count FROM jobsheet_items WHERE jobsheet_id = ? AND product_id = ?',
+        [jobsheetId, item[0].product_id]
+      );
+      
+      if (remainingItems[0].count === 0 && 
+          jobsheetState[0] && jobsheetState[0].state !== 'completed') {
+        await connection.query(
+          'DELETE FROM compatibility WHERE product_id = ? AND created_by_jobsheet = ?',
+          [item[0].product_id, jobsheetId]
+        );
+        
+        console.log(`Removed compatibility for product ${item[0].product_id} created by jobsheet ${jobsheetId}`);
+      }
   
       // Actualizar el total_amount en la tabla jobsheets
       await connection.query(`

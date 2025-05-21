@@ -18,7 +18,7 @@ import {
 
 const Sidebar = ({ isMobile, sidebarOpen, setSidebarOpen }) => {
     const navigate = useNavigate();
-    const { isAdmin } = useAuth();
+    const { isAdmin, logout } = useAuth(); // Extract logout function at component level
     const [showLogoutModal, setShowLogoutModal] = useState(false);
     
     useEffect(() => {
@@ -40,7 +40,7 @@ const Sidebar = ({ isMobile, sidebarOpen, setSidebarOpen }) => {
     };
 
     const confirmLogout = () => {
-        localStorage.removeItem('token');
+        logout(); // Use the extracted logout function
         navigate('/login');
         setShowLogoutModal(false);
         if (isMobile) {
@@ -145,17 +145,7 @@ const iconStyle = {
                         Inventory
                     </button>
                     
-                    <button 
-                        className="sidebar-button"
-                        id="btn-vehicles"
-                        onClick={() => handleNavigation('/vehicles')}
-                        style={buttonStyle}
-                    >
-                        <span style={iconStyle}>
-                            <FontAwesomeIcon icon={faCar} />
-                        </span>
-                        Vehicles
-                    </button>
+
                     
                     <button 
                         className="sidebar-button"
@@ -182,6 +172,17 @@ const iconStyle = {
     </span>
     Payments
 </button>
+                    <button 
+                        className="sidebar-button"
+                        id="btn-vehicles"
+                        onClick={() => handleNavigation('/vehicles')}
+                        style={buttonStyle}
+                    >
+                        <span style={iconStyle}>
+                            <FontAwesomeIcon icon={faCar} />
+                        </span>
+                        Vehicles
+                    </button>
                     <button 
                         className="sidebar-button"
                         id="btn5"

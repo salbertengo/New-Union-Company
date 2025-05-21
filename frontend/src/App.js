@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import Login from './pages/login';
@@ -44,6 +44,14 @@ function App() {
 
 function AppContent() {
   const { isLoggedIn, loading } = useAuth();
+  
+  // Check token on each navigation
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token && window.location.pathname !== '/login') {
+      window.location.href = '/login';
+    }
+  }, [window.location.pathname]);
   
   if (loading) {
     return <div>Loading...</div>;

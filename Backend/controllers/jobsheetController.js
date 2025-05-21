@@ -333,19 +333,24 @@ class JobsheetController {
       res.status(500).json({ error: 'Internal server error' });
     }
   }
-
-  static async getAllPayments(req, res) {
-    try {
-      console.log("getAllPayments called"); 
-      const { search } = req.query;
-      const payments = await PaymentModel.getAll(search || '');
-      console.log(`Found ${payments.length} payments`); 
-      res.json(payments);
-    } catch (err) {
-      console.error('Error in getAllPayments:', err);
-      res.status(500).json({ error: 'Internal server error' });
-    }
+static async getAllPayments(req, res) {
+  try {
+    console.log("getAllPayments called with query params:", req.query); 
+    const { method, start_date, end_date } = req.query;
+    
+    const filters = {};
+    if (method) filters.method = method;
+    if (start_date) filters.start_date = start_date;
+    if (end_date) filters.end_date = end_date;
+    
+    const payments = await PaymentModel.getAll(filters);
+    
+    res.json(payments);
+  } catch (err) {
+    console.error('Error in getAllPayments:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
+}
   
   static async getPaymentsByJobsheetId(req, res) {
     try {

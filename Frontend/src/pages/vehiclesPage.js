@@ -7,7 +7,7 @@ import {
   faPlus, 
   faHistory, 
   faCalendarAlt,
-  faUser,
+  faTimes,
   faStar,
   faClipboardList,
   faEdit,
@@ -34,11 +34,8 @@ const VehiclesPage = () => {
   const [isHovered, setIsHovered] = useState(false);
   const [currentVehicle, setCurrentVehicle] = useState(null);
   const [formData, setFormData] = useState({
-    brand: '',
     model: '',
-    year: '',
     plate: '',
-    type: 'motorcycle',
     customer_id: '',
   });
   const [serviceHistory, setServiceHistory] = useState([]);
@@ -53,7 +50,18 @@ const VehiclesPage = () => {
 const [isMobile, setIsMobile] = useState(false);
   const [isVertical, setIsVertical] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  
+  const [customerSearch, setCustomerSearch] = useState('');
+const [searchResults, setSearchResults] = useState([]);
+const [selectedCustomer, setSelectedCustomer] = useState(null);
+const [toast, setToast] = useState({
+  visible: false,
+  message: '',
+  type: 'success', // success, error, warning, info
+});
+
+const [formChanged, setFormChanged] = useState(false);
+const [showCloseConfirmation, setShowCloseConfirmation] = useState(false);
+
 
 
   // Filter vehicles based on search term
@@ -64,8 +72,7 @@ const [isMobile, setIsMobile] = useState(false);
         // Search by vehicle data
         matchesSearch = 
           vehicle.model?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          vehicle.plate?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          vehicle.brand?.toLowerCase().includes(searchTerm.toLowerCase());
+          vehicle.plate?.toLowerCase().includes(searchTerm.toLowerCase()) 
       } else if (searchType === 'customer') {
         // Search by customer name
         matchesSearch = 
@@ -81,16 +88,15 @@ const [isMobile, setIsMobile] = useState(false);
     {
       headerName: 'Motorcycle',
       field: 'model',
-      flex: 1.5,
-      minWidth: 180,
+      flex: 1,
+      minWidth: 120,
       cellRenderer: params => {
         if (!params.data) return '';
         return (
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
 
             <div>
-              <div style={{ fontWeight: '500', color: '#292D32' }}>
-                {params.data.brand} {params.data.model}
+              <div style={{ fontWeight: '500', color: '#292D32' }}> {params.data.model}
               </div>
               <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>
               </div>
@@ -98,7 +104,7 @@ const [isMobile, setIsMobile] = useState(false);
           </div>
         );
       },
-      headerClass: "custom-header-sumary",
+      headerClass: "custom-header-inventory",
     },
     {
       headerName: 'License Plate',
@@ -109,7 +115,7 @@ const [isMobile, setIsMobile] = useState(false);
         // Simply return the plate text in uppercase
         return <div>{(params.value || "").toUpperCase()}</div>;
       },
-      headerClass: "custom-header-sumary",
+      headerClass: "custom-header-inventory",
     },
     {
       headerName: 'Customer',
@@ -128,7 +134,7 @@ const [isMobile, setIsMobile] = useState(false);
           </div>
         );
       },
-      headerClass: "custom-header-sumary",
+      headerClass: "custom-header-inventory",
     },
     {
       headerName: 'Last Service',
@@ -189,7 +195,7 @@ const [isMobile, setIsMobile] = useState(false);
           );
         }
       },
-      headerClass: "custom-header-sumary",
+      headerClass: "custom-header-inventory",
     },
     {
       headerName: 'Actions',
@@ -215,7 +221,7 @@ const [isMobile, setIsMobile] = useState(false);
           </ActionButtonsContainer>
         );
       },
-      headerClass: "custom-header-sumary",
+      headerClass: "custom-header-inventory",
     }
   ];
 
@@ -233,13 +239,13 @@ const getColumnDefs = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <div>
                 <div style={{ fontWeight: '500', color: '#292D32', fontSize: isMobile ? '15px' : 'inherit' }}>
-                  {params.data.brand} {params.data.model}
+                  {params.data.model}
                 </div>
               </div>
             </div>
           );
         },
-        headerClass: "custom-header-sumary",
+        headerClass: "custom-header-inventory",
       },
       {
         headerName: 'License Plate',
@@ -249,12 +255,12 @@ const getColumnDefs = () => {
           if (!params.data) return '';
           return <div>{(params.value || "").toUpperCase()}</div>;
         },
-        headerClass: "custom-header-sumary",
+        headerClass: "custom-header-inventory",
       }
     ];
 
     // En modo móvil vertical, reducimos las columnas
-    if (isMobile && isVertical) {
+  if (isMobile && isVertical && window.innerWidth < 668) {
       return [
         ...baseColumns,
         {
@@ -280,7 +286,7 @@ const getColumnDefs = () => {
               </ActionButtonsContainer>
             );
           },
-          headerClass: "custom-header-sumary",
+          headerClass: "custom-header-inventory",
         }
       ];
     }
@@ -304,7 +310,7 @@ const getColumnDefs = () => {
             </div>
           );
         },
-        headerClass: "custom-header-sumary",
+        headerClass: "custom-header-inventory",
       },
       {
         headerName: 'Last Service',
@@ -361,7 +367,7 @@ const getColumnDefs = () => {
             );
           }
         },
-        headerClass: "custom-header-sumary",
+        headerClass: "custom-header-inventory",
       },
       {
         headerName: 'Actions',
@@ -386,7 +392,7 @@ const getColumnDefs = () => {
             </ActionButtonsContainer>
           );
         },
-        headerClass: "custom-header-sumary",
+        headerClass: "custom-header-inventory",
       }
     ];
   };
@@ -415,6 +421,19 @@ const getColumnDefs = () => {
       window.removeEventListener('resize', checkDeviceAndOrientation);
     };
   }, []);
+
+
+const showToast = (message, type = 'success') => {
+  setToast({
+    visible: true,
+    message,
+    type
+  });
+  
+  setTimeout(() => {
+    setToast(prev => ({...prev, visible: false}));
+  }, 3000);
+};
   const fetchVehicles = async () => {
     setLoading(true);
     const token = localStorage.getItem('token');
@@ -527,7 +546,42 @@ const getColumnDefs = () => {
       setLoading(false);
     }
   };
+const handleCustomerSearch = async (e) => {
+  const value = e.target.value;
+  setCustomerSearch(value);
+  
+  if (value.length < 2) {
+    setSearchResults([]);
+    return;
+  }
+  
+  const token = localStorage.getItem('token');
+  try {
+    const response = await fetch(`${API_URL}/customers?search=${encodeURIComponent(value)}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      setSearchResults(data);
+    }
+  } catch (error) {
+    console.error('Error searching customers:', error);
+  }
+};
 
+const selectCustomer = (customer) => {
+  setSelectedCustomer(customer);
+  setCustomerSearch(''); // Clear the search input
+  setSearchResults([]); // Clear the search results
+  setFormData({
+    ...formData,
+    customer_id: customer.id // Set the customer_id in the form data
+  });
+};
   const fetchCustomers = async () => {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -694,50 +748,143 @@ const getColumnDefs = () => {
   };
 
   // Event handlers
-  const handleSearch = (e) => {
-    const value = e.target.value;
-    setSearchTerm(value);
+const handleSearch = async (e) => {
+  const value = e.target.value;
+  setSearchTerm(value);
+  
+  if (value.length < 2) {
+    // If search term is too short, just load all vehicles
+    fetchVehicles();
+    return;
+  }
+  
+  setLoading(true);
+  const token = localStorage.getItem('token');
+  
+  try {
+    // Search in both vehicles and customers
+    const [vehiclesResponse, customersResponse] = await Promise.all([
+      fetch(`${API_URL}/vehicles?search=${encodeURIComponent(value)}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      }),
+      fetch(`${API_URL}/customers?search=${encodeURIComponent(value)}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      })
+    ]);
     
-    if (searchType === 'customer' && value.length > 2) {
-      // If searching by customer and there are at least 3 characters, do the search
-      searchVehiclesByCustomer(value);
+    if (vehiclesResponse.ok && customersResponse.ok) {
+      const vehiclesData = await vehiclesResponse.json();
+      const customersData = await customersResponse.json();
+      
+      // First, add the vehicles from direct search
+      let resultVehicles = [...vehiclesData];
+      
+      // Then, get vehicles associated with matching customers
+      if (customersData.length > 0) {
+        const customerIds = customersData.map(customer => customer.id);
+        
+        // Get vehicles for each matching customer
+        for (const id of customerIds) {
+          const custVehiclesResponse = await fetch(`${API_URL}/vehicles?customer_id=${id}`, {
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          
+          if (custVehiclesResponse.ok) {
+            const custVehiclesData = await custVehiclesResponse.json();
+            
+            // Find the customer info for these vehicles
+            const customer = customersData.find(c => c.id === id);
+            let customerName = 'No customer';
+            if (customer) {
+              if (customer.first_name || customer.last_name) {
+                customerName = `${customer.first_name || ''} ${customer.last_name || ''}`.trim();
+              } else if (customer.name) {
+                customerName = customer.name;
+              }
+            }
+            
+            // Add customer name to each vehicle
+            const vehiclesWithCustomer = custVehiclesData.map(vehicle => ({
+              ...vehicle,
+              customer_name: customerName
+            }));
+            
+            // Add these vehicles to results, avoiding duplicates
+            for (const vehicle of vehiclesWithCustomer) {
+              if (!resultVehicles.some(v => v.id === vehicle.id)) {
+                resultVehicles.push(vehicle);
+              }
+            }
+          }
+        }
+      }
+      
+      setVehicles(resultVehicles);
     }
-  };
+  } catch (error) {
+    console.error('Error searching:', error);
+  } finally {
+    setLoading(false);
+  }
+};
 
-  const handleToggleSearchType = () => {
-    // Toggle between vehicle and customer search
-    setSearchType(searchType === 'vehicle' ? 'customer' : 'vehicle');
-    setSearchTerm('');
-    if (vehicles.length === 0) {
-      fetchVehicles();
-    }
-  };
 
-  const handleOpenNewModal = () => {
-    setCurrentVehicle(null);
-    setFormData({
-      brand: '',
-      model: '',
-      year: '',
-      plate: '',
-      type: 'motorcycle',
-      customer_id: '',
-    });
-    setShowModal(true);
-  };
+const handleOpenNewModal = () => {
+  setCurrentVehicle(null);
+  setSelectedCustomer(null);
+  setFormData({
+    model: '',
+    plate: '',
+    customer_id: '',
+  });
+  setShowModal(true);
+};
 
   const handleEditVehicle = (vehicle) => {
-    setCurrentVehicle(vehicle);
-    setFormData({
-      brand: vehicle.brand || '',
-      model: vehicle.model || '',
-      year: vehicle.year || '',
-      plate: vehicle.plate || '',
-      type: vehicle.type || 'motorcycle',
-      customer_id: vehicle.customer_id || '',
+  setCurrentVehicle(vehicle);
+  
+  // Find the customer if there's a customer_id
+  if (vehicle.customer_id) {
+    const token = localStorage.getItem('token');
+    
+    fetch(`${API_URL}/customers/${vehicle.customer_id}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    })
+    .then(response => {
+      if (response.ok) return response.json();
+      throw new Error('Failed to fetch customer');
+    })
+    .then(customer => {
+      setSelectedCustomer(customer);
+    })
+    .catch(error => {
+      console.error('Error fetching customer:', error);
     });
-    setShowModal(true);
-  };
+  } else {
+    setSelectedCustomer(null);
+  }
+  
+  setFormData({
+    model: vehicle.model || '',
+    plate: vehicle.plate || '',
+    customer_id: vehicle.customer_id || '',
+  });
+  
+  setShowModal(true);
+};
+
 
   const handleCreateJobsheet = async (vehicle) => {
     setCurrentVehicle(vehicle);
@@ -797,71 +944,87 @@ const getColumnDefs = () => {
     setShowJobsheetModal(true);
   };
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: value
-    });
-  };
+ const handleInputChange = (e) => {
+  const { name, value } = e.target;
+  setFormData({
+    ...formData,
+    [name]: value
+  });
+  setFormChanged(true); // Mark form as changed
+};
 
+const handleModalClose = () => {
+  if (formChanged) {
+    setShowCloseConfirmation(true);
+  } else {
+    setShowModal(false);
+  }
+};
   const handleSave = async () => {
-    setLoading(true);
-    const token = localStorage.getItem('token');
-    
-    try {
-      // Client-side validations
-      if (!formData.model || !formData.model.trim()) {
-        throw new Error("Model is required");
-      }
-      
-      if (!formData.plate || !formData.plate.trim()) {
-        throw new Error("License plate is required");
-      }
-      
-      const vehicleData = {
-        ...formData,
-        type: 'motorcycle' // Always motorcycle
-      };
-      
-      let response;
-      if (currentVehicle) {
-        // Update existing vehicle
-        response = await fetch(`${API_URL}/vehicles/${currentVehicle.id}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify(vehicleData)
-        });
-      } else {
-        // Create new vehicle
-        response = await fetch(`${API_URL}/vehicles`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify(vehicleData)
-        });
-      }
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to save: ${errorText}`);
-      }
-      
-      // Reload data
-      fetchVehicles();
-      setShowModal(false);
-    } catch (error) {
-      console.error('Error saving vehicle:', error);
-      alert(error.message);
-    } finally {
-      setLoading(false);
+  setLoading(true);
+  const token = localStorage.getItem('token');
+  
+  try {
+    // Enhanced client-side validations
+    if (!formData.model || !formData.model.trim()) {
+      throw new Error("Model is required");
     }
-  };
+    
+    if (!formData.plate || !formData.plate.trim()) {
+      throw new Error("License plate is required");
+    }
+    
+    // Also check for customer
+    if (!formData.customer_id) {
+      throw new Error("Please select a customer");
+    }
+    
+    const vehicleData = {
+      ...formData,
+      type: 'motorcycle' // Always motorcycle
+    };
+    
+    let response;
+    if (currentVehicle) {
+      // Update existing vehicle
+      response = await fetch(`${API_URL}/vehicles/${currentVehicle.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(vehicleData)
+      });
+    } else {
+      // Create new vehicle
+      response = await fetch(`${API_URL}/vehicles`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(vehicleData)
+      });
+    }
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to save: ${errorText}`);
+    }
+    
+    // Show success toast
+    showToast(currentVehicle ? 'Motorcycle updated successfully' : 'Motorcycle added successfully', 'success');
+    
+    // Reload data
+    fetchVehicles();
+    setShowModal(false);
+  } catch (error) {
+    console.error('Error saving vehicle:', error);
+    showToast(error.message, 'error');
+  } finally {
+    setLoading(false);
+  }
+};
   const getStatusColor = (status) => {
     switch (status) {
       case 'completed':
@@ -1000,66 +1163,52 @@ const getColumnDefs = () => {
 
             {!isMobile && <h2 style={{ margin: 0, fontSize: '18px' }}>Motorcycles</h2>}
 
+            {/* Moved search and add button to a consistent position */}
             <div style={{ 
               display: 'flex', 
               flexDirection: isMobile && isVertical ? 'column' : 'row', 
-              gap: '10px', 
+              gap: '10px',
               alignItems: isMobile && isVertical ? 'stretch' : 'center',
-              width: isMobile && isVertical ? '100%' : 'auto'
             }}>
               <div style={{ 
                 position: 'relative',
-                width: isMobile && isVertical ? '100%' : '216px' 
+                width: isMobile && isVertical ? '100%' : '250px',
               }}>
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center',
-                  width: '100%'
-                }}>
-                  <input
-                    type="text"
-                    placeholder={searchType === 'vehicle' ? "Search motorcycles..." : "Search by customer name..."}
-                    value={searchTerm}
-                    onChange={handleSearch}
-                    style={{
-                      padding: isMobile ? '12px 35px 12px 12px' : '5px 30px 5px 10px',
-                      width: '100%',
-                      borderRadius: '10px',
-                      border: '1px solid white',
-                      backgroundColor: '#F9FBFF',
-                      height: isMobile ? '46px' : '25px',
-                      fontSize: isMobile ? '16px' : 'inherit',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                  <button
-                    onClick={handleToggleSearchType}
-                    title={searchType === 'vehicle' ? "Switch to customer search" : "Switch to motorcycle search"}
-                    style={{
-                      position: 'absolute',
-                      right: '10px',
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      background: 'none',
-                      border: 'none',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      cursor: 'pointer',
-                      color: loading ? '#4321C9' : 'gray',
-                      fontSize: isMobile ? '18px' : 'inherit'
-                    }}
-                  >
-                    <FontAwesomeIcon icon={searchType === 'vehicle' ? faMotorcycle : faUser} />
-                  </button>
-                </div>
+                <input
+                  type="text"
+                  placeholder="Search motorcycles or customers..."
+                  value={searchTerm}
+                  onChange={handleSearch}
+                  style={{
+                    padding: isMobile ? '12px 35px 12px 12px' : '10px 30px 10px 12px',
+                    width: '100%',
+                    borderRadius: '8px',
+                    border: '1px solid #e0e0e0',
+                    backgroundColor: '#F9FBFF',
+                    fontSize: isMobile ? '16px' : '14px',
+                    boxSizing: 'border-box',
+                    outline: 'none'
+                  }}
+                />
+                <FontAwesomeIcon 
+                  icon={faSearch} 
+                  style={{
+                    position: 'absolute',
+                    right: '12px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: loading ? '#4321C9' : 'gray',
+                    cursor: 'pointer',
+                    fontSize: isMobile ? '18px' : '14px'
+                  }}
+                />
               </div>
 
               <button
                 onClick={handleOpenNewModal}
                 onMouseEnter={() => setIsHovered(true)}
                 onMouseLeave={() => setIsHovered(false)}
-                style={{
+                 style={{
                   padding: isMobile ? '14px 20px' : '10px 20px',
                   backgroundColor: isHovered ? '#4321C9' : '#5932EA',
                   color: 'white',
@@ -1197,14 +1346,14 @@ const getColumnDefs = () => {
                       </div>
                       <p style={{ margin: "0", fontSize: "14px", opacity: "0.9" }}>
                         {currentVehicle 
-                          ? `${currentVehicle.brand} ${currentVehicle.model} (${currentVehicle.year})`
+                          ? ` ${currentVehicle.model} (${currentVehicle.year})`
                           : "Add a new motorcycle to the system"}
                       </p>
                     </div>
                     <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          setShowModal(false)
+    handleModalClose();
                         }}
                       style={{
                         background: "rgba(255,255,255,0.2)",
@@ -1231,163 +1380,168 @@ const getColumnDefs = () => {
                   </div>
                 </div>
 
-                <div style={{ padding: "24px 30px" }}>
-                  <div style={{ display: "grid", gap: "20px" }}>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-                      <div>
-                        <label style={{
-                          display: "block",
-                          marginBottom: "8px",
-                          fontSize: "14px",
-                          fontWeight: "600",
-                          color: "#333"
-                        }}>
-                          Brand
-                        </label>
-                        <input
-                          type="text"
-                          name="brand"
-                          value={formData.brand}
-                          onChange={handleInputChange}
-                          placeholder="e.g. Honda, Yamaha, Ginsapur"
-                          style={{
-                            width: "90%",
-                            padding: "14px 16px",
-                            borderRadius: "10px",
-                            border: "1px solid #e0e0e0",
-                            fontSize: "14px",
-                            backgroundColor: "#f9faff",
-                            outline: "none",
-                          }}
-                        />
-                      </div>
-                      <div>
-                        <label style={{
-                          display: "block",
-                          marginBottom: "8px",
-                          fontSize: "14px",
-                          fontWeight: "600",
-                          color: "#333"
-                        }}>
-                          Model
-                        </label>
-                        <input
-                          type="text"
-                          name="model"
-                          value={formData.model}
-                          onChange={handleInputChange}
-                          placeholder="e.g. GN125, GN150"
-                          style={{
-                            width: "90%",
-                            padding: "14px 16px",
-                            borderRadius: "10px",
-                            border: "1px solid #e0e0e0",
-                            fontSize: "14px",
-                            backgroundColor: "#f9faff",
-                            outline: "none",
-                          }}
-                        />
-                      </div>
-                    </div>
+             <div style={{ padding: "24px 30px" }}>
+  <div style={{ display: "grid", gap: "20px" }}>
+    {/* Fix spacing between inputs */}
+    <div style={{ 
+      display: "grid", 
+      gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", 
+      gap: "30px"  // Increased gap for better separation
+    }}>
+      <div>
+        <label style={{
+          display: "block",
+          marginBottom: "8px",
+          fontSize: "14px",
+          fontWeight: "600",
+          color: "#333"
+        }}>
+          Model
+        </label>
+        <input
+          type="text"
+          name="model"
+          value={formData.model}
+          onChange={handleInputChange}
+          placeholder="e.g. GN125, GN150"
+          style={{
+            width: "100%",
+            padding: "14px 16px",
+            borderRadius: "10px",
+            border: "1px solid #e0e0e0",
+            fontSize: "14px",
+            backgroundColor: "#f9faff",
+            outline: "none",
+            boxSizing: "border-box"  // Added to prevent overflow
+          }}
+        />
+      </div>
+      
+      <div>
+        <label style={{
+          display: "block",
+          marginBottom: "8px",
+          fontSize: "14px",
+          fontWeight: "600",
+          color: "#333"
+        }}>
+          License Plate
+        </label>
+        <input
+          type="text"
+          name="plate"
+          value={formData.plate}
+          onChange={handleInputChange}
+          placeholder="e.g. AB1234C"
+          style={{
+            width: "100%",
+            padding: "14px 16px",
+            borderRadius: "10px",
+            border: "1px solid #e0e0e0",
+            fontSize: "14px",
+            backgroundColor: "#f9faff",
+            outline: "none",
+            boxSizing: "border-box"  // Added to prevent overflow
+          }}
+        />
+      </div>
+    </div>
 
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-                   
-                      <div>
-                        <label style={{
-                          display: "block",
-                          marginBottom: "8px",
-                          fontSize: "14px",
-                          fontWeight: "600",
-                          color: "#333"
-                        }}>
-                          License Plate
-                        </label>
-                        <input
-                          type="text"
-                          name="plate"
-                          value={formData.plate}
-                          onChange={handleInputChange}
-                          placeholder="e.g. AB1234C"
-                          style={{
-                            width: "90%",
-                            padding: "14px 16px",
-                            borderRadius: "10px",
-                            border: "1px solid #e0e0e0",
-                            fontSize: "14px",
-                            backgroundColor: "#f9faff",
-                            outline: "none",
-                          }}
-                        />
-                      </div>
-                    </div>
+    <div>
+        <label style={{
+          display: "block",
+          marginBottom: "8px",
+          fontSize: "14px",
+          fontWeight: "600",
+          color: "#333"
+        }}>
+          Owner (Customer)
+        </label>
+        <div style={{ 
+          position: "relative",
+          zIndex: 1050 // Ensure dropdown is above other modal elements
+        }}>
+          <input
+            type="text"
+            name="customerSearch"
+            value={customerSearch}
+            onChange={handleCustomerSearch}
+            placeholder="Search customer by name"
+            style={{
+              width: "100%",
+              padding: "14px 16px",
+              borderRadius: "10px",
+              border: "1px solid #e0e0e0",
+              fontSize: "14px",
+              backgroundColor: "#f9faff",
+              outline: "none",
+              boxSizing: "border-box"
+            }}
+          />
+          {searchResults.length > 0 && (
+            <div style={{
+              position: "absolute",
+              top: "100%",
+              left: 0,
+              right: 0,
+              maxHeight: "200px",
+              overflowY: "auto",
+              backgroundColor: "white",
+              border: "1px solid #e0e0e0",
+              borderRadius: "0 0 10px 10px",
+              zIndex: 1050,
+              boxShadow: "0 4px 10px rgba(0,0,0,0.1)"
+            }}>
+              {searchResults.map(customer => (
+                <div
+                  key={customer.id}
+                  onClick={() => selectCustomer(customer)}
+                  style={{
+                    padding: "12px 16px",
+                    cursor: "pointer",
+                    borderBottom: "1px solid #f0f0f0",
+                    hoverBackgroundColor: "#f9faff"
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#f9faff"}
+                  onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                >
+                  {customer.first_name && customer.last_name 
+                    ? `${customer.first_name} ${customer.last_name}`
+                    : customer.name || `Customer #${customer.id}`}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        {selectedCustomer && (
+          <div style={{
+            marginTop: "8px",
+            padding: "8px 12px",
+            backgroundColor: "#f0f0ff",
+            borderRadius: "6px",
+            fontSize: "14px",
+            color: "#5932EA"
+          }}>
+            Selected: {selectedCustomer.first_name && selectedCustomer.last_name 
+              ? `${selectedCustomer.first_name} ${selectedCustomer.last_name}`
+              : selectedCustomer.name || `Customer #${selectedCustomer.id}`}
+          </div>
+        )}
+      </div>
+    </div>
 
-                    <div>
-                      <label style={{
-                        display: "block",
-                        marginBottom: "8px",
-                        fontSize: "14px",
-                        fontWeight: "600",
-                        color: "#333"
-                      }}>
-                        Owner (Customer)
-                      </label>
-                      <div style={{
-                        position: "relative",
-                        backgroundColor: "#f9faff",
-                        borderRadius: "10px",
-                        border: "1px solid #e0e0e0",
-                        overflow: "hidden"
-                      }}>
-                        <select
-                          name="customer_id"
-                          value={formData.customer_id}
-                          onChange={handleInputChange}
-                          style={{
-                            width: "100%",
-                            padding: "14px 16px",
-                            fontSize: "14px",
-                            border: "none",
-                            backgroundColor: "transparent",
-                            appearance: "none",
-                            outline: "none",
-                            cursor: "pointer",
-                          }}
-                        >
-                          <option value="">Select a customer</option>
-                          {customers.map((customer) => (
-                            <option key={customer.id} value={customer.id}>
-                              {customer.first_name && customer.last_name 
-                                ? `${customer.first_name} ${customer.last_name}`
-                                : customer.name || `Customer #${customer.id}`}
-                            </option>
-                          ))}
-                        </select>
-                        <div style={{
-                          position: "absolute",
-                          right: "16px",
-                          top: "50%",
-                          transform: "translateY(-50%)",
-                          pointerEvents: "none",
-                          color: "#5932EA"
-                        }}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M6 9L12 15L18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
 
-                  <div style={{
-                    display: "flex",
-                    justifyContent: "flex-end",
-                    gap: "12px",
-                    marginTop: "30px"
-                  }}>
+  <div style={{
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: "12px",
+    marginTop: "30px"
+  }}>
                     <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          setShowModal(false)
+                              handleModalClose();
+
                         }}
                       style={{
                         padding: "12px 20px",
@@ -1446,39 +1600,167 @@ const getColumnDefs = () => {
               </div>
             </div>
           )}
+{showCloseConfirmation && (
+  <div
+    style={{
+      position: "fixed",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: "rgba(0, 0, 0, 0.6)",
+      backdropFilter: "blur(5px)",
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+      zIndex: 1100, // Higher than modal
+    }}
+  >
+    <div
+      style={{
+        backgroundColor: "white",
+        borderRadius: "16px",
+        width: isMobile ? "85%" : "400px",
+        overflow: "hidden",
+        animation: "modalFadeIn 0.3s ease",
+      }}
+    >
+      <div style={{ padding: "24px 30px" }}>
+        <h3 style={{ margin: "0 0 16px 0", fontSize: "18px" }}>Discard Changes?</h3>
+        <p style={{ margin: "0 0 20px 0", color: "#666" }}>
+          You have unsaved changes. Are you sure you want to close without saving?
+        </p>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px" }}>
+          <button
+            onClick={() => setShowCloseConfirmation(false)}
+            style={{
+              padding: "10px 16px",
+              backgroundColor: "#f5f5f5",
+              color: "#333",
+              border: "none",
+              borderRadius: "8px",
+              cursor: "pointer"
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => {
+              setShowCloseConfirmation(false);
+              setShowModal(false);
+              setFormChanged(false);
+            }}
+            style={{
+              padding: "10px 16px",
+              backgroundColor: "#D32F2F",
+              color: "white",
+              border: "none",
+              borderRadius: "8px",
+              cursor: "pointer"
+            }}
+          >
+            Discard
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
 
-         
+        {toast.visible && (
+  <div
+    style={{
+      position: 'fixed',
+      bottom: isMobile ? '40px' : '20px',
+      right: '20px',
+      zIndex: 2000,
+      minWidth: '250px',
+      maxWidth: isMobile ? '90%' : '400px',
+      backgroundColor: toast.type === 'error' ? '#D32F2F' : '#34A853',
+      color: 'white',
+      padding: isMobile ? '16px 24px' : '12px 24px',
+      borderRadius: '12px',
+      boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      animation: 'slideIn 0.3s ease'
+    }}
+  >
+    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <div style={{
+        width: isMobile ? '36px' : '24px',
+        height: isMobile ? '36px' : '24px',
+        borderRadius: '50%',
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        <FontAwesomeIcon 
+          icon={toast.type === 'error' ? faTimes : faCheck} 
+          style={{ fontSize: isMobile ? '16px' : '12px' }}
+        />
+      </div>
+      <span style={{ fontWeight: '500', fontSize: isMobile ? '16px' : '14px' }}>{toast.message}</span>
+    </div>
+    <button
+      onClick={() => setToast(prev => ({...prev, visible: false}))}
+      style={{
+        background: 'none',
+        border: 'none',
+        color: 'white',
+        cursor: 'pointer',
+        fontSize: isMobile ? '24px' : '18px',
+        opacity: 0.7,
+        transition: 'opacity 0.2s',
+        width: isMobile ? '44px' : '24px',
+        height: isMobile ? '44px' : '24px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 0,
+        margin: 0
+      }}
+      onMouseOver={(e) => e.currentTarget.style.opacity = 1}
+      onMouseOut={(e) => e.currentTarget.style.opacity = 0.7}
+    >
+      ×
+    </button>
+  </div>
+)}
 
           {/* Service History Modal */}
-          {showServiceModal && currentVehicle && (
-            <div
-              style={{
-                position: "fixed",
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                backgroundColor: "rgba(0, 0, 0, 0.6)",
-                backdropFilter: "blur(5px)",
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                zIndex: 1000,
-              }}
-            >
-              <div
-                style={{
-                  backgroundColor: "white",
-                  borderRadius: "16px",
-                  width: "800px",
-                  maxHeight: "85vh",
-                  boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
-                  display: "flex",
-                  flexDirection: "column",
-                  overflow: "hidden",
-                  animation: "modalFadeIn 0.3s ease",
-                }}
-              >
+         {showServiceModal && currentVehicle && (
+  <div
+    style={{
+      position: "fixed",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: "rgba(0, 0, 0, 0.6)",
+      backdropFilter: "blur(5px)",
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+      zIndex: 1000,
+    }}
+  >
+    <div
+      style={{
+        backgroundColor: "white",
+        borderRadius: "16px",
+        width: isMobile ? "95%" : "800px", // Reduce width on mobile
+        maxWidth: isMobile ? "500px" : "800px", // Further limit width on mobile
+        maxHeight: "85vh",
+        boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        animation: "modalFadeIn 0.3s ease",
+      }}
+    >
                 <div
                   style={{
                     background: "linear-gradient(135deg, #5932EA 0%, #4321C9 100%)",
@@ -1509,7 +1791,7 @@ const getColumnDefs = () => {
                         </h2>
                       </div>
                       <p style={{ margin: "0", fontSize: "14px", opacity: "0.9" }}>
-                        {currentVehicle && `${currentVehicle.brand} ${currentVehicle.model} - ${currentVehicle.plate}`}
+                        {currentVehicle && ` ${currentVehicle.model} - ${currentVehicle.plate}`}
                       </p>
                     </div>
                     <button
@@ -1790,9 +2072,16 @@ const getColumnDefs = () => {
                 </div>
               </div>
             </div>
+            
           )}
+          
 
           <style>{`
+            @keyframes slideIn {
+    from { transform: translateX(30px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+  
            @keyframes spin {
               0% { transform: rotate(0deg); }
               100% { transform: rotate(360deg); }
@@ -1829,24 +2118,8 @@ const getColumnDefs = () => {
               --ag-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             }
             
-            .ag-theme-alpine .ag-header {
-              border-bottom: 1px solid #5932EA;
-            }
-            
-            .ag-theme-alpine .ag-cell {
-              display: flex;
-              align-items: center;
-            }
-            
-            .custom-header-sumary {
-              background-color: #F9FBFF !important;
-              font-weight: 600 !important;
-              color: #333 !important;
-              border-bottom: 1px solid #5932EA !important;
-              text-align: left !important;
-              padding-left: 12px !important;
-            }
-            
+
+    
             @media (pointer: coarse) {
               ::-webkit-scrollbar {
                 width: 6px;

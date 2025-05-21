@@ -73,31 +73,42 @@ class PaymentModel {
       throw error;
     }
   }
-  static async getAll(search = '') {
-    try {
-      let query = `
-        SELECT p.*, j.id as jobsheet_id 
-        FROM payments p
-        LEFT JOIN jobsheets j ON p.jobsheet_id = j.id
-      `;
-      
-      const params = [];
-      
-      if (search) {
-        query += `
-          WHERE j.id LIKE ? OR p.method LIKE ?
-        `;
-        params.push(`%${search}%`, `%${search}%`);
-      }
-      
-      query += ` ORDER BY p.payment_date DESC`;
-      
-      const [rows] = await pool.query(query, params);
-      return rows;
-    } catch (error) {
-      throw error;
+static async getAll(filters = {}) {
+  try {
+    let query = `
+      SELECT p.*, j.id as jobsheet_id 
+      FROM payments p
+      LEFT JOIN jobsheets j ON p.jobsheet_id = j.id
+      WHERE 1=1
+    `;
+    
+    const params = [];
+    
+    // Filtro por método de pago
+    if (filters.method) {
+      query += ` AND p.method = ?`;
+      params.push(filters.method);
     }
+    
+    // Filtro por rango de fechas
+    if (filters.start_date) {
+      query += ` AND p.payment_date >= ?`;
+      params.push(filters.start_date);
+    }
+    
+    if (filters.end_date) {
+      query += ` AND p.payment_date <= ?`;
+      params.push(filters.end_date);
+    }
+    
+    query += ` ORDER BY p.payment_date DESC`;
+    
+    const [rows] = await pool.query(query, params);
+    return rows;
+  } catch (error) {
+    throw error;
   }
+}
 }
 
 module.exports = PaymentModel;

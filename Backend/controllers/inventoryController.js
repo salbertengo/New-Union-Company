@@ -23,8 +23,40 @@ class InventoryController {
       res.status(500).json({ error: err.message });
     }
   }
+  static async getCategories(req, res) {
+    try {
+      const products = await InventoryService.getAllProducts();
+      
+      const categories = [...new Set(products
+        .map(product => product.category)
+        .filter(category => category && category !== '')
+      )];
+      
+      // Ordenamos las categorías alfabéticamente
+      categories.sort();
+      
+      res.json(categories);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+ static async getBrands(req, res) {
+    try {
+      const products = await InventoryService.getAllProducts();
+      
+      const brands = [...new Set(products
+        .map(product => product.brand)
+        .filter(brand => brand && brand !== '')
+      )];
+      
+      brands.sort();
+      
+      res.json(brands);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  }
 
-  // Handler to get a single inventory item by ID
   static async getById(req, res) {
     try {
       const id = req.params.id;

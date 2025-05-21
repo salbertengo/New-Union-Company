@@ -273,6 +273,14 @@ class JobsheetModel {
         
         console.log(`Stock restored for product ${item.product_id}: ${item.quantity} units`);
       }
+      
+      // NUEVO: Eliminar las compatibilidades creadas automáticamente por este jobsheet
+      await connection.query(
+        'DELETE FROM compatibility WHERE created_by_jobsheet = ?',
+        [id]
+      );
+      
+      console.log(`Removed compatibility created by jobsheet ${id} due to cancellation`);
     }
 
     // NUEVO: Verificar si estamos cambiando el cliente y vehículo al mismo tiempo

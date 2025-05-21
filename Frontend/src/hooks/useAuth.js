@@ -1,4 +1,5 @@
 import { useState, useEffect, createContext, useContext } from 'react';
+import apiClient from '../utils/apiClient';
 
 const API_URL = process.env.REACT_APP_API_URL;
 console.log("API_URL desde React:", API_URL);
@@ -10,6 +11,25 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
+  // Handle forced logout from anywhere in the app
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      setUser(null);
+      setIsLoggedIn(false);
+      
+      // If not already on login page, redirect
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+    };
+
+    window.addEventListener('auth:unauthorized', handleUnauthorized);
+    
+    return () => {
+      window.removeEventListener('auth:unauthorized', handleUnauthorized);
+    };
+  }, []);
+
   // Verify token on load
   useEffect(() => {
     const checkAuth = async () => {
@@ -20,25 +40,17 @@ export const AuthProvider = ({ children }) => {
       }
 
       try {
-        const response = await fetch(`${API_URL}/auth/verify`, {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        });
-
-        if (!response.ok) throw new Error("Invalid response");
-
-        const data = await response.json();
-
-        if (data.valid) {
-          setUser(data.user);
+        const response = await apiClient.get('/auth/verify');
+        
+        if (response.data && response.data.valid) {
+          setUser(response.data.user);
           setIsLoggedIn(true);
         } else {
-          localStorage.removeItem('token');
+          logout();
         }
       } catch (error) {
         console.error('Auth check failed:', error);
-        localStorage.removeItem('token');
+        logout();
       } finally {
         setLoading(false);
       }
@@ -49,18 +61,12 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (username, password) => {
     try {
-      const response = await fetch(`${API_URL}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
+      const response = await apiClient.post('/auth/login', {
+        username, 
+        password
       });
 
-      if (!response.ok) {
-        console.error('Login failed with status:', response.status);
-        return false;
-      }
-
-      const data = await response.json();
+      const data = response.data;
       const token = data.token;
 
       if (!token) {
@@ -70,27 +76,21 @@ export const AuthProvider = ({ children }) => {
 
       localStorage.setItem('token', token);
 
-      const userResponse = await fetch(`${API_URL}/auth/verify`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      if (!userResponse.ok) {
-        console.error('Token verification failed');
-        localStorage.removeItem('token');
+      try {
+        const userResponse = await apiClient.get('/auth/verify');
+        
+        if (userResponse.data.valid) {
+          setUser(userResponse.data.user);
+          setIsLoggedIn(true);
+          return true;
+        } else {
+          logout();
+          return false;
+        }
+      } catch (error) {
+        logout();
         return false;
       }
-
-      const userData = await userResponse.json();
-
-      if (userData.valid) {
-        setUser(userData.user);
-        setIsLoggedIn(true);
-        return true;
-      } else {
-        localStorage.removeItem('token');
-        return false;
-      }
-
     } catch (error) {
       console.error('Login error:', error);
       return false;

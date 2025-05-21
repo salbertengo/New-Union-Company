@@ -111,7 +111,22 @@ const CustomersView = () => {
   const [showVehiclesModal, setShowVehiclesModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState({ show: false, message: '', type: '' });
-  
+  const [isHovered, setIsHovered] = useState(false);
+const [isMobile, setIsMobile] = useState(false);
+const [isVertical, setIsVertical] = useState(false);
+useEffect(() => { 
+  const checkDeviceAndOrientation = () => {
+    const isMobileDevice = window.innerWidth <= 1024;
+    const isVerticalOrientation = window.innerHeight > window.innerWidth;
+    setIsMobile(isMobileDevice);
+    setIsVertical(isVerticalOrientation);
+  };
+  checkDeviceAndOrientation();
+  window.addEventListener('resize', checkDeviceAndOrientation);
+  return () => {
+    window.removeEventListener('resize', checkDeviceAndOrientation);
+  };
+}, []);
   // Refs
   const gridRef = useRef(null);
   const vehicleGridRef = useRef(null);
@@ -530,97 +545,94 @@ const CustomersView = () => {
       >
         <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '600' }}>Customers</h2>
         <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-          <div style={{ position: 'relative' }}>
-            <input
-              type="text"
-              placeholder="Search customers..."
-              style={{
-                padding: '5px 30px 5px 10px',
-                width: '216px',
-                borderRadius: '10px',
-                border: '1px solid #e0e0e0',
-                backgroundColor: '#F9FBFF',
-                height: '25px',
-                fontSize: '14px',
-                transition: 'all 0.2s ease'
-              }}
-              value={searchTerm}
-              onChange={handleSearchChange}
-              onFocus={(e) => e.target.style.borderColor = '#5932EA'}
-              onBlur={(e) => e.target.style.borderColor = '#e0e0e0'}
-            />
-            {loading ? (
-              <div
-                style={{
-                  position: 'absolute',
-                  right: '10px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  width: '14px',
-                  height: '14px',
-                  border: '2px solid rgba(89, 50, 234, 0.1)',
-                  borderLeftColor: '#5932EA',
-                  borderRadius: '50%',
-                  animation: 'spin 1s linear infinite'
-                }}
-              ></div>
-            ) : (
-              <FontAwesomeIcon 
-                icon={faSearch} 
-                style={{
-                  position: 'absolute',
-                  right: '10px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  color: searchTerm ? '#4321C9' : '#6E6E6E',
-                }}
-              />
-            )}
-            {searchTerm && !loading && customers.length === 0 && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '100%',
-                  left: '0',
-                  right: '0',
-                  background: 'white',
-                  padding: '10px',
-                  borderRadius: '5px',
-                  boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-                  marginTop: '5px',
-                  zIndex: 10,
-                  fontSize: '14px',
-                  color: '#666'
-                }}
-              >
-                No customers found matching "{searchTerm}"
-              </div>
-            )}
-          </div>
+<div style={{ 
+  position: 'relative',
+  width: isMobile && isVertical ? '100%' : 'auto'
+}}>
+  <div 
+    style={{ 
+      display: 'flex', 
+      alignItems: 'center',
+      width: '100%',
+      backgroundColor: '#F9FBFF',
+      borderRadius: '8px',
+      border: '1px solid #e0e0e0',
+      padding: isMobile ? '0 14px' : '0 10px',
+      height: isMobile ? '46px' : '36px',
+      boxSizing: 'border-box',
+      transition: 'background-color 0.3s ease'
+    }}
+  >
+    <FontAwesomeIcon
+      icon={faSearch}
+      style={{
+        color: loading ? '#4321C9' : 'gray',
+        fontSize: isMobile ? '16px' : '14px',
+        marginRight: '8px'
+      }}
+    />
+    <input
+      type="text"
+      placeholder="Search customers..."
+      value={searchTerm}
+      onChange={handleSearchChange}
+      style={{
+        padding: '0',
+        width: '100%',
+        border: 'none',
+        backgroundColor: 'transparent',
+        outline: 'none',
+        fontSize: isMobile ? '16px' : 'inherit',
+        color: '#333'
+      }}
+    />
+  </div>
+  {searchTerm && !loading && customers.length === 0 && (
+    <div
+      style={{
+        position: 'absolute',
+        top: '100%',
+        left: '0',
+        right: '0',
+        background: 'white',
+        padding: '10px',
+        borderRadius: '5px',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+        marginTop: '5px',
+        zIndex: 10,
+        fontSize: '14px',
+        color: '#666'
+      }}
+    >
+      No customers found matching "{searchTerm}"
+    </div>
+  )}
+</div>
           <button
-            onClick={() => {
-              setSelectedCustomer(null);
-              setShowCustomerModal(true);
-            }}
-            style={{
-              padding: '10px 20px',
-              backgroundColor: '#5932EA',
-              color: 'white',
-              border: 'none',
-              borderRadius: '5px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              fontSize: '14px',
-              fontWeight: '500',
-              transition: 'background-color 0.3s'
-            }}
-            onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#4321C9'}
-            onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#5932EA'}
-          >
-            <FontAwesomeIcon icon={faPlus} />
-            Add Customer
+  onClick={() => {
+    setSelectedCustomer(null);
+    setShowCustomerModal(true);
+  }}
+  onMouseEnter={() => setIsHovered(true)}
+  onMouseLeave={() => setIsHovered(false)}
+  style={{
+    padding: isMobile ? '14px 20px' : '10px 20px',
+    backgroundColor: isHovered ? '#4321C9' : '#5932EA',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    transition: 'background-color 0.3s ease',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    fontSize: isMobile ? '16px' : 'inherit',
+    width: isMobile && isVertical ? '100%' : 'auto',
+    justifyContent: isMobile && isVertical ? 'center' : 'flex-start'
+  }}
+>
+  <FontAwesomeIcon icon={faPlus} />
+  <span>Add Customer</span>
           </button>
         </div>
       </div>

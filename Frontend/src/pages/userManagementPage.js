@@ -291,7 +291,7 @@ function UserManagement() {
           </div>
         );
       },
-      headerClass: "custom-header",
+      headerClass: "custom-header-inventory",
     },
     {
       headerName: 'Role',
@@ -316,7 +316,7 @@ function UserManagement() {
           </div>
         );
       },
-      headerClass: "custom-header",
+      headerClass: "custom-header-inventory",
     },
     {
       headerName: 'Created',
@@ -332,7 +332,7 @@ function UserManagement() {
           day: 'numeric' 
         });
       },
-      headerClass: "custom-header",
+      headerClass: "custom-header-inventory",
     },
     {
       headerName: 'Actions',
@@ -363,7 +363,7 @@ function UserManagement() {
           </ActionButtonsContainer>
         );
       },
-      headerClass: "custom-header",
+      headerClass: "custom-header-inventory",
     }
   ];
 
@@ -382,7 +382,7 @@ function UserManagement() {
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
       color: '#333'
     },
-    headerClass: 'custom-header'
+    headerClass: 'custom-header-inventory'
   };
 
   return (
@@ -1288,23 +1288,13 @@ function UserManagement() {
               --ag-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             }
             
-            .ag-theme-alpine .ag-header {
-              border-bottom: 1px solid #5932EA;
-            }
-            
+
             .ag-theme-alpine .ag-cell {
               display: flex;
               align-items: center;
             }
             
-            .custom-header {
-              background-color: #F9FBFF !important;
-              font-weight: 600 !important;
-              color: #333 !important;
-              border-bottom: 1px solid #5932EA !important;
-              text-align: left !important;
-              padding-left: 12px !important;
-            }
+
 
             /* Estilos para celdas con iconos */
             .cell-with-icon {
