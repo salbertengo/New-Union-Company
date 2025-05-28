@@ -205,8 +205,66 @@ const DashboardView = () => {
   }
   return `${formatDate(start)} - ${formatDate(end)}`;
 };
-  // DateRangeSelector component similar to jobsheetView
+  // DateRangeSelector component for dashboardView.js
   const DateRangeSelector = () => {
+    // Format date for display in button
+    const formatDate = (date) => {
+      if (!date) return "";
+      const d = new Date(date);
+      return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
+    };
+    
+    // Check if selected date range is today
+    const isToday = () => {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      
+      const end = new Date(endDate);
+      end.setHours(0, 0, 0, 0);
+      
+      return start.getTime() === today.getTime() && end.getTime() === today.getTime();
+    };
+    
+    // Format the date range for display
+    const displayDateRange = () => {
+      if (isToday()) {
+        return "Today";
+      }
+      
+      if (formatDateForInput(startDate) === formatDateForInput(endDate)) {
+        return formatDate(startDate);
+      }
+      
+      return `${formatDate(startDate)} - ${formatDate(endDate)}`;
+    };
+
+    // Format date for input elements (YYYY-MM-DD)
+    const formatDateForInput = (date) => {
+      const d = new Date(date);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0'); 
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+    
+    // Handle date input changes properly
+    const handleStartDateChange = (e) => {
+      const dateString = e.target.value; // Format: YYYY-MM-DD
+      const [year, month, day] = dateString.split('-').map(Number);
+      const newDate = new Date(year, month - 1, day); // month is 0-indexed in JS Date
+      setStartDate(newDate);
+    };
+
+    const handleEndDateChange = (e) => {
+      const dateString = e.target.value; // Format: YYYY-MM-DD
+      const [year, month, day] = dateString.split('-').map(Number);
+      const newDate = new Date(year, month - 1, day); // month is 0-indexed in JS Date
+      setEndDate(newDate);
+    };
+    
     return (
       <div style={{ position: "relative", width: "100%" }}>
         <button
@@ -227,27 +285,27 @@ const DashboardView = () => {
           }}
         >
           <FontAwesomeIcon icon={faCalendar} style={{ color: "#5932EA" }} />
-          {formatDateRangeDisplay(startDate, endDate)}
+          {displayDateRange()}
         </button>
 
- {showDatePicker && (
-  <div style={{
-    position: "absolute",
-    top: "50px",
-    // Cambiamos el posicionamiento para evitar que se corte en el sidebar
-    left: isVerticalOrientation ? "50%" : "0",
-    transform: isVerticalOrientation ? "translateX(-50%)" : "none",
-    zIndex: 1000,
-    backgroundColor: "white",
-    borderRadius: "8px",
-    boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
-    padding: isTouchDevice ? "20px" : "15px",
-    display: "flex",
-    flexDirection: "column",
-    gap: "10px",
-    width: isVerticalOrientation ? (isTouchDevice ? "90%" : "95%") : "280px",
-    maxWidth: "500px"
-  }}>
+        {showDatePicker && (
+          <div style={{
+            position: "absolute",
+            top: "50px",
+            // Cambiamos el posicionamiento para evitar que se corte en el sidebar
+            left: isVerticalOrientation ? "50%" : "0",
+            transform: isVerticalOrientation ? "translateX(-50%)" : "none",
+            zIndex: 1000,
+            backgroundColor: "white",
+            borderRadius: "8px",
+            boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
+            padding: isTouchDevice ? "20px" : "15px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "10px",
+            width: isVerticalOrientation ? (isTouchDevice ? "90%" : "95%") : "280px",
+            maxWidth: "500px"
+          }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <h4 style={{ margin: 0, marginBottom: 16, fontSize: isTouchDevice ? 18 : 16 }}>Date Range</h4>
               <button 
@@ -281,9 +339,8 @@ const DashboardView = () => {
                 </label>
                 <input
                   type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  max={endDate}
+                  value={formatDateForInput(startDate)}
+                  onChange={handleStartDateChange}
                   style={{ 
                     padding: isTouchDevice ? "14px 12px" : "8px", 
                     borderRadius: "6px", 
@@ -306,9 +363,8 @@ const DashboardView = () => {
                 </label>
                 <input
                   type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  min={startDate}
+                  value={formatDateForInput(endDate)}
+                  onChange={handleEndDateChange}
                   style={{ 
                     padding: isTouchDevice ? "14px 12px" : "8px", 
                     borderRadius: "6px", 
@@ -328,31 +384,31 @@ const DashboardView = () => {
               marginTop: "15px", 
               gap: "10px" 
             }}>
-<button
-  onClick={() => {
-    // Use the updated getTodayDates function
-    const todayDates = getTodayDates();
-    setStartDate(todayDates.start);
-    setEndDate(todayDates.end);
-    fetchDashboardData();
-    fetchPaymentBreakdownData();
-    setShowDatePicker(false);
-  }}
-  style={{
-    padding: isTouchDevice ? "14px" : "8px 15px",
-    backgroundColor: "#f5f5f5",
-    border: "none",
-    borderRadius: "6px",
-    cursor: "pointer",
-    fontSize: isTouchDevice ? 16 : "inherit",
-    flex: "1",
-    minHeight: isTouchDevice ? "48px" : "auto"
-  }}
->
-  Today Only
-</button>
               <button
-                onClick={handleApplyDates}
+                onClick={() => {
+                  const today = new Date();
+                  setStartDate(today);
+                  setEndDate(today);
+                }}
+                style={{
+                  padding: isTouchDevice ? "14px" : "8px 15px",
+                  backgroundColor: "#f5f5f5",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontSize: isTouchDevice ? 16 : "inherit",
+                  flex: "1",
+                  minHeight: isTouchDevice ? "48px" : "auto"
+                }}
+              >
+                Today Only
+              </button>
+              <button
+                onClick={() => {
+                  fetchDashboardData();
+                  fetchPaymentBreakdownData();
+                  setShowDatePicker(false);
+                }}
                 style={{
                   padding: isTouchDevice ? "14px" : "8px 15px",
                   backgroundColor: "#5932EA",

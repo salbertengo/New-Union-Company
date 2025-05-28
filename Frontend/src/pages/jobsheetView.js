@@ -1225,17 +1225,20 @@ const gridOptions = {
             {/* Modal container - Mismo tamaño grande para creación y edición */}
             <div
               className="modal-container edit-modal"
-              style={{
-                position: "absolute",
-                top: "60px",
-                left: "50px",
-                right: "50px",
-                bottom: "50px",
-                backgroundColor: "#f0f2f5",
-                borderRadius: "12px",
-                boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
-                overflow: "hidden"
-              }}
+      style={{
+        position: "absolute",
+        top: "60px",
+        bottom: "50px",
+        backgroundColor: "#f0f2f5",
+        borderRadius: "12px",
+        boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
+        overflow: "hidden",
+        // Cambio para escritorio: ancho máximo y centrado
+        width: isTouchDevice ? "calc(100% - 100px)" : "85%",
+        maxWidth: "1200px",
+        left: "50%",
+        transform: "translateX(-50%)"
+      }}
             >
               <JobsheetDetailView
                 jobsheetId={selectedJobsheetId}

@@ -711,6 +711,319 @@ const Notification = ({ show, message, type, onClose }) => {
     }
   };
 
+  // Componente DateRangeSelector mejorado para paymentsPage.js
+const DateRangeSelector = () => {
+  // Formato para mostrar fechas en DD/MM/YYYY
+const formatDate = (date) => {
+  if (!date) return "";
+  try {
+    const [year, month, day] = date.split('-').map(Number);
+    return `${day.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')}/${year}`;
+  } catch (e) {
+    console.error("Error formatting date:", e);
+    return date;
+  }
+};
+  
+  // Verificar si el rango seleccionado es hoy
+  const isToday = () => {
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    
+    return dateFilter.startDate === todayStr && dateFilter.endDate === todayStr;
+  };
+  
+  // Mostrar correctamente el rango de fechas
+  const displayDateRange = () => {
+    if (!dateFilter.startDate && !dateFilter.endDate) {
+      return "Filter by date";
+    }
+    
+    if (isToday()) {
+      return "Today";
+    }
+    
+    if (dateFilter.startDate && dateFilter.endDate) {
+      if (dateFilter.startDate === dateFilter.endDate) {
+        return formatDate(dateFilter.startDate);
+      }
+      return `${formatDate(dateFilter.startDate)} - ${formatDate(dateFilter.endDate)}`;
+    } else if (dateFilter.startDate) {
+      return `From ${formatDate(dateFilter.startDate)}`;
+    } else if (dateFilter.endDate) {
+      return `Until ${formatDate(dateFilter.endDate)}`;
+    }
+  };
+  
+  return (
+    <div id="date-picker-container" style={{
+      position: 'relative',
+      width: isMobile && isVertical ? '100%' : '220px'
+    }}>
+      <div 
+        onClick={(e) => {
+          e.stopPropagation();
+          setShowDatePicker(!showDatePicker);
+        }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          padding: isMobile ? '12px 15px' : '10px 12px',
+          borderRadius: '8px',
+          border: '1px solid #e0e0e0',
+          backgroundColor: '#F9FBFF',
+          cursor: 'pointer',
+          justifyContent: 'space-between',
+          height: isMobile ? '46px' : '36px',
+          boxSizing: 'border-box'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <FontAwesomeIcon icon={faCalendarAlt} style={{ color: '#5932EA' }} />
+          <span style={{ 
+            fontSize: '14px', 
+            color: (dateFilter.startDate || dateFilter.endDate) ? '#333' : '#999',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis' 
+          }}>
+            {displayDateRange()}
+          </span>
+        </div>
+        {(dateFilter.startDate || dateFilter.endDate) && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setDateFilter({ startDate: "", endDate: "" });
+              setTimeout(() => applyFilters(), 0);
+            }}
+            style={{
+              background: 'none',
+              border: 'none',
+              fontSize: '16px',
+              color: '#999',
+              cursor: 'pointer'
+            }}
+          >
+            ×
+          </button>
+        )}
+      </div>
+      
+      
+     {showDatePicker && (
+  <div
+    style={{
+      position: "absolute",
+      top: "45px",            
+      left: "0",             
+      zIndex: 1000,
+      backgroundColor: "white",
+      borderRadius: "12px",
+      boxShadow: "0 2px 15px rgba(0,0,0,0.15)",
+      padding: "20px",
+      display: "flex",
+      flexDirection: "column",
+      gap: "15px",
+      width: "280px", 
+      maxWidth: isMobile ? "90%" : "280px"
+    }}
+          onMouseEnter={() => setIsInteractingWithDatePicker(true)}
+          onMouseLeave={() => setIsInteractingWithDatePicker(false)}
+          onTouchStart={() => setIsInteractingWithDatePicker(true)}
+          onTouchEnd={() => setTimeout(() => setIsInteractingWithDatePicker(false), 300)}
+        >
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'space-between', 
+            marginBottom: '5px' 
+          }}>
+            <h3 style={{ 
+              margin: '0', 
+              fontSize: '16px', 
+              fontWeight: '600', 
+              color: '#333' 
+            }}>
+              Filter by dates
+            </h3>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowDatePicker(false);
+              }}
+              style={{
+                background: 'none',
+                border: 'none',
+                fontSize: '20px',
+                color: '#999',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '28px',
+                height: '28px',
+              }}
+            >
+              ×
+            </button>
+          </div>
+          
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ 
+              display: 'block', 
+              marginBottom: '6px', 
+              fontSize: '14px', 
+              fontWeight: '500',
+              color: '#555' 
+            }}>
+              Start Date
+            </label>
+            <div style={{ position: 'relative' }}>
+              <FontAwesomeIcon 
+                icon={faCalendarAlt} 
+                style={{
+                  position: 'absolute',
+                  left: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: '#5932EA',
+                }}
+              />
+              <input
+                type="date"
+                value={dateFilter.startDate}
+                onChange={(e) => {
+                  setDateFilter(prev => ({ ...prev, startDate: e.target.value }));
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsInteractingWithDatePicker(true);
+                }}
+                onBlur={() => setIsInteractingWithDatePicker(false)}
+                style={{
+                  width: "100%",
+                  padding: '10px 12px 10px 35px',
+                  borderRadius: '8px',
+                  border: '1px solid #e0e0e0',
+                  fontSize: '14px',
+                  backgroundColor: '#f9fbff',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+          </div>
+
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ 
+              display: 'block', 
+              marginBottom: '6px', 
+              fontSize: '14px', 
+              fontWeight: '500',
+              color: '#555' 
+            }}>
+              End Date
+            </label>
+            <div style={{ position: 'relative' }}>
+              <FontAwesomeIcon 
+                icon={faCalendarAlt} 
+                style={{
+                  position: 'absolute',
+                  left: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: '#5932EA',
+                }}
+              />
+              <input
+                type="date"
+                value={dateFilter.endDate}
+                min={dateFilter.startDate}
+                onChange={(e) => {
+                  setDateFilter(prev => ({ ...prev, endDate: e.target.value }));
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsInteractingWithDatePicker(true);
+                }}
+                onBlur={() => setIsInteractingWithDatePicker(false)}
+                style={{
+                  width: "100%",
+                  padding: '10px 12px 10px 35px',
+                  borderRadius: '8px',
+                  border: '1px solid #e0e0e0',
+                  fontSize: '14px',
+                  backgroundColor: '#f9fbff',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+          </div>
+          
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            marginTop: '5px',
+            gap: '10px' 
+          }}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                // Configurar para el día de hoy
+                const today = new Date();
+                const todayStr = today.toISOString().split('T')[0];
+                setDateFilter({ startDate: todayStr, endDate: todayStr });
+                setShowDatePicker(false);
+                setTimeout(() => applyFilters(), 0);
+              }}
+              style={{
+                padding: '10px 16px',
+                backgroundColor: '#f5f5f5',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                color: '#333',
+                fontSize: '14px',
+                fontWeight: '500',
+                transition: 'background-color 0.2s ease',
+                flex: '1'
+              }}
+              onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#e8e8e8'}
+              onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
+            >
+              Today
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowDatePicker(false);
+                setTimeout(() => applyFilters(), 0);
+              }}
+              style={{
+                padding: '10px 16px',
+                backgroundColor: '#5932EA',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: '600',
+                boxShadow: '0 2px 6px rgba(89, 50, 234, 0.3)',
+                transition: 'background-color 0.2s ease',
+                flex: '1'
+              }}
+              onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#4321C9'}
+              onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#5932EA'}
+            >
+              Apply
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+     ); 
+  };
+  
   return (
     <div
       style={{
@@ -822,60 +1135,10 @@ const Notification = ({ show, message, type, onClose }) => {
   width: isMobile && isVertical ? '100%' : 'auto',
   marginBottom: '15px'
 }}>
-  {/* Filtro de fecha */}
-<div id="date-picker-container" style={{
-  position: 'relative',  // Importante para el posicionamiento absoluto del datepicker
-  width: isMobile && isVertical ? '100%' : '220px'
-}}>
-  <div 
-    onClick={(e) => {
-      e.stopPropagation();
-      setShowDatePicker(!showDatePicker);
-    }}
-    style={{
-      display: 'flex',
-      alignItems: 'center',
-      padding: '10px 12px',
-      borderRadius: '8px',
-      border: '1px solid #e0e0e0',
-      backgroundColor: '#F9FBFF',
-      cursor: 'pointer',
-      justifyContent: 'space-between'
-    }}
-  >
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-      <FontAwesomeIcon icon={faCalendarAlt} style={{ color: '#5932EA' }} />
-      <span style={{ 
-        fontSize: '14px', 
-        color: (dateFilter.startDate || dateFilter.endDate) ? '#333' : '#999',
-        whiteSpace: 'nowrap',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis' 
-      }}>
-        {formatDateRange()}
-      </span>
-    </div>
-    {(dateFilter.startDate || dateFilter.endDate) && (
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          setDateFilter({ startDate: "", endDate: "" });
-          setTimeout(() => applyFilters(), 0);
-        }}
-        style={{
-          background: 'none',
-          border: 'none',
-          fontSize: '16px',
-          color: '#999',
-          cursor: 'pointer'
-        }}
-      >
-        ×
-      </button>
-    )}
-  </div>
-</div>
-  {/* Filtro de método de pago */}
+  {/* Reemplazar todo el div con id="date-picker-container" por: */}
+  <DateRangeSelector />
+  
+  {/* Resto de elementos */}
   <div style={{
     position: 'relative',
     width: isMobile && isVertical ? '100%' : '180px'
@@ -1187,7 +1450,7 @@ const Notification = ({ show, message, type, onClose }) => {
                             borderRadius: "10px",
                             border: "1px solid #e0e0e0",
                             fontSize: isMobile ? "16px" : "14px",
-                            backgroundColor: "#f9faff",
+                            backgroundColor: "#f9fbff",
                             outline: "none",
                           }}
                         />
@@ -1280,7 +1543,7 @@ const Notification = ({ show, message, type, onClose }) => {
                             borderRadius: "10px",
                             border: "1px solid #e0e0e0",
                             fontSize: isMobile ? "16px" : "14px",
-                            backgroundColor: "#f9faff",
+                            backgroundColor: "#f9fbff",
                             outline: "none",
                           }}
                         />
@@ -1419,213 +1682,7 @@ const Notification = ({ show, message, type, onClose }) => {
     </div>
   </div>
 )}
-{showDatePicker && (
-  <div
-    style={{
-      position: "absolute",
-      top: "45px",
-      left: "50%", // Centramos el elemento
-      transform: "translateX(-50%)", // Lo desplazamos a la izquierda la mitad de su ancho
-      zIndex: 1000,
-      backgroundColor: "white",
-      borderRadius: "12px",
-      boxShadow: "0 2px 15px rgba(0,0,0,0.15)",
-      padding: "20px",
-      display: "flex",
-      flexDirection: "column",
-      gap: "15px",
-      width: "280px", 
-      maxWidth: isMobile ? "90%" : "280px"
-    }}
-    onMouseEnter={() => setIsInteractingWithDatePicker(true)}
-    onMouseLeave={() => setIsInteractingWithDatePicker(false)}
-    onTouchStart={() => setIsInteractingWithDatePicker(true)}
-    onTouchEnd={() => setTimeout(() => setIsInteractingWithDatePicker(false), 300)}
-  >
-    <div style={{ 
-      display: 'flex', 
-      alignItems: 'center', 
-      justifyContent: 'space-between', 
-      marginBottom: '5px' 
-    }}>
-      <h3 style={{ 
-        margin: '0', 
-        fontSize: '16px', 
-        fontWeight: '600', 
-        color: '#333' 
-      }}>
-        Filter by dates
-      </h3>
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          setShowDatePicker(false);
-        }}
-        style={{
-          background: 'none',
-          border: 'none',
-          fontSize: '20px',
-          color: '#999',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: '28px',
-          height: '28px',
-        }}
-      >
-        ×
-      </button>
-    </div>
-    
-    <div style={{ marginBottom: '15px' }}>
-      <label style={{ 
-        display: 'block', 
-        marginBottom: '6px', 
-        fontSize: '14px', 
-        fontWeight: '500',
-        color: '#555' 
-      }}>
-        Start Date
-      </label>
-      <div style={{ position: 'relative' }}>
-        <FontAwesomeIcon 
-          icon={faCalendarAlt} 
-          style={{
-            position: 'absolute',
-            left: '12px',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            color: '#5932EA',
-          }}
-        />
-        <input
-          type="date"
-          value={dateFilter.startDate}
-          onChange={(e) => {
-            setDateFilter(prev => ({ ...prev, startDate: e.target.value }));
-          }}
-          onClick={(e) => {
-            e.stopPropagation();
-            setIsInteractingWithDatePicker(true);
-          }}
-          onBlur={() => setIsInteractingWithDatePicker(false)}
-          style={{
-            width: "100%",
-            padding: '10px 12px 10px 35px',
-            borderRadius: '8px',
-            border: '1px solid #e0e0e0',
-            fontSize: '14px',
-            backgroundColor: '#f9fbff',
-            boxSizing: 'border-box'
-          }}
-        />
-      </div>
-    </div>
 
-    <div style={{ marginBottom: '15px' }}>
-      <label style={{ 
-        display: 'block', 
-        marginBottom: '6px', 
-        fontSize: '14px', 
-        fontWeight: '500',
-        color: '#555' 
-      }}>
-        End Date
-      </label>
-      <div style={{ position: 'relative' }}>
-        <FontAwesomeIcon 
-          icon={faCalendarAlt} 
-          style={{
-            position: 'absolute',
-            left: '12px',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            color: '#5932EA',
-          }}
-        />
-        <input
-          type="date"
-          value={dateFilter.endDate}
-          min={dateFilter.startDate}
-          onChange={(e) => {
-            setDateFilter(prev => ({ ...prev, endDate: e.target.value }));
-          }}
-          onClick={(e) => {
-            e.stopPropagation();
-            setIsInteractingWithDatePicker(true);
-          }}
-          onBlur={() => setIsInteractingWithDatePicker(false)}
-          style={{
-            width: "100%",
-            padding: '10px 12px 10px 35px',
-            borderRadius: '8px',
-            border: '1px solid #e0e0e0',
-            fontSize: '14px',
-            backgroundColor: '#f9fbff',
-            boxSizing: 'border-box'
-          }}
-        />
-      </div>
-    </div>
-    
-    <div style={{ 
-      display: 'flex', 
-      justifyContent: 'space-between', 
-      marginTop: '5px',
-      gap: '10px' 
-    }}>
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          setDateFilter({ startDate: "", endDate: "" });
-          setShowDatePicker(false);
-          setTimeout(() => applyFilters(), 0);
-        }}
-        style={{
-          padding: '10px 16px',
-          backgroundColor: '#f5f5f5',
-          border: 'none',
-          borderRadius: '8px',
-          cursor: 'pointer',
-          color: '#333',
-          fontSize: '14px',
-          fontWeight: '500',
-          transition: 'background-color 0.2s ease',
-          flex: '1'
-        }}
-        onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#e8e8e8'}
-        onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
-      >
-        Clear
-      </button>
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          setShowDatePicker(false);
-          setTimeout(() => applyFilters(), 0);
-        }}
-        style={{
-          padding: '10px 16px',
-          backgroundColor: '#5932EA',
-          color: 'white',
-          border: 'none',
-          borderRadius: '8px',
-          cursor: 'pointer',
-          fontSize: '14px',
-          fontWeight: '600',
-          boxShadow: '0 2px 6px rgba(89, 50, 234, 0.3)',
-          transition: 'background-color 0.2s ease',
-          flex: '1'
-        }}
-        onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#4321C9'}
-        onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#5932EA'}
-      >
-        Apply
-      </button>
-    </div>
-  </div>
-)}
           {/* Modal de eliminación adaptado para móvil */}
           {showDeleteModal && (
             <div

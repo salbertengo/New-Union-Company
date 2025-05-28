@@ -53,7 +53,7 @@ const CustomersPage = ({ onLogout }) => {
           justifyContent: 'center',
           alignItems: 'center',
           transition: 'width 0.3s ease',
-          overflow: 'hidden', // Importante para ocultar contenido cuando width=0
+          overflow: 'hidden',
           position: isMobile ? 'fixed' : 'relative',
           zIndex: 1000,
           height: '100%'
@@ -72,43 +72,16 @@ const CustomersPage = ({ onLogout }) => {
           flex: 1,
           display: 'flex',
           flexDirection: 'column',
-          gap: '20px',
           padding: '20px',
           boxSizing: 'border-box',
           marginLeft: isMobile ? 0 : '0px',
           transition: 'margin-left 0.3s ease',
           height: '100%',
-          overflow: 'auto', // Permite scroll cuando sea necesario
-          WebkitOverflowScrolling: 'touch' // Scroll suave en iOS
+          overflow: 'auto',
+          WebkitOverflowScrolling: 'touch'
         }}
       >
-        {/* Botón del menú solo visible en móvil */}
-        {isMobile && (
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'flex-end',
-            marginBottom: '10px' 
-          }}>
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              style={{
-                border: 'none',
-                background: 'none',
-                color: '#5932EA',
-                cursor: 'pointer',
-                padding: '8px',
-                borderRadius: '4px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-            >
-              <FontAwesomeIcon icon={faBars} size="lg" />
-            </button>
-          </div>
-        )}
-
-        {/* Contenido principal - CustomersView */}
+        {/* Contenedor para CustomersView - toda la altura disponible */}
         <div style={{ 
           flex: 1,
           height: '100%',
