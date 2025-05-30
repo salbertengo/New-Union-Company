@@ -14,7 +14,7 @@ import {
   faCalendarAlt,
   faCreditCard,
   faCheck,
-  faExchangeAlt,
+  faExchangeAlt,    
   faFileInvoiceDollar,
   faWallet,
   faMobile,
@@ -30,6 +30,30 @@ import {
 
 // Register AG Grid modules
 ModuleRegistry.registerModules([ClientSideRowModelModule]);
+
+const formatDateString = (dateInput) => {
+  if (!dateInput) return '';
+  // Si es un objeto Date
+  if (Object.prototype.toString.call(dateInput) === '[object Date]') {
+    if (isNaN(dateInput.getTime())) return '';
+    const year = dateInput.getFullYear();
+    const month = String(dateInput.getMonth() + 1).padStart(2, '0');
+    const day = String(dateInput.getDate()).padStart(2, '0');
+    return `${day}/${month}/${year}`;
+  }
+  // Si es un string tipo ISO (YYYY-MM-DDTHH:mm:ss.sssZ)
+  if (typeof dateInput === 'string' && dateInput.includes('T')) {
+    const [datePart] = dateInput.split('T');
+    return formatDateString(datePart);
+  }
+  // Si es un string tipo YYYY-MM-DD
+  if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
+    const [year, month, day] = dateInput.split('-');
+    return `${day}/${month}/${year}`;
+  }
+  // Si no es ninguno de los anteriores, devuelve el valor original
+  return dateInput;
+};
 
 const PaymentsPage = () => {
   const [payments, setPayments] = useState([]);
@@ -112,17 +136,16 @@ const [isInteractingWithDatePicker, setIsInteractingWithDatePicker] = useState(f
         }
       },
       {
-  headerName: 'Date',
-  field: 'payment_date',
-  suppressMenu: true,
-  headerClass: 'custom-header-inventory',
-  width: isMobile && !isVertical ? 100 : 120,
-  cellRenderer: (params) => {
-    if (!params.value) return '';
-    const date = new Date(params.value);
-    return `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
-  }
-},
+        headerName: 'Date',
+        field: 'payment_date',
+        suppressMenu: true,
+        headerClass: 'custom-header-inventory',
+        width: isMobile && !isVertical ? 100 : 120,
+        cellRenderer: (params) => {
+          if (!params.value) return '';
+          return formatDateString(params.value);
+        }
+      },
       {
         headerName: 'Method',
         field: 'method',
@@ -230,8 +253,7 @@ const [isInteractingWithDatePicker, setIsInteractingWithDatePicker] = useState(f
         width: 100,
         cellRenderer: (params) => {
           if (!params.value) return '';
-          const date = new Date(params.value);
-          return date.toLocaleDateString('en-GB');
+          return formatDateString(params.value);
         }
       }, actionsColumn];
     }
@@ -745,13 +767,13 @@ const formatDate = (date) => {
     
     if (dateFilter.startDate && dateFilter.endDate) {
       if (dateFilter.startDate === dateFilter.endDate) {
-        return formatDate(dateFilter.startDate);
+        return formatDateString(dateFilter.startDate);
       }
-      return `${formatDate(dateFilter.startDate)} - ${formatDate(dateFilter.endDate)}`;
+      return `${formatDateString(dateFilter.startDate)} - ${formatDateString(dateFilter.endDate)}`;
     } else if (dateFilter.startDate) {
-      return `From ${formatDate(dateFilter.startDate)}`;
+      return `From ${formatDateString(dateFilter.startDate)}`;
     } else if (dateFilter.endDate) {
-      return `Until ${formatDate(dateFilter.endDate)}`;
+      return `Until ${formatDateString(dateFilter.endDate)}`;
     }
   };
   
