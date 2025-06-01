@@ -79,6 +79,10 @@ const JobsheetDetailView = ({ jobsheetId: propJobsheetId, onClose, refreshJobshe
     contact: "",
     email: ""
   });
+  const [searchTimeout, setSearchTimeout] = useState(null);
+const [noResultsFound, setNoResultsFound] = useState(false);
+const [isCreatingFromSearch, setIsCreatingFromSearch] = useState(false);
+
   const [showCustomerModal, setShowCustomerModal] = useState(false);
 
   const [activeInputMode, setActiveInputMode] = useState("search"); // 'search', 'labor', 'workflowSpecific'
@@ -1792,10 +1796,34 @@ if (!allSavesSuccessful) {
 }
   }
 };
-
+const handleSelectCustomer = (customer) => {
+  if (!customer || !customer.id) {
+    console.error("Invalid customer selected:", customer);
+    showNotification("Invalid customer selection", "error");
+    return;
+  }
+  
+  // Set the selected customer and ID in state
+  setSelectedCustomer(customer);
+  setSelectedCustomerId(customer.id);
+  
+  // Optional: provide visual feedback
+  showNotification(`Customer "${customer.name}" selected`, "info");
+  
+  // Clear search results to make the selection more obvious
+  // Comment this line if you want to keep results visible
+  // setCustomerSearchResults([]);
+};
   const handleCustomerSearch = async (e) => {
     const term = e.target.value;
     setCustomerSearchTerm(term);
+    setNoResultsFound(false);
+    setIsCreatingFromSearch(false);
+    
+    // Limpiar el temporizador anterior si existe
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
 
     if (term.length >= 2) {
       try {
@@ -1809,6 +1837,21 @@ if (!allSavesSuccessful) {
         if (response.ok) {
           const results = await response.json();
           setCustomerSearchResults(results);
+          
+          // Configurar un temporizador para mostrar la opción de crear después de 1.5 segundos
+          const newTimeout = setTimeout(() => {
+            if (results.length === 0 && term.trim().length >= 2) {
+              setNoResultsFound(true);
+              // Prepopular los datos del nuevo cliente con el término de búsqueda
+              setNewCustomerDetails({
+                name: term,
+                contact: "",
+                email: ""
+              });
+            }
+          }, 1500);
+          
+          setSearchTimeout(newTimeout);
         } else {
           console.error("Error searching customers:", response.status);
         }
@@ -1820,80 +1863,106 @@ if (!allSavesSuccessful) {
     }
   };
 
-  const handleSelectCustomer = (customer) => {
-    setSelectedCustomer(customer);
-    setSelectedCustomerId(customer.id);
+  // Función para iniciar la creación desde la búsqueda
+  const handleStartCreateFromSearch = () => {
+    setIsCreatingFromSearch(true);
   };
 
+  // Modificar la función handleCreateCustomer para regresar a la búsqueda después de crear
   const handleCreateCustomer = async () => {
-    if (!newCustomerDetails.name) {
-      showNotification("Customer name is required", "error");
-      return;
-    }
+  if (!newCustomerDetails.name) {
+    showNotification("Customer name is required", "error");
+    return;
+  }
 
-    try {
-      const token = localStorage.getItem("token");
-      if (!token) return;
+  try {
+    const token = localStorage.getItem("token");
+    if (!token) return;
 
-      const response = await fetch(`${API_URL}/customers`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({...newCustomerDetails, is_active: 1}),
-      });
+    // 1. Create the new customer
+    const response = await fetch(`${API_URL}/customers`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({...newCustomerDetails, is_active: 1}),
+    });
 
-      if (response.ok) {
-        setNewCustomerDetails({ name: "", contact: "", email: "" });
-        setShowNewCustomerForm(false);
-        showNotification("Customer created successfully. You can now search for them.", "success");
-        if (customerSearchTerm) {
-          handleCustomerSearch({ target: { value: customerSearchTerm } });
-        }
-      } else {
-        const errorText = await response.text();
-        let errorMessage = "Failed to create customer";
+    if (response.ok) {
+      const newCustomer = await response.json();
+      showNotification("Customer created successfully", "success");
+      
+      // 2. Automatically select and assign the new customer to the jobsheet
+      setSelectedCustomer(newCustomer);
+      setSelectedCustomerId(newCustomer.id);
+      
+      // Update jobsheet with new customer
+      setJobsheet(prevJobsheet => ({
+        ...prevJobsheet, 
+        customer_id: newCustomer.id,
+        customer_name: newCustomer.name,
+        customer_contact: newCustomer.contact,
+        customer_email: newCustomer.email
+      }));
+      
+      // Track pending update
+      setPendingJobsheetUpdates(prev => ({
+        ...prev, 
+        customer_id: newCustomer.id
+      }));
+      
+      // 3. If there's a vehicle associated with the jobsheet, update it
+      if (jobsheet?.vehicle_id) {
         try {
-          const errorData = JSON.parse(errorText);
-          errorMessage = errorData.error || errorData.message || errorMessage;
-        } catch (e) {}
-        console.error("Failed to create customer:", response.status, errorMessage);
-        showNotification(`Failed to create customer: ${errorMessage}`, "error");
-      }
-    } catch (error) {
-      console.error("Error creating customer:", error);
-      showNotification("Error creating customer: " + error.message, "error");
-    }
-  };
-
-  const handleUseGeneralCustomer = async () => {
-    try {
-      const token = localStorage.getItem("token");
-      if (!token) return;
-
-      const response = await fetch(`${API_URL}/customers?search=General Customer`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (response.ok) {
-        const results = await response.json();
-        if (results.length > 0) {
-          setSelectedCustomer(results[0]);
-          setSelectedCustomerId(results[0].id);
-          showNotification("General Customer selected", "success");
-        } else {
-          showNotification("General Customer not found", "error");
+          const vehicleResponse = await fetch(`${API_URL}/vehicles/${jobsheet.vehicle_id}`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              customer_id: newCustomer.id
+            }),
+          });
+          
+          if (vehicleResponse.ok) {
+            showNotification("Vehicle associated with new customer", "success");
+          } else {
+            console.error("Failed to update vehicle with new customer:", await vehicleResponse.text());
+          }
+        } catch (vehicleError) {
+          console.error("Error updating vehicle:", vehicleError);
         }
-      } else {
-        console.error("Error searching General Customer:", response.status);
-        showNotification("Error searching General Customer", "error");
       }
-    } catch (error) {
-      console.error("Error searching General Customer:", error);
-      showNotification("Error searching General Customer", "error");
+      
+      setHasPendingChanges(true);
+      setIsCreatingFromSearch(false);
+      setNoResultsFound(false);
+      setShowCustomerModal(false); // Close the modal
+      
+      // Update search results to include the new customer
+      setCustomerSearchResults([newCustomer]);
+      
+      showNotification("Customer created and assigned to jobsheet", "success");
+    } else {
+      const errorText = await response.text();
+      let errorMessage = "Failed to create customer";
+      try {
+        const errorData = JSON.parse(errorText);
+        errorMessage = errorData.error || errorData.message || errorMessage;
+      } catch (e) {}
+      console.error("Failed to create customer:", response.status, errorMessage);
+      showNotification(`Failed to create customer: ${errorMessage}`, "error");
     }
-  };
+  } catch (error) {
+    console.error("Error creating customer:", error);
+    showNotification("Error creating customer: " + error.message, "error");
+  }
+};
+
+  
+
 
 const isReadOnly = effectiveJobsheetId && 
                   // Only consider the actual jobsheet.state (server state), not pending updates
@@ -2108,9 +2177,8 @@ const isReadOnly = effectiveJobsheetId &&
                 <label style={{ 
                   display: "block", 
                   marginBottom: "5px", 
-                  fontSize: "14px", 
-                  fontWeight: "500", 
-                  color: "#333" 
+                  fontSize: isTouchDevice ? "14px" : "13px", 
+                  color: "#555" 
                 }}>
                   Model *
                 </label>
@@ -2121,10 +2189,10 @@ const isReadOnly = effectiveJobsheetId &&
                   placeholder="Enter vehicle model (e.g. Honda CBR 150R)"
                   style={{ 
                     width: "100%",
-                    padding: "10px",
-                    borderRadius: "4px",
+                    padding: isTouchDevice ? "12px" : "8px",
+                    borderRadius: isTouchDevice ? "8px" : "4px",
                     border: "1px solid #ddd",
-                    fontSize: "14px",
+                    fontSize: isTouchDevice ? "15px" : "14px",
                     boxSizing: "border-box"
                   }}
                 />
@@ -2137,7 +2205,8 @@ const isReadOnly = effectiveJobsheetId &&
                   color: "white",
                   border: "none",
                   borderRadius: "4px",
-                                   cursor: "pointer"
+                  cursor: "pointer",
+                  fontSize: "13px"
                 }}
               >
                 Create Vehicle & Jobsheet
@@ -3376,180 +3445,363 @@ const isReadOnly = effectiveJobsheetId &&
         </div>
       )}
 
-      {showCustomerModal && (
+{showCustomerModal && (
+  <div style={{
+    position: "fixed",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 1100
+  }}>
+    <div style={{
+      backgroundColor: "white",
+      borderRadius: "8px",
+      width: "90%",
+      maxWidth: isTouchDevice ? "100%" : "500px",
+      padding: isTouchDevice ? "16px 12px" : "20px",
+      maxHeight: isTouchDevice ? "90vh" : "80vh",
+      overflowY: "auto",
+      boxShadow: "0 4px 8px rgba(0,0,0,0.1)"
+    }}>
+      {/* Cabecera del modal */}
+      <div style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: isTouchDevice ? "20px" : "15px",
+        borderBottom: "1px solid #eee",
+        paddingBottom: isTouchDevice ? "15px" : "10px"
+      }}>
+        <h3 style={{ 
+          margin: 0, 
+          fontSize: isTouchDevice ? "18px" : "16px", 
+          fontWeight: 600 
+        }}>
+          {jobsheet?.customer_id ? "Change Customer" : "Assign Customer"}
+        </h3>
+        <button
+          onClick={() => setShowCustomerModal(false)}
+          style={{
+            background: "none",
+            border: "none",
+            fontSize: isTouchDevice ? "28px" : "20px",
+            cursor: "pointer",
+            color: "#666",
+            padding: isTouchDevice ? "8px" : "0",
+            marginRight: isTouchDevice ? "-8px" : "0",
+            WebkitTapHighlightColor: "transparent"
+          }}
+        >
+          &times;
+        </button>
+      </div>
+
+      {/* Búsqueda de clientes */}
+      <div style={{ marginBottom: isTouchDevice ? "20px" : "15px" }}>
+        <label style={{ 
+          display: "block", 
+          marginBottom: isTouchDevice ? "8px" : "5px", 
+          fontSize: isTouchDevice ? "15px" : "13px" 
+        }}>
+          Search Customers
+        </label>
+        <div style={{ position: "relative" }}>
+          <input
+            type="text"
+            value={customerSearchTerm || ''}
+            onChange={handleCustomerSearch}
+            placeholder="Search by name, contact or email"
+            style={{ 
+              width: "100%",
+              padding: isTouchDevice ? "12px 12px 12px 35px" : "8px 8px 8px 30px",
+              borderRadius: isTouchDevice ? "8px" : "4px",
+              border: "1px solid #ddd",
+              fontSize: isTouchDevice ? "15px" : "14px",
+              boxSizing: "border-box"
+            }}
+          />
+          <FontAwesomeIcon 
+            icon={faSearch} 
+            style={{ 
+              position: "absolute",
+              left: isTouchDevice ? "14px" : "12px",
+              top: "50%",
+              transform: "translateY(-50%)",
+              color: "#666",
+              fontSize: isTouchDevice ? "16px" : "14px"
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Resultados de búsqueda */}
+      {customerSearchResults.length > 0 && (
         <div style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: "rgba(0,0,0,0.5)",
+          border: "1px solid #eee",
+          borderRadius: isTouchDevice ? "8px" : "4px",
+          marginBottom: isTouchDevice ? "20px" : "15px",
+          maxHeight: isTouchDevice ? "40vh" : "200px",
+          overflowY: "auto"
+        }}>
+          {customerSearchResults.map(customer => (
+            <div 
+              key={customer.id}
+              onClick={() => handleSelectCustomer(customer)}
+              style={{
+                padding: isTouchDevice ? "14px 16px" : "10px 15px",
+                borderBottom: "1px solid #f0f0f0",
+                cursor: "pointer",
+                backgroundColor: selectedCustomerId === customer.id ? "#f0f7ff" : "white",
+                transition: "background-color 0.2s"
+              }}
+              onMouseOver={(e) => e.currentTarget.style.backgroundColor = selectedCustomerId === customer.id ? "#f0f7ff" : "#f9f9f9"}
+              onMouseOut={(e) => e.currentTarget.style.backgroundColor = selectedCustomerId === customer.id ? "#f0f7ff" : "white"}
+            >
+              <div style={{ 
+                fontWeight: "500",
+                fontSize: isTouchDevice ? "16px" : "14px" 
+              }}>{customer.name}</div>
+              <div style={{ 
+                fontSize: isTouchDevice ? "14px" : "13px", 
+                color: "#666", 
+                marginTop: "3px" 
+              }}>
+                {customer.contact || "No contact"} | {customer.email || "No email"}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Indicador de búsqueda en progreso */}
+      {customerSearchTerm && customerSearchTerm.length >= 2 && customerSearchResults.length === 0 && !noResultsFound && (
+        <div style={{
           display: "flex",
           justifyContent: "center",
-          alignItems: "center",
-          zIndex: 1100
+          padding: "15px",
+          color: "#666",
+          fontSize: isTouchDevice ? "15px" : "14px"
         }}>
-          <div style={{
-            backgroundColor: "white",
-            borderRadius: "8px",
-            width: "90%",
-            maxWidth: isTouchDevice ? "100%" : "500px",
-            padding: isTouchDevice ? "16px 12px" : "20px",
-            maxHeight: isTouchDevice ? "90vh" : "80vh",
-            overflowY: "auto",
-            boxShadow: "0 4px 8px rgba(0,0,0,0.1)"
+          <FontAwesomeIcon icon={faSearch} style={{ marginRight: "10px" }} />
+          Searching...
+        </div>
+      )}
+
+      {/* Opción para crear nuevo cliente cuando no se encuentran resultados */}
+      {customerSearchTerm && customerSearchTerm.length >= 2 && noResultsFound && !isCreatingFromSearch && (
+        <div style={{
+          padding: isTouchDevice ? "16px" : "12px", 
+          backgroundColor: "#f8f9ff", 
+          borderRadius: isTouchDevice ? "8px" : "6px",
+          marginBottom: "15px",
+          border: "1px solid #e0e7ff"
+        }}>
+          <p style={{ 
+            margin: "0 0 10px 0", 
+            fontSize: isTouchDevice ? "15px" : "14px", 
+            color: "#333" 
           }}>
-            <div style={{
+            <FontAwesomeIcon icon={faUser} style={{ marginRight: "8px", color: "#5932EA" }} />
+            No customer found with name "<strong>{customerSearchTerm}</strong>"
+          </p>
+          <button
+            onClick={handleStartCreateFromSearch}
+            style={{
+              width: "100%",
+              padding: isTouchDevice ? "12px" : "8px",
+              backgroundColor: "#5932EA",
+              color: "white",
+              border: "none",
+              borderRadius: isTouchDevice ? "8px" : "4px",
+              cursor: "pointer",
+              fontSize: isTouchDevice ? "15px" : "14px",
               display: "flex",
-              justifyContent: "space-between",
               alignItems: "center",
-              marginBottom: isTouchDevice ? "20px" : "15px",
-              borderBottom: "1px solid #eee",
-              paddingBottom: isTouchDevice ? "15px" : "10px"
+              justifyContent: "center",
+              gap: "6px"
+            }}
+          >
+            <FontAwesomeIcon icon={faPlus} />
+            Create New Customer
+          </button>
+        </div>
+      )}
+
+      {/* Formulario para crear nuevo cliente */}
+      {isCreatingFromSearch && (
+        <div style={{
+          padding: isTouchDevice ? "16px" : "12px", 
+          backgroundColor: "#f8f9ff", 
+          borderRadius: isTouchDevice ? "8px" : "6px",
+          marginBottom: "15px",
+          border: "1px solid #e0e7ff"
+        }}>
+          <h4 style={{ 
+            margin: "0 0 15px 0", 
+            fontSize: isTouchDevice ? "16px" : "15px"
+          }}>
+            <FontAwesomeIcon icon={faPlus} style={{ marginRight: "8px", color: "#5932EA" }} />
+            Create New Customer
+          </h4>
+          
+          <div style={{ marginBottom: "12px" }}>
+            <label style={{ 
+              display: "block", 
+              marginBottom: "5px", 
+              fontSize: isTouchDevice ? "14px" : "13px", 
+              color: "#555" 
             }}>
-              <h3 style={{ 
-                margin: 0, 
-                fontSize: isTouchDevice ? "18px" : "16px", 
-                fontWeight: 600 
-              }}>
-                {jobsheet?.customer_id ? "Change Customer" : "Assign Customer"}
-              </h3>
-              <button
-                onClick={() => setShowCustomerModal(false)}
-                style={{
-                  background: "none",
-                  border: "none",
-                  fontSize: isTouchDevice ? "28px" : "20px", // Botón más grande para móvil
-                  cursor: "pointer",
-                  color: "#666",
-                  padding: isTouchDevice ? "8px" : "0", // Área táctil más grande
-                  marginRight: isTouchDevice ? "-8px" : "0",
-                  WebkitTapHighlightColor: "transparent" // Elimina el highlight en dispositivos táctiles
-                }}
-              >
-                &times;
-              </button>
-            </div>
-
-            <div style={{ marginBottom: isTouchDevice ? "20px" : "15px" }}>
-              <label style={{ 
-                display: "block", 
-                marginBottom: isTouchDevice ? "8px" : "5px", 
-                fontSize: isTouchDevice ? "15px" : "13px" 
-              }}>
-                Search Customers
-              </label>
-              <div style={{ position: "relative" }}>
-                <input
-                  type="text"
-                  value={customerSearchTerm || ''}
-                  onChange={handleCustomerSearch}
-                  placeholder="Search by name, contact or email"
-                  style={{ 
-                    width: "100%",
-                    padding: isTouchDevice ? "12px 12px 12px 40px" : "10px 10px 10px 35px",
-                    borderRadius: isTouchDevice ? "8px" : "4px",
-                    border: "1px solid #ddd",
-                    fontSize: isTouchDevice ? "16px" : "14px", // Fuente más grande en móvil
-                    boxSizing: "border-box"
-                  }}
-                />
-                <FontAwesomeIcon 
-                  icon={faSearch} 
-                  style={{ 
-                    position: "absolute",
-                    left: isTouchDevice ? "14px" : "12px",
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    color: "#666",
-                    fontSize: isTouchDevice ? "16px" : "14px"
-                  }}
-                />
-              </div>
-            </div>
-
-            {customerSearchResults.length > 0 && (
-              <div style={{
-                border: "1px solid #eee",
+              Name *
+            </label>
+            <input
+              type="text"
+              value={newCustomerDetails.name}
+              onChange={(e) => setNewCustomerDetails({...newCustomerDetails, name: e.target.value})}
+              placeholder="Customer name"
+              style={{ 
+                width: "100%",
+                padding: isTouchDevice ? "12px" : "8px",
                 borderRadius: isTouchDevice ? "8px" : "4px",
-                marginBottom: isTouchDevice ? "20px" : "15px",
-                maxHeight: isTouchDevice ? "40vh" : "200px",
-                overflowY: "auto"
-              }}>
-                {customerSearchResults.map(customer => (
-                  <div 
-                    key={customer.id}
-                    onClick={() => handleSelectCustomer(customer)}
-                    style={{
-                      padding: isTouchDevice ? "14px 16px" : "10px 15px", // Área táctil más grande
-                      borderBottom: "1px solid #f0f0f0",
-                      cursor: "pointer",
-                      backgroundColor: selectedCustomerId === customer.id ? "#f0f7ff" : "white",
-                      transition: "background-color 0.2s"
-                    }}
-                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = selectedCustomerId === customer.id ? "#f0f7ff" : "#f9f9f9"}
-                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = selectedCustomerId === customer.id ? "#f0f7ff" : "white"}
-                  >
-                    <div style={{ 
-                      fontWeight: "500",
-                      fontSize: isTouchDevice ? "16px" : "14px" 
-                    }}>{customer.name}</div>
-                    <div style={{ 
-                      fontSize: isTouchDevice ? "14px" : "13px", 
-                      color: "#666", 
-                      marginTop: "3px" 
-                    }}>
-                      {customer.contact || "No contact"} | {customer.email || "No email"}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Botones del formulario */}
-            <div style={{ 
-              display: "flex", 
-              gap: isTouchDevice ? "15px" : "10px", 
-              justifyContent: "flex-end", 
-              marginTop: isTouchDevice ? "20px" : "15px" 
+                border: "1px solid #ddd",
+                fontSize: isTouchDevice ? "15px" : "14px",
+                boxSizing: "border-box"
+              }}
+            />
+          </div>
+          
+          <div style={{ marginBottom: "12px" }}>
+            <label style={{ 
+              display: "block", 
+              marginBottom: "5px", 
+              fontSize: isTouchDevice ? "14px" : "13px", 
+              color: "#555" 
             }}>
-              <button
-                onClick={() => setShowCustomerModal(false)}
-                style={{
-                  padding: isTouchDevice ? "12px 20px" : "8px 16px",
-                  backgroundColor: "#f1f1f1",
-                  color: "#333",
-                  border: "1px solid #ddd",
-                  borderRadius: isTouchDevice ? "8px" : "4px",
-                  cursor: "pointer",
-                  fontSize: isTouchDevice ? "16px" : "14px",
-                  minWidth: isTouchDevice ? "100px" : "auto", // Área táctil más grande
-                  WebkitTapHighlightColor: "transparent" // Elimina el highlight en móvil
-                }}
-              >
-                Close
-              </button>
-              <button
-                onClick={handleUpdateJobsheetCustomer}
-                disabled={!selectedCustomerId}
-                style={{
-                  padding: isTouchDevice ? "12px 20px" : "8px 16px",
-                  backgroundColor: selectedCustomerId ? "#00C853" : "#e0e0e0",
-                  color: "white",
-                  border: "none",
-                  borderRadius: isTouchDevice ? "8px" : "4px",
-                  cursor: selectedCustomerId ? "pointer" : "not-allowed",
-                  fontSize: isTouchDevice ? "16px" : "14px",
-                  minWidth: isTouchDevice ? "140px" : "auto", // Área táctil más grande
-                  WebkitTapHighlightColor: "transparent"
-                }}
-              >
-                {jobsheet?.customer_id ? "Update Customer" : "Assign Customer"}
-              </button>
-            </div>
+              Contact Number
+            </label>
+            <input
+              type="text"
+              value={newCustomerDetails.contact}
+              onChange={(e) => setNewCustomerDetails({...newCustomerDetails, contact: e.target.value})}
+              placeholder="Phone number"
+              style={{ 
+                width: "100%",
+                padding: isTouchDevice ? "12px" : "8px",
+                borderRadius: isTouchDevice ? "8px" : "4px",
+                border: "1px solid #ddd",
+                fontSize: isTouchDevice ? "15px" : "14px",
+                boxSizing: "border-box"
+              }}
+            />
+          </div>
+          
+          <div style={{ marginBottom: "12px" }}>
+            <label style={{ 
+              display: "block", 
+              marginBottom: "5px", 
+              fontSize: isTouchDevice ? "14px" : "13px", 
+              color: "#555" 
+            }}>
+              Email
+            </label>
+            <input
+              type="email"
+              value={newCustomerDetails.email}
+              onChange={(e) => setNewCustomerDetails({...newCustomerDetails, email: e.target.value})}
+              placeholder="Email address"
+              style={{ 
+                width: "100%",
+                padding: isTouchDevice ? "12px" : "8px",
+                borderRadius: isTouchDevice ? "8px" : "4px",
+                border: "1px solid #ddd",
+                fontSize: isTouchDevice ? "15px" : "14px",
+                boxSizing: "border-box"
+              }}
+            />
+          </div>
+          
+          <div style={{ display: "flex", gap: "10px", marginTop: "15px" }}>
+            <button
+              onClick={() => setIsCreatingFromSearch(false)}
+              style={{
+                padding: isTouchDevice ? "12px" : "8px",
+                backgroundColor: "#f1f1f1",
+                color: "#333",
+                border: "1px solid #ddd",
+                borderRadius: isTouchDevice ? "8px" : "4px",
+                cursor: "pointer",
+                fontSize: isTouchDevice ? "15px" : "14px",
+                flex: "1"
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleCreateCustomer}
+              style={{
+                padding: isTouchDevice ? "12px" : "8px",
+                backgroundColor: "#00C853",
+                color: "white",
+                border: "none",
+                borderRadius: isTouchDevice ? "8px" : "4px",
+                cursor: "pointer",
+                fontSize: isTouchDevice ? "15px" : "14px",
+                flex: "2",
+                fontWeight: "500"
+              }}
+            >
+              Create Customer
+            </button>
           </div>
         </div>
       )}
+
+      {/* Botones de acción para confirmar selección de cliente */}
+      {selectedCustomerId && (
+        <div style={{ 
+          display: "flex",
+          justifyContent: "flex-end",
+          marginTop: "15px", 
+          gap: "10px" 
+        }}>
+          <button
+            onClick={() => setShowCustomerModal(false)}
+            style={{
+              padding: isTouchDevice ? "12px" : "8px",
+              backgroundColor: "#f1f1f1",
+              color: "#333",
+              border: "1px solid #ddd",
+              borderRadius: isTouchDevice ? "8px" : "4px",
+              cursor: "pointer",
+              fontSize: isTouchDevice ? "15px" : "14px"
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleUpdateJobsheetCustomer}
+            style={{
+              padding: isTouchDevice ? "12px" : "8px",
+              backgroundColor: "#00C853",
+              color: "white",
+              border: "none",
+              borderRadius: isTouchDevice ? "8px" : "4px",
+              cursor: "pointer",
+              fontSize: isTouchDevice ? "15px" : "14px",
+              fontWeight: "500"
+            }}
+          >
+            Confirm Customer
+          </button>
+        </div>
+      )}
+    </div>
+  </div>
+)}
  {showExitConfirmation && (
         <div style={{
           position: "fixed",
