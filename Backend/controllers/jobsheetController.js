@@ -214,10 +214,20 @@ class JobsheetController {
   static async addJobsheetItem(req, res) {
     try {
       const itemData = req.body;
-      
+
       // Validar campos obligatorios
       if (!itemData.jobsheet_id || !itemData.product_id || !itemData.quantity) {
         return res.status(400).json({ error: 'Jobsheet ID, Product ID and Quantity are required' });
+      }
+
+      // Verificar que el jobsheet exista
+      try {
+        await JobsheetService.getJobsheetById(itemData.jobsheet_id);
+      } catch (checkErr) {
+        if (checkErr.message === 'Jobsheet not found') {
+          return res.status(404).json({ error: 'Jobsheet not found' });
+        }
+        throw checkErr;
       }
 
       const newItem = await JobsheetService.addJobsheetItem(itemData);
@@ -278,6 +288,16 @@ class JobsheetController {
       // Validar campos obligatorios
       if (!paymentData.jobsheet_id || !paymentData.amount) {
         return res.status(400).json({ error: 'Jobsheet ID and Amount are required' });
+      }
+
+      // Verificar que el jobsheet exista
+      try {
+        await JobsheetService.getJobsheetById(paymentData.jobsheet_id);
+      } catch (checkErr) {
+        if (checkErr.message === 'Jobsheet not found') {
+          return res.status(404).json({ error: 'Jobsheet not found' });
+        }
+        throw checkErr;
       }
       // Verificar que el jobsheet tenga items o labores antes de registrar el pago
       const [items, labors] = await Promise.all([

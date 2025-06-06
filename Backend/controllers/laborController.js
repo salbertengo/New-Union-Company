@@ -1,4 +1,5 @@
 const LaborService = require('../services/laborService');
+const JobsheetService = require('../services/jobsheetService');
 
 class LaborController {
   static async getLaborsByJobsheetId(req, res) {
@@ -25,7 +26,17 @@ class LaborController {
       if (!jobsheet_id) {
         return res.status(400).json({ error: 'Jobsheet ID es requerido' });
       }
-      
+
+      // Verificar que el jobsheet exista
+      try {
+        await JobsheetService.getJobsheetById(jobsheet_id);
+      } catch (checkErr) {
+        if (checkErr.message === 'Jobsheet not found') {
+          return res.status(404).json({ error: 'Jobsheet not found' });
+        }
+        throw checkErr;
+      }
+
       // Asegúrate de que workflow_type se pasa correctamente
       const labor = await LaborService.addLabor({
         jobsheet_id,
