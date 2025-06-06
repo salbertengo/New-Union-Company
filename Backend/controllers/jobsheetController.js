@@ -2,6 +2,7 @@ const JobsheetService = require('../services/jobsheetService');
 const CustomerService = require('../services/customerService');
 const VehicleService = require('../services/vehicleService');
 const PaymentModel = require('../models/payment');
+const LaborService = require('../services/laborService');
 class JobsheetController {
   // En el servidor - jobsheetController.js
   static async getAllJobsheets(req, res) {
@@ -273,10 +274,19 @@ class JobsheetController {
   static async addPayment(req, res) {
     try {
       const paymentData = req.body;
-      
+
       // Validar campos obligatorios
       if (!paymentData.jobsheet_id || !paymentData.amount) {
         return res.status(400).json({ error: 'Jobsheet ID and Amount are required' });
+      }
+      // Verificar que el jobsheet tenga items o labores antes de registrar el pago
+      const [items, labors] = await Promise.all([
+        JobsheetService.getJobsheetItems(paymentData.jobsheet_id),
+        LaborService.getLaborsByJobsheetId(paymentData.jobsheet_id)
+      ]);
+
+      if ((!items || items.length === 0) && (!labors || labors.length === 0)) {
+        return res.status(400).json({ error: 'Cannot add payment: jobsheet has no items or services.' });
       }
 
       const newPayment = await JobsheetService.addPayment(paymentData);
